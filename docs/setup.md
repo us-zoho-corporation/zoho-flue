@@ -38,6 +38,18 @@ CATALYST_ORG_ID=
 
 See [Environment](environment.md) for what each variable does.
 
+## Zoho Knowledge Base MCP (optional)
+
+The agent connects to `help-docs.zoho-forge.com/mcp` for documentation search. It requires a JWT issued by that server, obtained once via browser OAuth.
+
+To get a token: complete the OAuth flow at `https://help-docs.zoho-forge.com/authorize` (see the server's setup page), then copy the `access_token` from the `/token` response into `.env`:
+
+```
+ZOHO_DOCS_TOKEN=<jwt>
+```
+
+Tokens are valid for 7 days. Without this variable the agent starts normally — KB tools are simply unavailable.
+
 ## Adding a sandbox
 
 By default agents use Flue's in-memory virtual sandbox (just-bash) — no configuration needed. For a provider-backed remote sandbox, run `flue add sandbox <provider>` to get the blueprint, write the generated file to `src/sandboxes/<provider>.ts` verbatim, and wire it in with `sandbox: <provider>(instance)` in `defineAgent`.

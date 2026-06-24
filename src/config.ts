@@ -13,6 +13,8 @@ export const config = {
 	catalystEndpoint: required('CATALYST_ENDPOINT'),
 	catalystOrgId: required('CATALYST_ORG_ID'),
 
+	zohoDocsToken: process.env['ZOHO_DOCS_TOKEN'] ?? '',
+
 	// Model used by all agents
 	model: 'catalyst-glm/crm-di-glm47b_30b_it',
 
@@ -20,4 +22,5 @@ export const config = {
 	zohoAllowedHostnames: ['zoho.com', 'zohoapis.com'],
 	// Maximum number of redirects the zoho_api tool will follow
 	zohoApiMaxRedirects: 5,
+
 };

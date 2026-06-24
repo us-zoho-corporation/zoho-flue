@@ -72,19 +72,11 @@ export function convertMessages(context: Context): CatalystMessage[] {
 				.filter((c): c is TextContent => c.type === 'text')
 				.map(c => c.text)
 				.join('');
-			const toolCalls = msg.content
-				.filter((c): c is ToolCall => c.type === 'toolCall')
-				.map(tc => ({ id: tc.id, type: 'function' as const, function: { name: tc.name, arguments: JSON.stringify(tc.arguments) } }));
-			msgs.push({
-				role: 'assistant',
-				content: text,
-				...(toolCalls.length ? { tool_calls: toolCalls } : {}),
-			});
+			msgs.push({ role: 'assistant', content: text });
 		} else if (msg.role === 'toolResult') {
 			msgs.push({
-				role: 'tool',
-				content: blocksToText(msg.content),
-				tool_call_id: msg.toolCallId,
+				role: 'user',
+				content: `[TOOL_RESULT_START id="${msg.toolCallId}"]\n${blocksToText(msg.content)}\n[TOOL_RESULT_END]`,
 			});
 		}
 	}
@@ -138,30 +130,61 @@ function catalystStream(
 		}
 
 		if (!res.ok) {
-			const errText = await res.text().catch(() => res.statusText);
+			const errText = (await res.text().catch(() => res.statusText)).slice(0, 200);
 			output.stopReason = 'error';
 			(output as never as { errorMessage: string }).errorMessage = errText;
 			eventStream.push({ type: 'error', reason: 'error', error: output });
 			return;
 		}
 
+		type CatalystToolCall = { id: string; type: 'function'; function: { name: string; arguments: string } };
 		type CatalystResponse = {
-			response: string;
+			response?: string;
+			tool_calls?: CatalystToolCall[];
 			usage?: { prompt_tokens: number; completion_tokens: number };
 		};
 
 		const data = (await res.json()) as CatalystResponse;
 
+		let contentIndex = 0;
+
 		if (data.response) {
 			const text = data.response;
 			const textBlock = { type: 'text' as const, text };
 			(output.content as TextContent[]).push(textBlock);
-			eventStream.push({ type: 'text_start', contentIndex: 0, partial: output });
-			eventStream.push({ type: 'text_delta', contentIndex: 0, delta: text, partial: output });
-			eventStream.push({ type: 'text_end', contentIndex: 0, content: text, partial: output });
+			eventStream.push({ type: 'text_start', contentIndex, partial: output });
+			eventStream.push({ type: 'text_delta', contentIndex, delta: text, partial: output });
+			eventStream.push({ type: 'text_end', contentIndex, content: text, partial: output });
+			contentIndex++;
 		}
 
-		output.stopReason = 'stop';
+		if (data.tool_calls?.length) {
+			output.stopReason = 'toolUse';
+			for (const tc of data.tool_calls) {
+				let parsedArgs: Record<string, unknown>;
+				try {
+					const raw: unknown = JSON.parse(tc.function.arguments);
+					if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+						throw new TypeError('expected object');
+					}
+					parsedArgs = raw as Record<string, unknown>;
+				} catch {
+					throw new Error(`Invalid arguments for tool '${tc.function.name}'`);
+				}
+				const toolCall: ToolCall = {
+					type: 'toolCall',
+					id: tc.id,
+					name: tc.function.name,
+					arguments: parsedArgs,
+				};
+				(output.content as (TextContent | ToolCall)[]).push(toolCall);
+				eventStream.push({ type: 'toolcall_start', contentIndex, partial: output });
+				eventStream.push({ type: 'toolcall_end', contentIndex, toolCall, partial: output });
+				contentIndex++;
+			}
+		} else {
+			output.stopReason = 'stop';
+		}
 
 		if (data.usage) {
 			output.usage = {

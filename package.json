@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:smoke": "vitest run --config vitest.smoke.config.ts"
+    "test": "vitest run --tags-filter='!smoke'",
+    "test:watch": "vitest --tags-filter='!smoke'",
+    "test:smoke": "vitest run --tags-filter='smoke'"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +15,7 @@
   "dependencies": {
     "@earendil-works/pi-ai": "0.80.1",
     "@flue/runtime": "1.0.0-beta.3",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "valibot": "^1.4.1"
   },
   "devDependencies": {
