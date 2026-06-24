@@ -2,6 +2,7 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { config } from '../config';
 
+/** Returns true if `url`'s hostname matches or is a subdomain of an entry in `config.zohoAllowedHostnames`. */
 function isAllowedUrl(url: string): boolean {
 	try {
 		// Normalize: lowercase hostname, strip trailing dot (DNS absolute form).

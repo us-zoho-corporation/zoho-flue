@@ -55,7 +55,7 @@ describe('convertMessages', () => {
 		expect(result[0]).toEqual({ role: 'assistant', content: 'hi there' });
 	});
 
-	it('converts assistant tool calls', () => {
+	it('strips tool_calls from assistant messages — Catalyst GLM rejects them in history', () => {
 		const result = convertMessages({
 			...base,
 			messages: [{
@@ -68,14 +68,11 @@ describe('convertMessages', () => {
 				}],
 			} as unknown as Context['messages'][number]],
 		});
-		expect(result[0].tool_calls).toEqual([{
-			id: 'call_1',
-			type: 'function',
-			function: { name: 'search', arguments: '{"q":"cats"}' },
-		}]);
+		expect(result[0]).toEqual({ role: 'assistant', content: '' });
+		expect(result[0]).not.toHaveProperty('tool_calls');
 	});
 
-	it('converts a tool result message', () => {
+	it('converts a tool result as a user message with structured delimiters', () => {
 		const result = convertMessages({
 			...base,
 			messages: [{
@@ -87,7 +84,9 @@ describe('convertMessages', () => {
 				timestamp: 0,
 			}],
 		});
-		expect(result[0]).toEqual({ role: 'tool', content: 'result text', tool_call_id: 'call_1' });
+		expect(result[0].role).toBe('user');
+		expect(result[0].content).toBe('[TOOL_RESULT_START id="call_1"]\nresult text\n[TOOL_RESULT_END]');
+		expect(result[0]).not.toHaveProperty('tool_call_id');
 	});
 });
 

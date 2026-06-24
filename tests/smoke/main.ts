@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'child_process';
 
-describe('main agent', () => {
+describe('main agent', { tags: ['smoke'] }, () => {
 	it('responds to a simple prompt', () => {
 		const { stdout, status } = spawnSync(
 			'pnpm',
