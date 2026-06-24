@@ -1,3 +1,9 @@
+# Flue generated
+.flue-vite/
+
+# Catalyst CLI local config
+.catalystrc
+
 # Logs
 logs
 *.log

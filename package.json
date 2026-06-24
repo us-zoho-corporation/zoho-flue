@@ -1,0 +1,26 @@
+{
+  "name": "zoho-flue",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "vitest run --config vitest.smoke.config.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.80.1",
+    "@flue/runtime": "1.0.0-beta.3",
+    "valibot": "^1.4.1"
+  },
+  "devDependencies": {
+    "@flue/cli": "1.0.0-beta.3",
+    "oxlint": "^1.71.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
