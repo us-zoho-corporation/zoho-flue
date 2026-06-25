@@ -50,7 +50,8 @@ allowed-tools: <...>  # Optional/experimental. Space-separated pre-approved tool
 | Skill | When to activate |
 |---|---|
 | `add-skill` | Adding a new skill to this project |
-| `run-agent` | Running the agent, tests, type-check, lint |
+| `flue-docs` | Searching and reading Flue framework documentation via CLI |
+| `run-agent` | Running the agent, tests, type-check, lint, or the browser chat UI |
 | `add-agent` | Creating a new agent in `src/agents/` |
 | `add-provider` | Registering a new provider in `src/providers/` |
 | `catalyst-glm` | Debugging GLM responses, history format, EXTRA_KEY_FOUND_IN_JSON |

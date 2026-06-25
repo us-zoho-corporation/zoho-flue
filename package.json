@@ -6,22 +6,40 @@
   "scripts": {
     "test": "vitest run --tags-filter='!smoke'",
     "test:watch": "vitest --tags-filter='!smoke'",
-    "test:smoke": "vitest run --tags-filter='smoke'"
+    "test:smoke": "vitest run --tags-filter='smoke'",
+    "chat": "vite --config src/chat/vite.config.ts src/chat/",
+    "chat:build": "vite build --config src/chat/vite.config.ts src/chat/"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@assistant-ui/react": "^0.14.23",
+    "@assistant-ui/react-markdown": "^0.14.4",
+    "@cloudflare/kumo": "^2.6.0",
     "@earendil-works/pi-ai": "0.80.1",
+    "@flue/react": "1.0.0-beta.4",
     "@flue/runtime": "1.0.0-beta.3",
+    "@flue/sdk": "1.0.0-beta.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@phosphor-icons/react": "^2.1.10",
+    "@tailwindcss/vite": "^4.3.1",
+    "hono": "^4.12.27",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-markdown": "^10.1.0",
+    "tailwindcss": "^4.3.1",
     "valibot": "^1.4.1"
   },
   "devDependencies": {
     "@flue/cli": "1.0.0-beta.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "typescript": "^6.0.3",
+    "vite": "^8.1.0",
     "vitest": "^4.1.9"
   }
 }

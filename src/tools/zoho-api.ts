@@ -1,6 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { config } from '../config';
+import { getZohoAccessToken, type OAuthCredentials } from '../providers/zoho-auth';
 
 /** Returns true if `url`'s hostname matches or is a subdomain of an entry in `config.zohoAllowedHostnames`. */
 function isAllowedUrl(url: string): boolean {
@@ -16,11 +17,11 @@ function isAllowedUrl(url: string): boolean {
 }
 
 /**
- * Returns a tool for making authenticated Zoho API calls. The token lives in
- * a closure and is never exposed to the model — only the URL, method, and
- * optional body are model-selected inputs.
+ * Returns a tool for making authenticated Zoho API calls. Credentials live in
+ * a closure; the token is refreshed on every call via the shared token cache so
+ * it never goes stale after the boot-time token expires.
  */
-export function defineZohoApiTool(token: string) {
+export function defineZohoApiTool(oauth: OAuthCredentials) {
 	return defineTool({
 		name: 'zoho_api',
 		description: 'Make an authenticated HTTP request to a Zoho API endpoint.',
@@ -39,6 +40,7 @@ export function defineZohoApiTool(token: string) {
 					`Request blocked: ${input.url} is not under an allowed Zoho domain (${config.zohoAllowedHostnames.join(', ')}).`,
 				);
 			}
+			const token = await getZohoAccessToken(oauth);
 			const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
 			if (input.body !== undefined) {
 				headers['Content-Type'] = 'application/json';
