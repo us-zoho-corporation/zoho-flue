@@ -1,17 +1,28 @@
 # zoho-flue
 
-Exploratory repository for building LLM agents on the [Flue](https://flueframework.com/) framework backed by Zoho's AI infrastructure (Catalyst QuickML GLM).
+Exploratory repo for building LLM agents on [Flue](https://flueframework.com/) backed by Zoho Catalyst QuickML GLM.
 
-## Agents
+## Directory map
 
-Agents live in [`src/agents/`](src/agents/). Each filename is the agent name passed to `flue run`.
+| Path | Purpose |
+|---|---|
+| `src/agents/` | Agent entry points — one file per agent name |
+| `src/config.ts` | All env reads and static constants |
+| `src/tools/` | Application-controlled tool definitions |
+| `src/providers/` | LLM and auth provider registrations |
+| `src/mcp/` | Programmatic MCP server clients |
+| `src/channels/` | Flue channel bindings |
+| `src/sandboxes/` | Sandbox provider configurations |
+| `src/workflows/` | Multi-step workflow definitions |
 
-## Docs
+## Code conventions
 
-- [Setup](docs/setup.md) — OAuth credentials, .env, adding agents and providers
-- [Commands](docs/commands.md) — run, build, type-check, lint
-- [Examples](docs/examples.md) — example prompts per agent
-- [Architecture](docs/architecture.md) — component map and conventions
-- [Providers](docs/providers.md) — Catalyst GLM response format, tool call quirks, zoho-auth
-- [MCP Clients](docs/mcp-clients.md) — zoho-kb connection pattern, why direct SDK
-- [Environment](docs/environment.md) — required `.env` variables
+- Never read `process.env` outside `src/config.ts`. Use `config.*` everywhere else.
+- No `!` non-null assertions on env variables — `required()` throws at startup if absent.
+- Unit tests colocated as `*.test.ts`; smoke tests in `tests/smoke/` (require live credentials).
+- Use Zod for schema validation; Valibot only where `defineTool` requires it.
+- Tools hold credentials in closures — the model only sees parameter names, never raw tokens.
+
+## Skills
+
+Agent workflows live in `.agents/skills/`. Activate the relevant skill before starting work. See [docs/skills.md](docs/skills.md) for the agentskills.io spec compliance rules and four-tier context loading conventions.
