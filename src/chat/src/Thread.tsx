@@ -1,7 +1,6 @@
 import {
   ArrowUp,
   Copy,
-  StopCircle,
 } from '@phosphor-icons/react';
 import { Button, LayerCard, Popover, Select, SidebarTrigger, useSidebar } from '@cloudflare/kumo';
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
@@ -304,15 +303,10 @@ function Composer({ agents, agentsLoading, agentName, onAgentChange, isRunning, 
         )}
 
         <div className="ml-auto">
-          {isRunning ? (
-            <Button variant="secondary" shape="square" size="sm" aria-label="Stop" onClick={() => {}}>
-              <StopCircle size={15} />
-            </Button>
-          ) : (
-            <Button variant="primary" shape="square" size="sm" aria-label="Send" onClick={handleSend} disabled={!value.trim()}>
-              <ArrowUp size={15} />
-            </Button>
-          )}
+          {/* No cancel affordance: useFlueAgent exposes no abort. Send is disabled while a run is in flight. */}
+          <Button variant="primary" shape="square" size="sm" aria-label="Send" onClick={handleSend} disabled={!value.trim() || isRunning}>
+            <ArrowUp size={15} />
+          </Button>
         </div>
       </div>
     </div>
@@ -354,7 +348,7 @@ function friendlyLabel(name: string, state: ToolCallInfo['state'], input: unknow
   return detail ? `${verb} ${detail}` : verb;
 }
 
-function ToolCallRow({ toolName, state, input, index }: ToolCallInfo & { index: number }) {
+export function ToolCallRow({ toolName, state, input, index }: ToolCallInfo & { index: number }) {
   const running = state === 'input-available';
   const errored = state === 'output-error';
 

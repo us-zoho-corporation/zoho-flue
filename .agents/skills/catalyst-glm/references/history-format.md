@@ -12,12 +12,13 @@ Source: `src/providers/catalyst-glm.ts` → `convertMessages`.
 
 ## Tool result conversion
 
-Incoming tool result messages (`role: "tool"`) are converted to:
+Incoming tool result messages (`role: "toolResult"`) are converted to a `user` message with
+explicit delimiters so the model recognises them as tool output rather than a user turn:
 
 ```json
 {
   "role": "user",
-  "content": "[Tool result]\n<serialized JSON of tool output>"
+  "content": "[TOOL_RESULT_START id=\"<toolCallId>\"]\n<tool output text>\n[TOOL_RESULT_END]"
 }
 ```
 

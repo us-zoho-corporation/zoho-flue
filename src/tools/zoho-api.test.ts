@@ -7,9 +7,17 @@ vi.mock('../config', () => ({
     },
 }));
 
+// The tool resolves its bearer token via getZohoAccessToken(oauth) on each call.
+// Mock it to return a fixed token so tests stay offline and deterministic.
+// (Inlined literal — vi.mock factories run hoisted, before top-level consts.)
+vi.mock('../providers/zoho-auth', () => ({
+    getZohoAccessToken: vi.fn(async () => 'test-token'),
+}));
+
 import { defineZohoApiTool } from './zoho-api';
 
 const TOKEN = 'test-token';
+const OAUTH = { clientId: 'id', clientSecret: 'secret', refreshToken: 'refresh' };
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -26,7 +34,7 @@ function mockFetch(responses: Array<{ status: number; location?: string; body?: 
 }
 
 function tool() {
-    return defineZohoApiTool(TOKEN);
+    return defineZohoApiTool(OAUTH);
 }
 
 describe('zoho_api SSRF protection', () => {

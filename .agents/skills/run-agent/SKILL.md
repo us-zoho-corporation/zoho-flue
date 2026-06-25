@@ -21,7 +21,7 @@ pnpm exec flue run main --input '{"message":"get the first page of contacts from
 pnpm exec flue run main --input '{"message":"what is 12 * 34?"}'
 ```
 
-KB search tools (`zoho_kb_search`, `zoho_kb_get_page`, `zoho_kb_list_products`) are only available when `ZOHO_DOCS_TOKEN` is set in `.env`:
+KB search tools (`zoho_kb_search`, `zoho_kb_get_page`, `zoho_kb_list_products`) are only available when `ZOHO_DOCS_BEARER_TOKEN` is set in `.env`:
 
 ```bash
 pnpm exec flue run main --input '{"message":"search zoho docs for how to create a CRM custom function"}'
@@ -31,12 +31,17 @@ pnpm exec flue run main --input '{"message":"list all available zoho documentati
 ## Quality checks
 
 ```bash
-pnpm test                       # unit tests
+pnpm test                       # unit tests (node)
 pnpm test:watch                 # unit tests in watch mode
 pnpm test:smoke                 # smoke tests (requires live API credentials)
+pnpm test:browser               # optional: React component tests in headless Chromium
 pnpm exec tsc --noEmit          # type-check (no output = clean)
 pnpm exec oxlint src/           # lint all source
 ```
+
+`pnpm test:browser` uses `vitest.browser.config.ts` (Playwright provider) to render
+`*.browser.test.tsx` components in a real browser. Excluded from the default `pnpm test`.
+One-time: `pnpm exec playwright install chromium`.
 
 ## Chat UI (browser interface)
 
@@ -59,5 +64,5 @@ Open `http://localhost:5173` in the browser. The chat UI talks to the `main` age
 | Error | Cause | Fix |
 |---|---|---|
 | `Missing required environment variable: X` | `.env` missing or incomplete | Fill all required vars (activate `zoho-oauth` skill) |
-| `ZOHO_DOCS_TOKEN has expired` | JWT expired after 7 days | Re-run browser OAuth at `https://help-docs.zoho-forge.com/authorize` |
+| KB tools fail / 401 from KB MCP | `ZOHO_DOCS_BEARER_TOKEN` invalid or expired | Re-issue via browser OAuth at `https://help-docs.zoho-forge.com/authorize` |
 | Persistent 401 on API calls | Bad OAuth credentials | Check `ZOHO_OAUTH_*` values in `.env` |

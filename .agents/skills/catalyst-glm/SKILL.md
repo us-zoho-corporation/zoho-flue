@@ -13,8 +13,14 @@ Catalyst GLM validates message history strictly and rejects any non-standard key
 - `tool_call_id` on any message
 
 **Workaround already in `convertMessages` (`src/providers/catalyst-glm.ts`):**
-- Assistant messages: `tool_calls` is stripped, only text content is kept
-- Tool results: converted to `role: "user"` with content `[Tool result]\n<json>`
+- Assistant messages: `tool_calls` is stripped, only text content is kept (the empty
+  assistant turn is still emitted so the conversation structure stays intact)
+- Tool results: converted to `role: "user"` with content
+  `[TOOL_RESULT_START id="<toolCallId>"]\n<content>\n[TOOL_RESULT_END]`
+
+`convertMessages(context)` does only this wire-format translation. It does NOT truncate
+history (Flue's built-in compaction handles context — see below), gate tool calls, or
+post-process the model's response text.
 
 ## Response format
 
@@ -33,6 +39,12 @@ GLM response is flat — not wrapped in `choices[]`:
 ## Model ID format
 
 `catalyst-glm/<model-id>` — e.g. `catalyst-glm/crm-di-glm47b_30b_it` (set in `src/config.ts`).
+
+## Registration & context
+
+`registerCatalystGLM(...)` is called once from `src/app.ts` (not the agent module). It passes
+`contextWindow: config.catalystContextWindow` (200k) so Flue's built-in compaction triggers on
+its own — there is no manual history truncation in the provider.
 
 ## Token refresh
 

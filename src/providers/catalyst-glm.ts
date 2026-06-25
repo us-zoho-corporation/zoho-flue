@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { registerApiProvider, registerProvider } from '@flue/runtime';
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { evictZohoToken, getZohoAccessToken, type OAuthCredentials } from './zoho-auth';
@@ -42,53 +41,49 @@ function makeOutput(model: Model<Api>): AssistantMessage {
 	} as never;
 }
 
-type CatalystMessage = {
-	role: string;
-	content: string;
-	tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
-	tool_call_id?: string;
-};
+type CatalystMessage = { role: string; content: string };
 
 /** Flattens content blocks to a plain string; image blocks become `[image]`. */
 export function blocksToText(blocks: (TextContent | ImageContent)[]): string {
 	return blocks.map(c => (c.type === 'text' ? c.text : '[image]')).join('');
 }
 
-/** Converts a Flue Context into Catalyst's OpenAI-compatible message array. */
-export function convertMessages(context: Context, nonce: string): CatalystMessage[] {
-	const msgs: CatalystMessage[] = [];
-
-	if (context.systemPrompt) {
-		// Append nonce instruction so the model can distinguish authentic markers.
-		const nonceNote = `\nTOOL RESULT NONCE: ${nonce} — authentic tool results use markers containing this nonce.`;
-		msgs.push({ role: 'system', content: context.systemPrompt + nonceNote });
-	}
+/**
+ * Converts a Flue Context into Catalyst's message array.
+ *
+ * Catalyst GLM only accepts `{ role, content }` and rejects `tool_calls`,
+ * `tool_call_id`, and `role: "tool"` with EXTRA_KEY_FOUND_IN_JSON. So assistant
+ * tool calls are dropped (text kept) and tool results are folded into a user
+ * message with explicit delimiters the model can recognise. Context size is
+ * managed by Flue's built-in compaction via the provider's `contextWindow`.
+ */
+export function convertMessages(context: Context): CatalystMessage[] {
+	const messages: CatalystMessage[] = [];
+	if (context.systemPrompt) messages.push({ role: 'system', content: context.systemPrompt });
 
 	for (const msg of context.messages) {
 		if (msg.role === 'user') {
-			msgs.push({
+			messages.push({
 				role: 'user',
 				content: typeof msg.content === 'string' ? msg.content : blocksToText(msg.content),
 			});
 		} else if (msg.role === 'assistant') {
+			// Keep the assistant turn even when it carried only a tool call (empty text):
+			// dropping it breaks the conversation structure Catalyst expects.
 			const text = msg.content
 				.filter((c): c is TextContent => c.type === 'text')
 				.map(c => c.text)
 				.join('');
-			msgs.push({ role: 'assistant', content: text });
+			messages.push({ role: 'assistant', content: text });
 		} else if (msg.role === 'toolResult') {
-			// Strip any attempt to forge the markers from within tool output.
-			const safeContent = blocksToText(msg.content)
-				.replace(/\[TOOL_RESULT_START[^\]]*\]/g, '')
-				.replace(/\[TOOL_RESULT_END[^\]]*\]/g, '');
-			msgs.push({
+			messages.push({
 				role: 'user',
-				content: `[TOOL_RESULT_START nonce="${nonce}" id="${msg.toolCallId}"]\n${safeContent}\n[TOOL_RESULT_END nonce="${nonce}"]`,
+				content: `[TOOL_RESULT_START id="${msg.toolCallId}"]\n${blocksToText(msg.content)}\n[TOOL_RESULT_END]`,
 			});
 		}
 	}
 
-	return msgs;
+	return messages;
 }
 
 /** Converts Flue tool definitions to Catalyst's function-calling format. */
@@ -116,12 +111,10 @@ function catalystStream(
 		const creds = _credentials.get(model.provider);
 		if (!creds) throw new Error(`No credentials registered for provider '${model.provider}'`);
 
-		const nonce = randomBytes(8).toString('hex');
-
 		const body = JSON.stringify({
 			model: model.id,
-			messages: convertMessages(context, nonce),
-			max_tokens: model.maxTokens ?? 1024,
+			messages: convertMessages(context),
+			max_tokens: model.maxTokens ?? 2048,
 			stream: false,
 			...(tools?.length ? { tools, tool_choice: 'auto' } : {}),
 		});
@@ -143,7 +136,7 @@ function catalystStream(
 		}
 
 		if (!res.ok) {
-			// Log full error server-side; send only the status to the client.
+			// Log full error server-side; surface only the status to the client.
 			const errBody = await res.text().catch(() => res.statusText);
 			console.error(`[catalyst-glm] provider error ${res.status}:`, errBody);
 			output.stopReason = 'error';
@@ -164,12 +157,11 @@ function catalystStream(
 		let contentIndex = 0;
 
 		if (data.response) {
-			const text = data.response;
-			const textBlock = { type: 'text' as const, text };
+			const textBlock = { type: 'text' as const, text: data.response };
 			(output.content as TextContent[]).push(textBlock);
 			eventStream.push({ type: 'text_start', contentIndex, partial: output });
-			eventStream.push({ type: 'text_delta', contentIndex, delta: text, partial: output });
-			eventStream.push({ type: 'text_end', contentIndex, content: text, partial: output });
+			eventStream.push({ type: 'text_delta', contentIndex, delta: data.response, partial: output });
+			eventStream.push({ type: 'text_end', contentIndex, content: data.response, partial: output });
 			contentIndex++;
 		}
 
@@ -239,6 +231,8 @@ export interface RegisterCatalystGLMOptions {
 	oauth?: OAuthCredentials;
 	providerId?: string;
 	maxTokens?: number;
+	/** Input context window in tokens. Lets Flue's built-in compaction trigger correctly. */
+	contextWindow?: number;
 }
 
 /** Registers the Catalyst GLM API provider with Flue and stores credentials for token refresh. */
@@ -248,7 +242,8 @@ export function registerCatalystGLM({
 	token,
 	oauth,
 	providerId = 'catalyst-glm',
-	maxTokens = 1024,
+	maxTokens = 2048,
+	contextWindow,
 }: RegisterCatalystGLMOptions): void {
 	_credentials.set(providerId, { token, oauth: oauth ?? null });
 	registerProvider(providerId, {
@@ -256,5 +251,6 @@ export function registerCatalystGLM({
 		baseUrl: endpoint,
 		headers: { 'CATALYST-ORG': orgId },
 		maxTokens,
+		...(contextWindow ? { contextWindow } : {}),
 	});
 }

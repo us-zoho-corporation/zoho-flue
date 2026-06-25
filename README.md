@@ -10,10 +10,17 @@ pnpm install
 
 Populate `.env` — see [Setup](docs/setup.md) for credentials and OAuth.
 
-Run the main agent:
+Run the main agent from the CLI:
 
 ```bash
 pnpm exec flue run main --input '{"message":"hello"}'
+```
+
+Or use the browser chat UI (two terminals):
+
+```bash
+pnpm exec flue dev   # agent server on :3583
+pnpm chat            # chat UI on :5173 (proxies to :3583)
 ```
 
 ## Docs

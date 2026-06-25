@@ -19,7 +19,7 @@ Exploratory repo for building LLM agents on [Flue](https://flueframework.com/) b
 
 - Never read `process.env` outside `src/config.ts`. Use `config.*` everywhere else.
 - No `!` non-null assertions on env variables — `required()` throws at startup if absent.
-- Unit tests colocated as `*.test.ts`; smoke tests in `tests/smoke/` (require live credentials).
+- Unit tests colocated as `*.test.ts`; smoke tests in `tests/smoke/` (live credentials); optional browser component tests as `*.browser.test.tsx` (`pnpm test:browser`).
 - Use Zod for schema validation; Valibot only where `defineTool` requires it.
 - Tools hold credentials in closures — the model only sees parameter names, never raw tokens.
 

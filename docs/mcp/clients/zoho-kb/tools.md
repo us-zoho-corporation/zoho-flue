@@ -2,7 +2,7 @@
 
 Source: `src/mcp/zoho-kb.ts`  
 MCP server: `https://help-docs.zoho-forge.com/mcp`  
-Requires: `ZOHO_DOCS_TOKEN` (see [setup.md](../../../setup.md))
+Requires: `ZOHO_DOCS_BEARER_TOKEN` (see [setup.md](../../../setup.md))
 
 | Tool | MCP tool | Required inputs | Optional inputs |
 |---|---|---|---|

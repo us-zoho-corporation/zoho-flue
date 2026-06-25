@@ -2,7 +2,7 @@
 
 Source: `src/mcp/zoho-kb.ts`
 MCP server: `https://help-docs.zoho-forge.com/mcp`
-Requires: `ZOHO_DOCS_TOKEN` in `.env` (see `zoho-oauth` skill)
+Requires: `ZOHO_DOCS_BEARER_TOKEN` in `.env` (see `zoho-oauth` skill)
 
 ## zoho_kb_search
 

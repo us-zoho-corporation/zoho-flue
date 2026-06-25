@@ -1,6 +1,6 @@
 ---
 name: zoho-oauth
-description: Set up or refresh Zoho OAuth credentials for this project. Use when obtaining a new refresh token for .env, filling in ZOHO_OAUTH_* variables, troubleshooting authentication failures at startup, or refreshing an expired ZOHO_DOCS_TOKEN.
+description: Set up or refresh Zoho OAuth credentials for this project. Use when obtaining a new refresh token for .env, filling in ZOHO_OAUTH_* variables, troubleshooting authentication failures at startup, or refreshing an expired ZOHO_DOCS_BEARER_TOKEN.
 allowed-tools: Bash Read
 ---
 
@@ -17,7 +17,7 @@ CATALYST_ORG_ID=
 Optional (enables KB MCP tools):
 
 ```
-ZOHO_DOCS_TOKEN=
+ZOHO_DOCS_BEARER_TOKEN=
 ```
 
 ## Step 1: create a Self Client
@@ -46,9 +46,14 @@ Copy the value into `.env` as `ZOHO_OAUTH_REFRESH_TOKEN`. It is long-lived.
 ## Step 3: obtain a Zoho Docs token (optional)
 
 1. Complete the browser OAuth flow at `https://help-docs.zoho-forge.com/authorize`.
-2. Copy the `access_token` from the `/token` response into `.env` as `ZOHO_DOCS_TOKEN`.
-3. Tokens are valid for 7 days. Repeat when the agent reports `ZOHO_DOCS_TOKEN has expired`.
+2. Copy the `access_token` from the `/token` response into `.env` as `ZOHO_DOCS_BEARER_TOKEN`.
+3. This token is short-lived (~7 days). The app does not check or report its expiry — when
+   KB tools start failing with auth errors, repeat this step to get a fresh one.
 
 ## How auth works at runtime
 
-`src/providers/zoho-auth.ts` runs at module load (top-level `await`) and exchanges the refresh token for a live access token. On a 401, `src/providers/catalyst-glm.ts` calls `getZohoAccessToken` once and retries automatically.
+`src/app.ts` exchanges the refresh token for a live access token at startup (top-level `await`
+via `getZohoAccessToken`) and registers the Catalyst GLM provider with it. On a 401,
+`src/providers/catalyst-glm.ts` refreshes the token once via `getZohoAccessToken` and retries
+automatically. `ZOHO_DOCS_BEARER_TOKEN` is used directly by the KB MCP client
+(`src/mcp/zoho-kb.ts`) and is not refreshed automatically.

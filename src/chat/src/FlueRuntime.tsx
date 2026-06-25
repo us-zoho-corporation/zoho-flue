@@ -73,7 +73,10 @@ interface FlueAssistantBridgeProps {
 }
 
 export function FlueAssistantBridge({ agentName, conversationId, onFirstMessage, children }: FlueAssistantBridgeProps) {
-  const agent = useFlueAgent({ name: agentName, id: conversationId });
+  // Follow live events over a single SSE connection rather than the default
+  // long-poll cycle — lower per-event latency, so tool-activity progress and the
+  // final answer surface as soon as the server emits them.
+  const agent = useFlueAgent({ name: agentName, id: conversationId, live: 'sse' });
   const timestamps = useRef<Map<string, number>>(new Map());
 
   const isRunning = agent.status === 'submitted' || agent.status === 'streaming';
