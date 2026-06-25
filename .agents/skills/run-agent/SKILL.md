@@ -38,6 +38,22 @@ pnpm exec tsc --noEmit          # type-check (no output = clean)
 pnpm exec oxlint src/           # lint all source
 ```
 
+## Chat UI (browser interface)
+
+The agent exposes an HTTP API via `src/app.ts`. Run the dev server and the Vite chat app in two separate terminals:
+
+```bash
+# Terminal 1 — Flue dev server (port 3583)
+pnpm exec flue dev
+
+# Terminal 2 — Vite chat UI (port 5173, proxies /agents → :3583)
+pnpm chat
+```
+
+Open `http://localhost:5173` in the browser. The chat UI talks to the `main` agent with conversation ID `default`.
+
+**Requirement:** `src/agents/main.ts` must export `route` for the HTTP API to be reachable. It currently does — `export const route: AgentRouteHandler = async (_c, next) => next();`.
+
 ## Common startup errors
 
 | Error | Cause | Fix |

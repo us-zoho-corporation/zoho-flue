@@ -15,6 +15,19 @@ export const config = {
 
 	zohoDocsToken: process.env['ZOHO_DOCS_TOKEN'] ?? '',
 
+	// Shared secret for API routes. If unset, routes are unauthenticated — only safe in dev.
+	apiSecret: process.env['FLUE_API_SECRET'] ?? '',
+
+	// Origins allowed for CORS (comma-separated). Set FLUE_CORS_ORIGINS in production.
+	corsOrigins: (process.env['FLUE_CORS_ORIGINS'] ?? 'http://localhost:5173,http://localhost:4173')
+		.split(',').map(s => s.trim()).filter(Boolean),
+
+	// Warn at startup if security-sensitive defaults are in use.
+	_devWarnings: {
+		noApiSecret: !process.env['FLUE_API_SECRET'],
+		defaultCorsOrigins: !process.env['FLUE_CORS_ORIGINS'],
+	},
+
 	// Model used by all agents
 	model: 'catalyst-glm/crm-di-glm47b_30b_it',
 
