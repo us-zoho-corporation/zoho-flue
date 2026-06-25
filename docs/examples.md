@@ -8,7 +8,7 @@ pnpm exec flue run main --input '{"message":"get the first page of contacts from
 pnpm exec flue run main --input '{"message":"what is 12 * 34?"}'
 ```
 
-### KB search (requires `ZOHO_DOCS_TOKEN`)
+### KB search (requires `ZOHO_DOCS_BEARER_TOKEN`)
 
 ```bash
 pnpm exec flue run main --input '{"message":"search zoho docs for how to create a CRM custom function"}'

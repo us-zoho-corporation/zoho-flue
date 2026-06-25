@@ -7,6 +7,7 @@
     "test": "vitest run --tags-filter='!smoke'",
     "test:watch": "vitest --tags-filter='!smoke'",
     "test:smoke": "vitest run --tags-filter='smoke'",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "chat": "vite --config src/chat/vite.config.ts src/chat/",
     "chat:build": "vite build --config src/chat/vite.config.ts src/chat/"
   },
@@ -37,9 +38,12 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/browser-playwright": "4.1.9",
     "oxlint": "^1.71.0",
+    "playwright": "^1.61.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.0",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "vitest-browser-react": "^2.2.0"
   }
 }

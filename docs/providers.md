@@ -1,6 +1,6 @@
 # Providers
 
-Custom integrations in `src/providers/`, registered at agent startup via `registerProvider` / `registerApiProvider` from `@flue/runtime`.
+Custom integrations in `src/providers/`, registered once in `src/app.ts` via `registerProvider` / `registerApiProvider` from `@flue/runtime`. Runtime provider setup belongs in `app.ts`, not in agent modules — Flue loads `app.ts` in every run mode, so the provider is registered before any agent resolves its model.
 
 ## `catalyst-glm.ts`
 
@@ -31,7 +31,12 @@ When sending multi-turn history back, Catalyst GLM rejects unrecognised keys wit
 
 **Workaround (already implemented in `convertMessages`):**
 - Assistant messages carry only their text content — `tool_calls` is stripped
-- Tool results are sent as `role: "user"` with content `[Tool result]\n<json>`
+- Tool results are sent as `role: "user"` with content
+  `[TOOL_RESULT_START id="<toolCallId>"]\n<content>\n[TOOL_RESULT_END]`
+
+`convertMessages` does wire-format translation only — it does not truncate history. Context
+size is managed by Flue's built-in compaction, which `registerCatalystGLM` enables by passing
+`contextWindow` (`config.catalystContextWindow`, 200k).
 
 ### Model ID format
 
@@ -52,6 +57,6 @@ POST https://accounts.zoho.com/oauth/v2/token
   grant_type=refresh_token
 ```
 
-Called at agent module load (top-level `await`) — token is always fresh on startup, never static.
+Called from `src/app.ts` at startup (top-level `await`) when registering the Catalyst provider — token is always fresh on startup, never static.
 
 See [environment.md](environment.md) for the required env variables and [setup.md](setup.md) for how to obtain them.

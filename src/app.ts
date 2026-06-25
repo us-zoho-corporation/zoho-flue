@@ -6,6 +6,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { config } from './config';
 import { getZohoAccessToken } from './providers/zoho-auth';
+import { registerCatalystGLM } from './providers/catalyst-glm';
 
 if (config._devWarnings.noApiSecret) {
 	console.warn('[security] FLUE_API_SECRET is not set — all /api/* routes are unauthenticated. Set this in production.');
@@ -19,8 +20,8 @@ const app = new Hono();
 app.get('/health', (c) => c.json({ ok: true }));
 
 const corsOptions = { origin: config.corsOrigins, credentials: true };
-// Apply CORS to all routes including the Flue runtime mount.
-app.use('*', cors(corsOptions));
+app.use('/agents/*', cors(corsOptions));
+app.use('/api/*', cors(corsOptions));
 
 if (config.apiSecret) {
 	app.use('/api/*', async (c, next) => {
@@ -80,6 +81,17 @@ const oauthCreds = {
 	clientSecret: config.zohoClientSecret,
 	refreshToken: config.zohoRefreshToken,
 };
+
+// Register the Catalyst GLM provider once at startup (runtime provider setup
+// belongs in app.ts, not in agent modules). The provider refreshes the token
+// itself via oauth on a 401. contextWindow lets Flue's compaction trigger.
+registerCatalystGLM({
+	endpoint: config.catalystEndpoint,
+	orgId: config.catalystOrgId,
+	token: await getZohoAccessToken(oauthCreds),
+	oauth: oauthCreds,
+	contextWindow: config.catalystContextWindow,
+});
 
 app.get('/api/me', async (c) => {
 	const token = await getZohoAccessToken(oauthCreds);

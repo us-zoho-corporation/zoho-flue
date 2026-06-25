@@ -1,5 +1,6 @@
 # Flue generated
 .flue-vite/
+.vitest-attachments
 
 # Catalyst CLI local config
 .catalystrc
@@ -147,3 +148,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Vitest browser failure screenshots (debug artifacts, not snapshot baselines)
+**/__screenshots__/

@@ -24,6 +24,8 @@ curl -s -X POST https://accounts.zoho.com/oauth/v2/token \
 
 Copy the `refresh_token` value into `.env` as `ZOHO_OAUTH_REFRESH_TOKEN`. It is long-lived and used to fetch a fresh access token on every agent startup.
 
+> For step-by-step credential setup, activate the `zoho-oauth` skill.
+
 ## .env
 
 Copy the template below, fill in your values, and save as `.env` at the repo root.
@@ -40,32 +42,24 @@ See [Environment](environment.md) for what each variable does.
 
 ## Zoho Knowledge Base MCP (optional)
 
-The agent connects to `help-docs.zoho-forge.com/mcp` for documentation search. It requires a JWT issued by that server, obtained once via browser OAuth.
+The agent connects to `help-docs.zoho-forge.com/mcp` for documentation search. It requires a bearer token issued by that server, obtained once via browser OAuth.
 
 To get a token: complete the OAuth flow at `https://help-docs.zoho-forge.com/authorize` (see the server's setup page), then copy the `access_token` from the `/token` response into `.env`:
 
 ```
-ZOHO_DOCS_TOKEN=<jwt>
+ZOHO_DOCS_BEARER_TOKEN=<token>
 ```
 
-Tokens are valid for 7 days. Without this variable the agent starts normally — KB tools are simply unavailable.
+The token is short-lived (~7 days); re-issue it when KB tools start failing with auth errors. Without this variable the agent starts normally — KB tools are simply unavailable.
 
 ## Adding a sandbox
 
 By default agents use Flue's in-memory virtual sandbox (just-bash) — no configuration needed. For a provider-backed remote sandbox, run `flue add sandbox <provider>` to get the blueprint, write the generated file to `src/sandboxes/<provider>.ts` verbatim, and wire it in with `sandbox: <provider>(instance)` in `defineAgent`.
 
-## Adding an agent
+## Adding agents, providers, and skills
 
-1. Create `src/agents/<name>.ts` — export a default `defineAgent(...)`.
-2. Import from `src/config.ts`; add new env vars or static settings there and document in `docs/environment.md`.
-3. Register any providers it needs at the top (top-level `await` is fine).
-4. Run it: `pnpm exec flue run <name> --input '{"message":"..."}'`
+These task workflows are owned by skills — activate the relevant one rather than copying steps here:
 
-## Adding a provider
-
-1. Create `src/providers/<name>.ts`.
-2. Call `registerApiProvider` / `registerProvider` from `@flue/runtime` to wire it into Flue.
-3. Export a `register*` function for agents to call at startup.
-4. Read any required settings via `src/config.ts`, not `process.env` directly.
-
-See `src/providers/catalyst-glm.ts` as the reference implementation.
+- **New agent** → `add-agent` skill. (Providers are registered in `src/app.ts`, never in the agent module.)
+- **New provider** → `add-provider` skill. (Register once in `src/app.ts`; set `contextWindow` for compaction.)
+- **New skill** → `add-skill` skill. (agentskills.io spec + four-tier context conventions.)

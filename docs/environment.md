@@ -9,4 +9,6 @@ Stored in `.env` at the repo root.
 | `ZOHO_OAUTH_REFRESH_TOKEN` | Long-lived refresh token exchanged for access token at startup |
 | `CATALYST_ENDPOINT` | QuickML GLM chat endpoint URL |
 | `CATALYST_ORG_ID` | Catalyst org ID — sent as `CATALYST-ORG` request header |
-| `ZOHO_DOCS_TOKEN` | *(Optional)* JWT from `help-docs.zoho-forge.com`; enables KB MCP tools. Valid 7 days — re-run the browser OAuth flow to refresh. |
+| `ZOHO_DOCS_BEARER_TOKEN` | *(Optional)* Bearer token from `help-docs.zoho-forge.com`; enables KB MCP tools. Short-lived (~7 days) — re-issue via browser OAuth when KB tools start failing. |
+| `FLUE_API_SECRET` | *(Optional)* Shared secret required on `/api/*` requests via the `x-flue-secret` header. Unset = unauthenticated (dev only). |
+| `FLUE_CORS_ORIGINS` | *(Optional)* Comma-separated allowed CORS origins. Defaults to localhost dev origins. |

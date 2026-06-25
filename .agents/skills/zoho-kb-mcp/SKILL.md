@@ -19,12 +19,12 @@ Flue's `connectMcpServer` passes raw MCP tool schemas (including `outputSchema`,
 const client = new Client({ name: 'zoho-flue', version: '1.0.0' });
 await client.connect(
     new StreamableHTTPClientTransport(new URL(MCP_URL), {
-        requestInit: { headers: { Authorization: `Bearer ${config.zohoDocsToken}` } },
+        requestInit: { headers: { Authorization: `Bearer ${config.zohoDocsBearerToken}` } },
     }),
 );
 ```
 
-The client checks JWT expiry before each use and throws with an actionable message if expired.
+The bearer token (`config.zohoDocsBearerToken`) is sent as-is — the client does not validate or refresh it. On a failed call it retries once, then propagates the error; if the token has expired, re-issue it (see the `zoho-oauth` skill).
 
 ## Result truncation
 

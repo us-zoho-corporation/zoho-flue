@@ -13,7 +13,7 @@ export const config = {
 	catalystEndpoint: required('CATALYST_ENDPOINT'),
 	catalystOrgId: required('CATALYST_ORG_ID'),
 
-	zohoDocsToken: process.env['ZOHO_DOCS_TOKEN'] ?? '',
+	zohoDocsBearerToken: process.env['ZOHO_DOCS_BEARER_TOKEN'] ?? '',
 
 	// Shared secret for API routes. If unset, routes are unauthenticated — only safe in dev.
 	apiSecret: process.env['FLUE_API_SECRET'] ?? '',
@@ -30,6 +30,8 @@ export const config = {
 
 	// Model used by all agents
 	model: 'catalyst-glm/crm-di-glm47b_30b_it',
+	// Catalyst GLM input context window (tokens). Drives Flue's built-in compaction.
+	catalystContextWindow: 200_000,
 
 	// Zoho API tool — domains the zoho_api tool is permitted to reach
 	zohoAllowedHostnames: ['zoho.com', 'zohoapis.com'],
