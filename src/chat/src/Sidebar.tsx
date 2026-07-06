@@ -6,6 +6,7 @@ import {
   MagnifyingGlass,
   Plus,
   Robot,
+  SignOut,
   Trash,
   TreeStructure,
   User,
@@ -34,6 +35,8 @@ interface SidebarProps {
   sessions: Session[];
   activeId: string;
   profile: UserProfile | null;
+  onSignIn: () => void;
+  onSignOut: () => void;
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
@@ -52,7 +55,7 @@ const WORKSPACE: { key: string; label: string; icon: typeof Robot }[] = [
   { key: 'settings', label: 'Settings', icon: GearSix },
 ];
 
-export function Sidebar({ sessions, activeId, profile, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns }: SidebarProps) {
+export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns }: SidebarProps) {
   const { open } = useSidebar();
   const [search, setSearch] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
@@ -130,19 +133,30 @@ export function Sidebar({ sessions, activeId, profile, onSelect, onNew, onDelete
           </div>
         )}
 
-        <div className="sb-user">
-          <div className="sb-avatar" data-guest={!profile}>
-            {profile?.photoUrl
-              ? <img src={profile.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : profile
-                ? <span>{initialsOf(profile)}</span>
-                : <User size={16} weight="regular" />}
+        {profile ? (
+          <div className="sb-user">
+            <div className="sb-avatar">
+              {profile.photoUrl
+                ? <img src={profile.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <span>{initialsOf(profile)}</span>}
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="sb-user-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.displayName}</div>
+              <div className="sb-user-sub" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.email}</div>
+            </div>
+            <button className="icon-btn sb-signout" onClick={onSignOut} title="Sign out" aria-label="Sign out">
+              <SignOut size={16} />
+            </button>
           </div>
-          <div style={{ minWidth: 0 }}>
-            <div className="sb-user-name">{profile?.displayName ?? 'Not signed in'}</div>
-            <div className="sb-user-sub" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile?.email ?? 'Sign in to sync'}</div>
-          </div>
-        </div>
+        ) : (
+          <button className="sb-user sb-signin" onClick={onSignIn}>
+            <div className="sb-avatar" data-guest="true"><User size={16} weight="regular" /></div>
+            <div style={{ minWidth: 0, textAlign: 'left' }}>
+              <div className="sb-user-name">Sign in</div>
+              <div className="sb-user-sub">Continue with Zoho to sync</div>
+            </div>
+          </button>
+        )}
       </div>
     </aside>
   );

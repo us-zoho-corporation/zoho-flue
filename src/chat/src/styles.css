@@ -144,7 +144,15 @@ body { background: var(--page-bg); color: var(--txt1); }
 }
 .sb-nav:hover { background: var(--hover); }
 .sb-nav span { color: var(--txt1); }
-.sb-user { display: flex; align-items: center; gap: 10px; padding: 10px 8px 4px; margin-top: 8px; }
+.sb-user { display: flex; align-items: center; gap: 10px; padding: 10px 8px; margin-top: 8px; border-radius: 12px; }
+/* Guest footer is a sign-in button. */
+.sb-signin { width: 100%; box-sizing: border-box; border: none; background: transparent; cursor: pointer; transition: background 140ms var(--ease-out); font-family: var(--font-sans); }
+.sb-signin:hover { background: var(--hover); }
+.sb-signin:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+/* Sign-out reveals on hover of the signed-in footer. */
+.sb-signout { flex-shrink: 0; opacity: 0; transition: opacity 140ms var(--ease-out); }
+.sb-user:hover .sb-signout { opacity: 0.7; }
+.sb-signout:hover { opacity: 1 !important; }
 .sb-avatar {
   width: 30px; height: 30px; border-radius: 999px; background: var(--accent); color: #fff;
   display: flex; align-items: center; justify-content: center; font: 600 12px var(--font-sans);
