@@ -7,8 +7,6 @@ import { probeMcpServer, validateMcpUrl, type McpTransport } from './connect';
 export interface McpRoutesDeps {
 	stores: Stores;
 	keyring: Keyring;
-	/** Max servers a single user may connect. */
-	maxServers: number;
 }
 
 /** Client-safe view of a server — never exposes the encrypted token. */
@@ -52,11 +50,6 @@ export function createMcpRoutes(deps: McpRoutesDeps): Hono {
 		if (urlError) return c.json({ error: urlError }, 400);
 
 		const userId = uid(c);
-		const existing = await deps.stores.mcpServers.listForUser(userId);
-		if (existing.length >= deps.maxServers) {
-			return c.json({ error: `You can connect at most ${deps.maxServers} MCP servers.` }, 400);
-		}
-
 		const now = Date.now();
 		const token = typeof body.authToken === 'string' && body.authToken ? body.authToken : null;
 		const server: McpServer = {

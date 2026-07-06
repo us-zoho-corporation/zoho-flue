@@ -13,13 +13,13 @@ const { probeMcpServer } = await import('./connect');
 
 const KEY = 'k1:' + Buffer.alloc(32, 7).toString('base64');
 
-function makeApp(maxServers = 3) {
+function makeApp() {
 	const stores = createMemoryStores();
 	const keyring = parseKeyring(KEY);
 	const app = new Hono();
 	// Simulate requireUser: userId from a test header (default 'u1').
 	app.use('*', async (c, next) => { c.set('userId', c.req.header('x-test-user') || 'u1'); await next(); });
-	app.route('/', createMcpRoutes({ stores, keyring, maxServers }));
+	app.route('/', createMcpRoutes({ stores, keyring }));
 	return { app, stores, keyring };
 }
 
@@ -81,13 +81,6 @@ describe('MCP server CRUD', () => {
 		expect((await post(app, `/${id}/test`, {}, 'u2')).status).toBe(404);
 		await app.request(`/${id}`, { method: 'DELETE', headers: { 'x-test-user': 'u2' } });
 		expect(await stores.mcpServers.get('u1', id)).not.toBeNull(); // not deleted by u2
-	});
-
-	it('rejects creating beyond the per-user cap', async () => {
-		const { app } = makeApp(2);
-		await post(app, '/', { name: 'a', url: 'https://a.example.com/mcp' });
-		await post(app, '/', { name: 'b', url: 'https://b.example.com/mcp' });
-		expect((await post(app, '/', { name: 'c', url: 'https://c.example.com/mcp' })).status).toBe(400);
 	});
 
 	it('tests a saved server and an ad-hoc target via the probe', async () => {

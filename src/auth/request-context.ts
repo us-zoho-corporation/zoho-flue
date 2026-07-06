@@ -9,6 +9,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export interface RequestContext {
 	/** The logged-in user's Zoho access token, for per-user provider calls. */
 	userToken?: string;
+	/** The logged-in user's connected MCP server tools, injected into the turn. */
+	mcpTools?: unknown[];
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
@@ -21,4 +23,9 @@ export function runWithRequestContext<T>(ctx: RequestContext, fn: () => T): T {
 /** The current request's logged-in user token, if any. */
 export function currentUserToken(): string | undefined {
 	return storage.getStore()?.userToken;
+}
+
+/** The current request's user-connected MCP tools, if any. */
+export function currentMcpTools(): unknown[] | undefined {
+	return storage.getStore()?.mcpTools;
 }
