@@ -310,6 +310,36 @@ body { background: var(--page-bg); color: var(--txt1); }
 .composer-signin-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
 .composer-signin-btn:disabled { opacity: 0.5; cursor: default; }
 
+/* ─── Login / welcome screen ─────────────────────────────────────────────────── */
+.login-screen {
+  height: 100vh; width: 100%; display: flex; align-items: center; justify-content: center;
+  position: relative; z-index: 1; color: var(--txt1); padding: 24px; box-sizing: border-box;
+}
+.login-inner { width: 400px; max-width: 100%; display: flex; flex-direction: column; align-items: center; gap: 28px; animation: fadeup 420ms var(--ease-out) both; }
+.login-head { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.login-titles { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.login-title { margin: 0; font: 600 26px/1.25 var(--font-sans); letter-spacing: -0.01em; color: var(--txt1); }
+.login-sub { margin: 0; font: 400 15px/1.55 var(--font-sans); color: var(--txt2); }
+.login-card {
+  width: 100%; box-sizing: border-box; padding: 28px 28px 24px; border-radius: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+  background: var(--glass); backdrop-filter: blur(var(--blur)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
+  border: 1px solid var(--gb); box-shadow: var(--ghi), var(--gsh);
+}
+.login-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: center;
+  box-sizing: border-box; padding: 12px 24px; border-radius: 10px; border: none;
+  background: var(--accent); color: #fff; font: 600 14px var(--font-sans); cursor: pointer;
+  transition: background 180ms var(--ease-out);
+}
+.login-btn:hover:not(:disabled) { background: var(--accent-fg); }
+.login-btn:disabled { cursor: default; opacity: 0.9; }
+.login-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.login-spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; display: inline-block; animation: spin 700ms linear infinite; }
+.login-note { margin: 0; font: 400 12px/1.5 var(--font-sans); color: var(--txt3); text-align: center; }
+.login-footer { position: absolute; bottom: 20px; left: 0; right: 0; display: flex; justify-content: center; gap: 16px; font: 400 12px var(--font-sans); color: var(--txt3); z-index: 1; }
+
 /* ─── MCP servers view ───────────────────────────────────────────────────────── */
 .mcp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .mcp-card {

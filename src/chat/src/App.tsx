@@ -8,6 +8,7 @@ import { McpServers } from './McpServers.tsx';
 import { Sidebar } from './Sidebar.tsx';
 import { Skills } from './Skills.tsx';
 import { Thread } from './Thread.tsx';
+import { Welcome } from './Welcome.tsx';
 import { Workflows } from './Workflows.tsx';
 import { applyTheme, loadTheme, saveTheme, type Theme } from './theme.ts';
 
@@ -87,6 +88,9 @@ export function App() {
   const storedPrefRef = useRef<string | null>(loadPreferredModel());
   const [preferredModelKey, setPreferredModelKey] = useState<string>(storedPrefRef.current ?? FALLBACK_MODEL.key);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  // Whether the initial /api/me check has resolved — until then we don't know if
+  // the user is signed in, so we hold rendering to avoid flashing the login screen.
+  const [authChecked, setAuthChecked] = useState(false);
   const [view, setView] = useState<'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs' | 'mcp'>('chat');
   const [theme, setTheme] = useState<Theme>(loadTheme);
 
@@ -113,7 +117,8 @@ export function App() {
     fetch('/api/me')
       .then((r) => r.ok ? r.json() as Promise<UserProfile> : null)
       .then((data) => data && setProfile(data))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setAuthChecked(true));
   }, []);
 
   const defaultModel = models.find((m) => m.key === defaultKey) ?? models[0] ?? FALLBACK_MODEL;
@@ -168,6 +173,25 @@ export function App() {
   }, []);
 
   const active = activeSession ?? makeSession(defaultModel);
+
+  // Login is required: hold until the auth check resolves, then show the Welcome
+  // login screen (wired to the Zoho OAuth flow) unless the user is signed in.
+  if (!authChecked) {
+    return (
+      <>
+        <div className="ambient" />
+        <div className="login-screen"><div className="tool-spinner" /></div>
+      </>
+    );
+  }
+  if (!profile) {
+    return (
+      <>
+        <div className="ambient" />
+        <Welcome onSignIn={handleSignIn} />
+      </>
+    );
+  }
 
   return (
     <>
