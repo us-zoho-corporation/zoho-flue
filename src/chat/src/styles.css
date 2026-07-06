@@ -80,58 +80,37 @@ aside[data-slot="sidebar-root"] {
   color: var(--text-3);
 }
 
-/* ─── Empty state ─────────────────────────────────────────────────────────────── */
+/* ─── Empty state (Kumo <Empty> + branded mark) ──────────────────────────────── */
 .empty-state {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 22px;
-  padding: 80px 0 40px;
-  text-align: center;
+  min-height: 56vh;
 }
 
-.empty-logo-wrap { position: relative; }
-
-.empty-logo-glow {
-  position: absolute;
-  inset: -16px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(228,37,39,0.18) 0%, transparent 70%);
-  filter: blur(10px);
-}
-
-.empty-logo-mark {
+.empty-logo {
   position: relative;
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  background: rgba(228,37,39,0.08);
-  border: 1.5px solid rgba(228,37,39,0.3);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: rgba(228, 37, 39, 0.08);
+  border: 1.5px solid rgba(228, 37, 39, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 800;
-  color: rgba(228,37,39,0.8);
+  color: rgba(228, 37, 39, 0.85);
   letter-spacing: -0.04em;
 }
 
-.empty-title {
-  margin: 0 0 7px;
-  font-size: 19px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  color: rgba(232,232,240,0.88);
-}
-
-.empty-subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-3);
-  line-height: 1.5;
+.empty-logo-glow {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(228, 37, 39, 0.2) 0%, transparent 70%);
+  filter: blur(10px);
+  z-index: -1;
 }
 
 /* ─── Messages ───────────────────────────────────────────────────────────────── */
@@ -194,6 +173,60 @@ aside[data-slot="sidebar-root"] {
   gap: 4px;
   margin-top: 4px;
 }
+
+/* ─── Answer (borderless prose — the hero of the turn) ─────────────────────────── */
+.answer { margin: 1px 0 2px; }
+
+/* ─── Tool trace (the process — quiet, sits above the answer) ─────────────────── */
+.tool-trace { margin-bottom: 11px; }
+
+.tool-trace-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.tool-trace-caret { color: var(--text-3); transition: transform 0.16s ease; }
+.tool-trace-caret.is-open { transform: rotate(90deg); }
+
+.tool-trace-live,
+.tool-trace-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.tool-trace-live { margin-bottom: 13px; }
+.tool-trace-panel { margin-top: 9px; padding-left: 1px; }
+
+.assistant-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-2);
+  font-size: 14px;
+  margin: 3px 0 4px;
+}
+
+.tool-row { display: flex; align-items: center; gap: 9px; }
+.tool-row-icon {
+  display: inline-flex;
+  width: 14px;
+  justify-content: center;
+  align-items: center;
+  flex-shrink: 0;
+}
+.tool-row-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(74, 222, 128, 0.85);
+}
+.tool-row-label { font-size: 12.5px; color: var(--text-2); }
+.tool-row-label.is-running { color: var(--text-1); }
 
 /* ─── Composer ───────────────────────────────────────────────────────────────── */
 .composer-wrap {

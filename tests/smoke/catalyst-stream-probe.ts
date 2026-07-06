@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 // in what wire format? Run with `pnpm test:smoke`. Credentials come from
 // global-setup (.env + ZOHO_ACCESS_TOKEN). This only logs findings — it does
 // not ship streaming; it tells us whether true streaming is even possible.
-describe('catalyst streaming probe', { tags: ['smoke'] }, () => {
+describe('catalyst streaming probe', () => {
 	it('reports whether /glm/chat supports stream:true and its wire format', async () => {
 		const endpoint = process.env.CATALYST_ENDPOINT;
 		const orgId = process.env.CATALYST_ORG_ID;

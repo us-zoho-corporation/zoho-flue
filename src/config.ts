@@ -15,6 +15,10 @@ export const config = {
 
 	zohoDocsBearerToken: process.env['ZOHO_DOCS_BEARER_TOKEN'] ?? '',
 
+	// Anthropic is a built-in Flue provider — only its key is needed. Optional here;
+	// enforced at startup by registerAnthropic() when an anthropic/* model is offered.
+	anthropicApiKey: process.env['ANTHROPIC_API_KEY'] ?? '',
+
 	// Shared secret for API routes. If unset, routes are unauthenticated — only safe in dev.
 	apiSecret: process.env['FLUE_API_SECRET'] ?? '',
 
@@ -28,10 +32,21 @@ export const config = {
 		defaultCorsOrigins: !process.env['FLUE_CORS_ORIGINS'],
 	},
 
-	// Model used by all agents
-	model: 'catalyst-glm/crm-di-glm47b_30b_it',
+	// Provider-models selectable in the chat. `spec` is a Flue model specifier
+	// (`<provider>/<model>`); `key` is a URL-safe token carried in the conversation
+	// id (`<key>__<uuid>`) so a single `assistant` agent can resolve the chosen
+	// model per conversation. The default is `defaultChatModelKey`.
+	chatModels: [
+		{ key: 'claude', label: 'Claude Sonnet 5', spec: 'anthropic/claude-sonnet-5' },
+		{ key: 'glm', label: 'Zoho GLM 4.7 Flash', spec: 'catalyst-glm/crm-di-glm47b_30b_it' },
+	] as const,
+	defaultChatModelKey: 'claude',
 	// Catalyst GLM input context window (tokens). Drives Flue's built-in compaction.
 	catalystContextWindow: 200_000,
+	// Max output tokens per turn. The default of 2048 truncates turns that both
+	// emit a visualization spec (a large tool-call JSON) and a written answer,
+	// which surfaces as the reply cutting off mid-stream. 8192 leaves headroom.
+	catalystMaxTokens: 8_192,
 
 	// Zoho API tool — domains the zoho_api tool is permitted to reach
 	zohoAllowedHostnames: ['zoho.com', 'zohoapis.com'],

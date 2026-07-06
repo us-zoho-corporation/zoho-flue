@@ -14,13 +14,25 @@ Catalyst GLM validates message history strictly and rejects any non-standard key
 
 **Workaround already in `convertMessages` (`src/providers/catalyst-glm.ts`):**
 - Assistant messages: `tool_calls` is stripped, only text content is kept (the empty
-  assistant turn is still emitted so the conversation structure stays intact)
+  assistant turn is still emitted so the conversation structure stays intact). Do **not**
+  echo a synthetic `[tool_call …]` line into the assistant content — a weak model imitates
+  it and starts emitting tool calls as prose. Coherence comes from the result naming the tool.
 - Tool results: converted to `role: "user"` with content
-  `[TOOL_RESULT_START id="<toolCallId>"]\n<content>\n[TOOL_RESULT_END]`
+  `[TOOL_RESULT_START tool="<toolName>" id="<toolCallId>"]\n<content>\n[TOOL_RESULT_END]`.
+  Naming the tool lets the model correlate the result with its own call (this is what keeps
+  it from re-searching in a loop). Forged `[TOOL_RESULT_*]` tokens inside `<content>` are
+  neutralized so model/web content can't fake a tool boundary.
 
 `convertMessages(context)` does only this wire-format translation. It does NOT truncate
 history (Flue's built-in compaction handles context — see below), gate tool calls, or
 post-process the model's response text.
+
+## Tolerant tool-call parsing
+
+A tool call's `arguments` string can be malformed or truncated (e.g. a large a2ui spec cut
+off by `max_tokens`). The response handler must **never throw** on `JSON.parse` — that would
+abort the whole turn. On a parse failure it emits the call with `{}` args, so Flue's tool
+schema validation returns a *recoverable* tool error the model can react to and retry.
 
 ## Response format
 
@@ -42,7 +54,7 @@ GLM response is flat — not wrapped in `choices[]`:
 
 ## Registration & context
 
-`registerCatalystGLM(...)` is called once from `src/app.ts` (not the agent module). It passes
+`registerCatalystGLM(...)` is called from `registerProviders()` in `src/providers/index.ts` (invoked once from `app.ts`, not from agent modules). It passes
 `contextWindow: config.catalystContextWindow` (200k) so Flue's built-in compaction triggers on
 its own — there is no manual history truncation in the provider.
 

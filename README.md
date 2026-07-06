@@ -10,10 +10,10 @@ pnpm install
 
 Populate `.env` — see [Setup](docs/setup.md) for credentials and OAuth.
 
-Run the main agent from the CLI:
+Run the assistant agent from the CLI:
 
 ```bash
-pnpm exec flue run main --input '{"message":"hello"}'
+pnpm exec flue run assistant --input '{"message":"hello"}'
 ```
 
 Or use the browser chat UI (two terminals):
@@ -29,4 +29,5 @@ pnpm chat            # chat UI on :5173 (proxies to :3583)
 - [Commands](docs/commands.md) — run, build, type-check, lint, test
 - [Examples](docs/examples.md) — example prompts per agent
 - [Architecture](docs/architecture.md) — project structure, providers, auth pattern
+- [a2ui](docs/a2ui.md) — generative UI streaming (charts, tables, metric cards)
 - [Environment](docs/environment.md) — required `.env` variables

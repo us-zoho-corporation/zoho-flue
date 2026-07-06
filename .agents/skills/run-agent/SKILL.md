@@ -13,19 +13,19 @@ pnpm exec flue build            # compile to dist/
 pnpm exec flue dev              # watch-mode dev server on :3583
 ```
 
-The default agent is `main`. Example inputs:
+The single agent is `assistant`; the provider-model is selected per conversation (see the chat UI, or pass `--id '<modelKey>__<id>'` to `flue run`; default is `claude`). Example inputs:
 
 ```bash
-pnpm exec flue run main --input '{"message":"fetch all open leads from Zoho CRM and summarize them"}'
-pnpm exec flue run main --input '{"message":"get the first page of contacts from Zoho CRM and count them"}'
-pnpm exec flue run main --input '{"message":"what is 12 * 34?"}'
+pnpm exec flue run assistant --input '{"message":"fetch all open leads from Zoho CRM and summarize them"}'
+pnpm exec flue run assistant --input '{"message":"get the first page of contacts from Zoho CRM and count them"}'
+pnpm exec flue run assistant --input '{"message":"what is 12 * 34?"}'
 ```
 
 KB search tools (`zoho_kb_search`, `zoho_kb_get_page`, `zoho_kb_list_products`) are only available when `ZOHO_DOCS_BEARER_TOKEN` is set in `.env`:
 
 ```bash
-pnpm exec flue run main --input '{"message":"search zoho docs for how to create a CRM custom function"}'
-pnpm exec flue run main --input '{"message":"list all available zoho documentation products"}'
+pnpm exec flue run assistant --input '{"message":"search zoho docs for how to create a CRM custom function"}'
+pnpm exec flue run assistant --input '{"message":"list all available zoho documentation products"}'
 ```
 
 ## Quality checks
@@ -39,9 +39,10 @@ pnpm exec tsc --noEmit          # type-check (no output = clean)
 pnpm exec oxlint src/           # lint all source
 ```
 
-`pnpm test:browser` uses `vitest.browser.config.ts` (Playwright provider) to render
-`*.browser.test.tsx` components in a real browser. Excluded from the default `pnpm test`.
-One-time: `pnpm exec playwright install chromium`.
+The suites are Vitest `projects` in one `vitest.config.ts`, selected with `--project`:
+`unit` (node — the default `pnpm test`), `browser` (`*.browser.test.tsx` via Playwright +
+headless Chromium), and `smoke` (live credentials). One-time for browser:
+`pnpm exec playwright install chromium`.
 
 ## Chat UI (browser interface)
 
@@ -55,9 +56,9 @@ pnpm exec flue dev
 pnpm chat
 ```
 
-Open `http://localhost:5173` in the browser. The chat UI talks to the `main` agent with conversation ID `default`.
+Open `http://localhost:5173` in the browser. The chat UI talks to the `assistant` agent; the composer's model picker selects the provider-model, carried on the conversation id as `<modelKey>__<uuid>`.
 
-**Requirement:** `src/agents/main.ts` must export `route` for the HTTP API to be reachable. It currently does — `export const route: AgentRouteHandler = async (_c, next) => next();`.
+**Requirement:** `src/agents/assistant.ts` must export `route` for the HTTP API to be reachable. It currently does — `export const route: AgentRouteHandler = async (_c, next) => next();`.
 
 ## Common startup errors
 
