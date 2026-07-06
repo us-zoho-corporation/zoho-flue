@@ -38,6 +38,8 @@ export interface Session {
 }
 
 const STORE_KEY = 'flue:sessions:v3';
+// The model new conversations start on — chosen in Settings, persisted here.
+const MODEL_KEY = 'flue:model:v1';
 
 // The single assistant agent. Its behavior is fixed; only the model varies, chosen
 // per conversation and carried in the instance id (`<modelKey>__<id>`).
@@ -52,6 +54,10 @@ function loadSessions(): Session[] {
 
 function saveSessions(sessions: Session[]) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(sessions)); } catch {}
+}
+
+function loadPreferredModel(): string | null {
+  try { return localStorage.getItem(MODEL_KEY); } catch { return null; }
 }
 
 function makeSession(model: ModelOption): Session {
@@ -73,6 +79,10 @@ export function App() {
   const [models, setModels] = useState<ModelOption[]>([FALLBACK_MODEL]);
   const [defaultKey, setDefaultKey] = useState<string>(FALLBACK_MODEL.key);
   const [modelsLoading, setModelsLoading] = useState(true);
+  // The model new conversations start on. Seeded from localStorage; if the user
+  // has never chosen one, we adopt the server default once /api/models resolves.
+  const storedPrefRef = useRef<string | null>(loadPreferredModel());
+  const [preferredModelKey, setPreferredModelKey] = useState<string>(storedPrefRef.current ?? FALLBACK_MODEL.key);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [view, setView] = useState<'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs'>('chat');
 
@@ -83,7 +93,10 @@ export function App() {
       .then((r) => r.json() as Promise<{ models: ModelOption[]; defaultKey: string }>)
       .then((data) => {
         if (data.models?.length) setModels(data.models);
-        if (data.defaultKey) setDefaultKey(data.defaultKey);
+        if (data.defaultKey) {
+          setDefaultKey(data.defaultKey);
+          if (!storedPrefRef.current) setPreferredModelKey(data.defaultKey);
+        }
       })
       .catch(() => {})
       .finally(() => setModelsLoading(false));
@@ -101,10 +114,10 @@ export function App() {
   const modelOf = (key: string): ModelOption => models.find((m) => m.key === key) ?? defaultModel;
 
   const handleNewSession = useCallback(() => {
-    const s = makeSession(modelOf(activeSession?.modelKey ?? defaultModel.key));
+    const s = makeSession(modelOf(preferredModelKey));
     setSessions((prev) => [...prev, s]);
     setActiveId(s.id);
-  }, [activeSession, defaultModel, models]);
+  }, [preferredModelKey, defaultModel, models]);
 
   const handleDeleteSession = useCallback(
     (id: string) => {
@@ -123,13 +136,14 @@ export function App() {
     [activeId, defaultModel],
   );
 
-  // Selecting a different model starts a fresh conversation — a thread stays on one
-  // model, so history never mixes voices.
+  // Chosen in Settings: the model new conversations start on. A thread stays on the
+  // model it was created with, so history never mixes voices — changing this only
+  // affects the next "New conversation".
   const handleModelChange = useCallback((key: string) => {
-    const s = makeSession(modelOf(key));
-    setSessions((prev) => [...prev, s]);
-    setActiveId(s.id);
-  }, [models, defaultModel]);
+    storedPrefRef.current = key;
+    setPreferredModelKey(key);
+    try { localStorage.setItem(MODEL_KEY, key); } catch {}
+  }, []);
 
   const handleFirstMessage = useCallback((text: string) => {
     const title = text.trim().slice(0, 40) + (text.trim().length > 40 ? '…' : '');
@@ -159,7 +173,14 @@ export function App() {
           onRuns={() => setView('runs')}
         />
         {view === 'settings'
-          ? <Settings profile={profile} onBack={() => setView('chat')} />
+          ? <Settings
+              profile={profile}
+              models={models}
+              modelsLoading={modelsLoading}
+              modelKey={preferredModelKey}
+              onModelChange={handleModelChange}
+              onBack={() => setView('chat')}
+            />
           : view === 'workflows'
           ? <Workflows onBack={() => setView('chat')} />
           : view === 'skills'
@@ -169,10 +190,7 @@ export function App() {
           : view === 'runs'
           ? <Runs onBack={() => setView('chat')} />
           : <Thread
-              models={models}
-              modelsLoading={modelsLoading}
-              modelKey={active.modelKey}
-              onModelChange={handleModelChange}
+              modelLabel={active.modelLabel}
               profile={profile}
             />
         }

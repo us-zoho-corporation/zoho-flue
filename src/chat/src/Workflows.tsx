@@ -21,8 +21,8 @@ interface WorkflowsProps {
 
 function statusIcon(status: RunPointer['status']) {
   switch (status) {
-    case 'completed': return <CheckCircle size={13} className="text-green-400 shrink-0" />;
-    case 'failed':    return <XCircle size={13} className="text-red-400 shrink-0" />;
+    case 'completed': return <CheckCircle size={13} className="text-green-600 shrink-0" />;
+    case 'failed':    return <XCircle size={13} className="text-red-600 shrink-0" />;
     case 'cancelled': return <WarningCircle size={13} className="text-kumo-subtle shrink-0" />;
     default:          return <Circle size={13} className="text-kumo-inactive shrink-0 animate-pulse" />;
   }

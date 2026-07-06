@@ -3,8 +3,8 @@ import { A2uiFrame } from './Frame.tsx';
 import type { StatCard, StatCardsSpec, StatTrend } from './spec.ts';
 
 const TREND_META: Record<StatTrend, { icon: typeof TrendUp; className: string }> = {
-	up: { icon: TrendUp, className: 'text-green-400' },
-	down: { icon: TrendDown, className: 'text-red-400' },
+	up: { icon: TrendUp, className: 'text-green-600' },
+	down: { icon: TrendDown, className: 'text-red-600' },
 	flat: { icon: Minus, className: 'text-kumo-subtle' },
 };
 
