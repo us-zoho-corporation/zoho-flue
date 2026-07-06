@@ -55,7 +55,6 @@ app.use('/api/mcp-servers/*', auth.requireUser);
 app.route('/api/mcp-servers', createMcpRoutes({
 	stores,
 	keyring: parseKeyring(config.dataEncryptionKey),
-	maxServers: config.mcpMaxServersPerUser,
 }));
 
 // Per-user preferences (Catalyst-backed). Requires a valid session.

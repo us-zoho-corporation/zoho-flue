@@ -4,7 +4,8 @@ import { defineZohoApiTool } from '../tools/zoho-api';
 import { a2uiTools } from '../tools/a2ui';
 import { zohoKbTools } from '../mcp/zoho-kb';
 import { getAuth } from '../auth';
-import { runWithRequestContext } from '../auth/request-context';
+import { currentMcpTools, runWithRequestContext } from '../auth/request-context';
+import { loadUserMcpTools } from '../mcp/live';
 import { CATALYST_GLM_API } from '../providers/catalyst-glm';
 
 // Tools hold these credentials in a closure; the model only ever sees parameter names.
@@ -57,18 +58,32 @@ export function modelForConversation(id: string): string {
 	return chosen.spec;
 }
 
-// Before running a turn, attach the logged-in user's token to the request context
-// for GLM conversations, so the Catalyst GLM provider can call the endpoint as the
-// user (their token carries QuickML.deployment.READ). Claude conversations use the
-// Anthropic key and need no per-user token. Guests fall back to the service token.
+// Before running a turn, populate the request context for the logged-in user:
+//  - GLM conversations get the user's Zoho token (carries QuickML.deployment.READ)
+//    so the provider calls the endpoint as the user;
+//  - any conversation gets the user's connected MCP servers' tools, injected into
+//    the agent below.
+// Guests get neither (service token / no MCP tools).
 export const route: AgentRouteHandler = async (c, next) => {
+	const auth = getAuth();
+	const userId = await auth.resolveUserId(c).catch(() => null);
+	if (!userId) return next();
+
 	const id = decodeURIComponent(c.req.path.split('/').pop() ?? '');
-	if (!modelForConversation(id).startsWith(`${CATALYST_GLM_API}/`)) return next();
-	const userToken = await getAuth().resolveUserToken(c).catch(() => null);
-	return runWithRequestContext({ userToken: userToken ?? undefined }, () => next());
+	const isGlm = modelForConversation(id).startsWith(`${CATALYST_GLM_API}/`);
+	const [userToken, mcpTools] = await Promise.all([
+		isGlm ? auth.getUserToken(userId).catch(() => undefined) : Promise.resolve(undefined),
+		loadUserMcpTools(userId).catch(() => []),
+	]);
+	return runWithRequestContext({ userToken, mcpTools }, () => next());
 };
 
-export default defineAgent(({ id }) => ({
-	profile: zohoAssistant,
-	model: modelForConversation(id),
-}));
+export default defineAgent(({ id }) => {
+	// Per-conversation profile: the fixed assistant plus the logged-in user's
+	// connected MCP tools (from the request context set in `route`, if any).
+	const mcp = (currentMcpTools() ?? []) as NonNullable<typeof zohoAssistant.tools>;
+	const profile = mcp.length
+		? { ...zohoAssistant, tools: [...(zohoAssistant.tools ?? []), ...mcp] }
+		: zohoAssistant;
+	return { profile, model: modelForConversation(id) };
+});

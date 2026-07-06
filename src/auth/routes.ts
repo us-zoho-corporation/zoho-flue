@@ -140,6 +140,8 @@ export interface Auth {
 	requireUser: MiddlewareHandler;
 	/** Live Zoho access token for a user (refreshes via their stored token). */
 	getUserToken(userId: string): Promise<string>;
+	/** Resolves the request's logged-in user id (from the session cookie), or null. */
+	resolveUserId(c: Context): Promise<string | null>;
 	/** Resolves the request's logged-in user and returns their live token, or null. */
 	resolveUserToken(c: Context): Promise<string | null>;
 }
@@ -151,6 +153,7 @@ export function createAuth(deps: AuthDeps): Auth {
 		optionalUser: optionalUser(deps),
 		requireUser: requireUser(deps),
 		getUserToken: (userId: string) => getUserToken(deps, userId),
+		resolveUserId: (c: Context) => resolveUser(c, deps),
 		resolveUserToken: async (c: Context) => {
 			const userId = await resolveUser(c, deps);
 			if (!userId) return null;
