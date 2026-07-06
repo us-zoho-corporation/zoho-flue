@@ -38,9 +38,10 @@ export function createAuthRoutes(deps: AuthDeps): Hono {
 		const state = createState();
 		const returnTo = safeReturnTo(c.req.query('returnTo'));
 
-		// Optional incremental scopes; always include the minimal login scopes.
+		// Optional incremental scopes; always include the configured login scopes.
+		// Zoho expects a comma-delimited scope list; accept comma/space on input.
 		const requested = c.req.query('scopes');
-		const scopes = unionScopes(deps.oauth.loginScopes.split(/\s+/), requested ? requested.split(/\s+/) : []).join(' ');
+		const scopes = unionScopes(deps.oauth.loginScopes.split(/[\s,]+/), requested ? requested.split(/[\s,]+/) : []).join(',');
 
 		const payload: LoginState = { state, verifier, returnTo };
 		await setSignedCookie(c, LOGIN_COOKIE, JSON.stringify(payload), deps.sessionSecret, { ...cookieOpts, maxAge: 600 });
