@@ -1,7 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { config } from '../config';
-import { getZohoAccessToken, type OAuthCredentials } from '../providers/zoho-auth';
+import { getZohoAccessToken, type OAuthCredentials } from '../auth/zoho-auth';
 
 /** Returns true if `url`'s hostname matches or is a subdomain of an entry in `config.zohoAllowedHostnames`. */
 function isAllowedUrl(url: string): boolean {

@@ -10,7 +10,7 @@ vi.mock('../config', () => ({
 // The tool resolves its bearer token via getZohoAccessToken(oauth) on each call.
 // Mock it to return a fixed token so tests stay offline and deterministic.
 // (Inlined literal — vi.mock factories run hoisted, before top-level consts.)
-vi.mock('../providers/zoho-auth', () => ({
+vi.mock('../auth/zoho-auth', () => ({
     getZohoAccessToken: vi.fn(async () => 'test-token'),
 }));
 

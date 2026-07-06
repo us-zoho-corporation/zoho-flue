@@ -1,31 +1,54 @@
 import {
+  ArrowClockwise,
   ArrowUp,
+  CaretRight,
   Copy,
+  Info,
+  WarningCircle,
 } from '@phosphor-icons/react';
-import { Button, LayerCard, Popover, Select, SidebarTrigger, useSidebar } from '@cloudflare/kumo';
+import { Badge, Banner, Button, Collapsible, Empty, Loader, Popover, Select, SidebarTrigger, useSidebar } from '@cloudflare/kumo';
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
-import type { AgentEntry, UserProfile } from './App.tsx';
-import { type ToolCallInfo, type ChatMessage, isAssistantMessage, useFlueActivity, useFlueChat } from './FlueRuntime.tsx';
-import type { UIMessage } from '@flue/react';
+import type { ModelOption, UserProfile } from './App.tsx';
+import { type ToolCallInfo, type ChatMessage, isAssistantMessage, useFlueChat } from './FlueRuntime.tsx';
+import { A2uiPart } from './a2ui/index.ts';
+import type { FlueConversationMessage } from '@flue/react';
 
 interface ThreadProps {
-  agents: AgentEntry[];
-  agentsLoading: boolean;
-  agentName: string;
-  onAgentChange: (name: string) => void;
+  models: ModelOption[];
+  modelsLoading: boolean;
+  modelKey: string;
+  onModelChange: (key: string) => void;
   profile: UserProfile | null;
 }
 
-export function Thread({ agents, agentsLoading, agentName, onAgentChange, profile }: ThreadProps) {
-  const { messages, timestamps, isRunning, historyReady, sendMessage } = useFlueChat();
+function textOf(message: FlueConversationMessage): string {
+  return message.parts.filter((p) => p.type === 'text').map((p) => ('text' in p ? p.text : '')).join('');
+}
+
+export function Thread({ models, modelsLoading, modelKey, onModelChange, profile }: ThreadProps) {
+  const { messages, timestamps, isRunning, historyReady, error, sendMessage } = useFlueChat();
   const { open: sidebarOpen } = useSidebar();
   const viewportRef = useRef<HTMLDivElement>(null);
+
+  const last = messages[messages.length - 1];
+  // The agent is working but hasn't produced its assistant turn yet (just
+  // submitted) — show a pending "Thinking" turn so the thread never sits silent.
+  const showPending = isRunning && (!last || last.role === 'user');
+
+  // A finished run whose final entry carries no answer (last visible entry is the
+  // user's message, or an assistant turn with steps but no text/visualization)
+  // means nothing was written back. Never leave the user with silence.
+  const lastAssistantEmpty = !!last && last.role === 'assistant'
+    && !last.parts.some((p) => p.type === 'text' && p.text)
+    && (!isAssistantMessage(last) || last.uiParts.length === 0);
+  const noReply = historyReady && !isRunning && (last?.role === 'user' || lastAssistantEmpty);
+  const lastUserText = [...messages].reverse().find((m) => m.role === 'user');
 
   useEffect(() => {
     const el = viewportRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, isRunning]);
+  }, [messages, isRunning]);
 
   return (
     <div className="chat-area flex-1 min-w-0">
@@ -38,27 +61,35 @@ export function Thread({ agents, agentsLoading, agentName, onAgentChange, profil
       <div ref={viewportRef} className="chat-viewport">
         <div className="chat-messages">
           {!historyReady && (
-            <div className="history-loading">Loading…</div>
+            <div className="history-loading"><Loader size="sm" /></div>
           )}
-          {historyReady && messages.length === 0 && (
-            <EmptyState agentName={agentName} />
+          {historyReady && messages.length === 0 && !showPending && (
+            <EmptyState />
           )}
-          {messages.map((msg) => (
+          {messages.map((msg, idx) => (
             msg.role === 'user'
               ? <UserMessage key={msg.id} message={msg} ts={timestamps.get(msg.id)} />
-              : <AssistantMessage key={msg.id} message={msg as ChatMessage} ts={timestamps.get(msg.id)} />
+              : <AssistantTurn
+                  key={msg.id}
+                  message={msg as ChatMessage}
+                  ts={timestamps.get(msg.id)}
+                  running={isRunning && idx === messages.length - 1}
+                />
           ))}
-          <ToolActivity />
+          {showPending && <PendingTurn />}
+          {noReply && (
+            <NoReplyNotice error={error} onRetry={() => lastUserText && sendMessage(textOf(lastUserText))} />
+          )}
         </div>
       </div>
 
       <div className="composer-wrap">
         <div className="composer-inner">
           <Composer
-            agents={agents}
-            agentsLoading={agentsLoading}
-            agentName={agentName}
-            onAgentChange={onAgentChange}
+            models={models}
+            modelsLoading={modelsLoading}
+            modelKey={modelKey}
+            onModelChange={onModelChange}
             isRunning={isRunning}
             onSend={sendMessage}
           />
@@ -132,28 +163,23 @@ function formatTs(ts: number | undefined): string {
 
 // ─── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState({ agentName }: { agentName: string }) {
+function EmptyState() {
   return (
     <div className="empty-state">
-      <div className="empty-logo-wrap">
-        <div className="empty-logo-glow" />
-        <div className="empty-logo-mark">Z</div>
-      </div>
-      <div>
-        <p className="empty-title">What can I help with?</p>
-        <p className="empty-subtitle">
-          Ask about {agentName} — Zoho products, APIs, and workflows.
-        </p>
-      </div>
+      <Empty
+        icon={<div className="empty-logo"><span className="empty-logo-glow" />Z</div>}
+        title="What can I help with?"
+        description="Ask about Zoho products, APIs, and workflows. Answers are grounded in the documentation, with sources."
+      />
     </div>
   );
 }
 
 // ─── User message ──────────────────────────────────────────────────────────────
 
-function UserMessage({ message, ts }: { message: UIMessage; ts?: number }) {
+function UserMessage({ message, ts }: { message: FlueConversationMessage; ts?: number }) {
   const [copied, setCopied] = useState(false);
-  const text = message.parts.filter((p) => p.type === 'text').map((p) => 'text' in p ? p.text : '').join('');
+  const text = textOf(message);
 
   const copy = useCallback(() => {
     navigator.clipboard.writeText(text).then(() => {
@@ -179,14 +205,20 @@ function UserMessage({ message, ts }: { message: UIMessage; ts?: number }) {
   );
 }
 
-// ─── Assistant message ─────────────────────────────────────────────────────────
+// ─── Assistant turn ──────────────────────────────────────────────────────────
+//
+// One continuous turn, answer-first. The tool trace (the process) sits quietly on
+// top — a live panel while running, a collapsed Kumo Badge/Collapsible once done.
+// The written answer is the hero: borderless prose, not a boxed card. Any
+// visualizations render below it in framed surfaces. Nothing teleports between the
+// running and finished states.
 
-function AssistantMessage({ message, ts }: { message: ChatMessage; ts?: number }) {
+export function AssistantTurn({ message, ts, running }: { message: ChatMessage; ts?: number; running: boolean }) {
   const [copied, setCopied] = useState(false);
-  const [stepsOpen, setStepsOpen] = useState(false);
   const textParts = message.parts.filter((p) => p.type === 'text' && 'text' in p && p.text);
-  const fullText = textParts.map((p) => 'text' in p ? p.text : '').join('');
-  const toolSteps = isAssistantMessage(message) ? message.toolSteps : [];
+  const fullText = textParts.map((p) => ('text' in p ? p.text : '')).join('');
+  const steps = isAssistantMessage(message) ? message.toolSteps : [];
+  const uiParts = isAssistantMessage(message) ? message.uiParts : [];
 
   const copy = useCallback(() => {
     navigator.clipboard.writeText(fullText).then(() => {
@@ -195,41 +227,167 @@ function AssistantMessage({ message, ts }: { message: ChatMessage; ts?: number }
     });
   }, [fullText]);
 
+  const hasContent = textParts.length > 0 || uiParts.length > 0;
+  const thinking = running && steps.length === 0 && !hasContent;
+
   return (
     <div className="msg-assistant msg-assistant-appear group">
       <div className="msg-avatar">Z</div>
       <div className="msg-assistant-content">
-        <LayerCard className="px-4 py-3 rounded-tl-sm">
-          <div className="message-content">
+        {steps.length > 0 && <ToolTrace steps={steps} running={running} />}
+
+        {thinking && <ThinkingRow />}
+
+        {textParts.length > 0 && (
+          <div className="answer message-content">
             {textParts.map((part, i) => (
               <Markdown key={i}>{'text' in part ? part.text : ''}</Markdown>
             ))}
           </div>
-        </LayerCard>
+        )}
 
-        <div className="msg-action-bar">
-          <div className="flex items-center gap-1">
-            {toolSteps.length > 0 && (
-              <button
-                onClick={() => setStepsOpen((o) => !o)}
-                className="flex items-center gap-1 text-[11px] text-kumo-inactive hover:text-kumo-subtle transition-colors px-1 py-0.5 rounded"
-              >
-                <span className={`transition-transform duration-150 inline-block ${stepsOpen ? 'rotate-90' : ''}`}>▶</span>
-                {toolSteps.length} {toolSteps.length === 1 ? 'step' : 'steps'}
-              </button>
-            )}
-            <Button variant="ghost" shape="square" size="xs" aria-label="Copy" onClick={copy} title={copied ? 'Copied!' : 'Copy'} className="opacity-100">
-              <Copy size={11} weight="fill" />
-            </Button>
-          </div>
-          <span className="text-[11px] text-kumo-inactive">{ts ? formatTs(ts) : ''}</span>
-        </div>
-
-        {stepsOpen && toolSteps.length > 0 && (
-          <div className="mt-1.5 flex flex-col gap-1.5 pl-1">
-            {toolSteps.map((tc, i) => <ToolCallRow key={tc.toolCallId} {...tc} index={i} />)}
+        {uiParts.length > 0 && (
+          <div className="a2ui-parts flex flex-col">
+            {uiParts.map((part) => <A2uiPart key={part.toolCallId} part={part} />)}
           </div>
         )}
+
+        {!running && hasContent && (
+          <div className="msg-action-bar">
+            <Button variant="ghost" shape="square" size="xs" aria-label="Copy answer" onClick={copy} title={copied ? 'Copied!' : 'Copy'} className="opacity-100">
+              <Copy size={11} weight="fill" />
+            </Button>
+            <span className="text-[11px] text-kumo-inactive">{ts ? formatTs(ts) : ''}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tool trace (the process) ────────────────────────────────────────────────
+
+function ToolTrace({ steps, running }: { steps: ToolCallInfo[]; running: boolean }) {
+  const [open, setOpen] = useState(false);
+
+  // While running, the steps are the live focus — a quiet panel that sits in the
+  // exact place the collapsed summary will occupy once the turn settles.
+  if (running) {
+    return (
+      <div className="tool-trace-live">
+        {steps.map((tc, i) => <ToolCallRow key={tc.toolCallId} {...tc} index={i} />)}
+      </div>
+    );
+  }
+
+  // Finished: collapse in place to a compact Kumo Badge, expandable.
+  const errored = steps.some((s) => s.state === 'output-error');
+  const label = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
+  return (
+    <Collapsible.Root open={open} onOpenChange={setOpen} className="tool-trace">
+      <Collapsible.Trigger className="tool-trace-trigger">
+        <CaretRight size={11} weight="bold" className={`tool-trace-caret${open ? ' is-open' : ''}`} />
+        <Badge variant={errored ? 'warning' : 'secondary'}>{errored ? `${label} · issue` : label}</Badge>
+      </Collapsible.Trigger>
+      <Collapsible.Panel className="tool-trace-panel">
+        {steps.map((tc, i) => <ToolCallRow key={tc.toolCallId} {...tc} index={i} />)}
+      </Collapsible.Panel>
+    </Collapsible.Root>
+  );
+}
+
+function ThinkingRow() {
+  return (
+    <div className="assistant-status">
+      <Loader size="sm" />
+      <span>Thinking…</span>
+    </div>
+  );
+}
+
+function PendingTurn() {
+  return (
+    <div className="msg-assistant msg-assistant-appear">
+      <div className="msg-avatar">Z</div>
+      <div className="msg-assistant-content">
+        <ThinkingRow />
+      </div>
+    </div>
+  );
+}
+
+function inputSummary(name: string, input: unknown): string {
+  if (!input || typeof input !== 'object') return '';
+  const obj = input as Record<string, unknown>;
+  // Prefer explicit query/search/keyword fields
+  const query = obj['query'] ?? obj['search'] ?? obj['keyword'] ?? obj['q'];
+  if (typeof query === 'string' && query.trim()) return `“${query.trim()}”`;
+  // For URL-based tools show the path
+  const url = obj['url'] ?? obj['path'] ?? obj['endpoint'];
+  if (typeof url === 'string') {
+    try { return new URL(url).pathname; } catch { return url; }
+  }
+  void name;
+  return '';
+}
+
+function friendlyLabel(name: string, state: ToolCallInfo['state'], input: unknown): string {
+  const running = state === 'input-available';
+  const map: Record<string, [string, string]> = {
+    search_docs:           ['Searching',  'Searched'],
+    zoho_kb_search:        ['Searching',  'Searched'],
+    get_page:              ['Reading',    'Read'],
+    list_products:         ['Listing',    'Listed'],
+    zoho_kb_list_products: ['Listing',    'Listed'],
+    zoho_api:              ['Fetching',   'Fetched'],
+  };
+  const snake = name.replace(/_/g, ' ');
+  const [present, past] = map[name] ?? [snake, snake];
+  const verb = running ? present : past;
+  const detail = inputSummary(name, input);
+  return detail ? `${verb} ${detail}` : verb;
+}
+
+export function ToolCallRow({ toolName, state, input, index }: ToolCallInfo & { index: number }) {
+  const running = state === 'input-available';
+  const errored = state === 'output-error';
+
+  return (
+    <div className="tool-row tool-row-enter" style={{ animationDelay: `${index * 55}ms` }}>
+      <span className="tool-row-icon">
+        {running
+          ? <Loader size={13} />
+          : errored
+            ? <WarningCircle size={13} weight="fill" className="text-kumo-danger" />
+            : <span className="tool-row-dot" />}
+      </span>
+      <span className={`tool-row-label${running ? ' is-running' : ''}`}>
+        {friendlyLabel(toolName, state, input)}
+      </span>
+    </div>
+  );
+}
+
+// ─── No-reply / error fallback ───────────────────────────────────────────────
+
+export function NoReplyNotice({ error, onRetry }: { error?: Error; onRetry: () => void }) {
+  return (
+    <div className="msg-assistant msg-assistant-appear">
+      <div className="msg-avatar">Z</div>
+      <div className="msg-assistant-content">
+        <Banner
+          variant={error ? 'error' : 'secondary'}
+          icon={error ? <WarningCircle size={18} weight="fill" /> : <Info size={18} weight="fill" />}
+          title={error ? 'Something went wrong while answering.' : 'I couldn’t find an answer to that.'}
+          description={error
+            ? error.message
+            : 'This can happen when the documentation doesn’t cover your question. Try rephrasing, or ask again.'}
+          action={
+            <Button variant="secondary" size="xs" onClick={onRetry}>
+              <ArrowClockwise size={12} /> Ask again
+            </Button>
+          }
+        />
       </div>
     </div>
   );
@@ -238,18 +396,18 @@ function AssistantMessage({ message, ts }: { message: ChatMessage; ts?: number }
 // ─── Composer ─────────────────────────────────────────────────────────────────
 
 interface ComposerProps {
-  agents: AgentEntry[];
-  agentsLoading: boolean;
-  agentName: string;
-  onAgentChange: (name: string) => void;
+  models: ModelOption[];
+  modelsLoading: boolean;
+  modelKey: string;
+  onModelChange: (key: string) => void;
   isRunning: boolean;
   onSend: (text: string) => Promise<void>;
 }
 
-function Composer({ agents, agentsLoading, agentName, onAgentChange, isRunning, onSend }: ComposerProps) {
+function Composer({ models, modelsLoading, modelKey, onModelChange, isRunning, onSend }: ComposerProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const hasChoice = agents.length > 1;
+  const hasChoice = models.length > 1;
 
   const handleSend = useCallback(() => {
     const text = value.trim();
@@ -285,21 +443,22 @@ function Composer({ agents, agentsLoading, agentName, onAgentChange, isRunning, 
       />
 
       <div className="composer-footer">
-        {!agentsLoading && hasChoice && (
+        {!modelsLoading && hasChoice && (
           <Select
-            hideLabel
             size="xs"
-            value={agentName}
-            onValueChange={(v) => onAgentChange(v as string)}
+            aria-label="Model"
+            value={modelKey}
+            onValueChange={(v) => onModelChange(v as string)}
+            renderValue={(v) => models.find((m) => m.key === v)?.label ?? String(v)}
             className="composer-agent-select"
           >
-            {agents.map((a) => (
-              <Select.Option key={a.name} value={a.name}>{a.name}</Select.Option>
+            {models.map((m) => (
+              <Select.Option key={m.key} value={m.key}>{m.label}</Select.Option>
             ))}
           </Select>
         )}
-        {!agentsLoading && !hasChoice && (
-          <span className="text-xs text-kumo-inactive px-1">{agentName}</span>
+        {!modelsLoading && !hasChoice && (
+          <span className="text-xs text-kumo-inactive px-1">{models.find((m) => m.key === modelKey)?.label ?? modelKey}</span>
         )}
 
         <div className="ml-auto">
@@ -309,103 +468,6 @@ function Composer({ agents, agentsLoading, agentName, onAgentChange, isRunning, 
           </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── Tool activity ─────────────────────────────────────────────────────────────
-
-
-function inputSummary(name: string, input: unknown): string {
-  if (!input || typeof input !== 'object') return '';
-  const obj = input as Record<string, unknown>;
-  // Prefer explicit query/search/keyword fields
-  const query = obj['query'] ?? obj['search'] ?? obj['keyword'] ?? obj['q'];
-  if (typeof query === 'string' && query.trim()) return `"${query.trim()}"`;
-  // For URL-based tools show the path
-  const url = obj['url'] ?? obj['path'] ?? obj['endpoint'];
-  if (typeof url === 'string') {
-    try { return new URL(url).pathname; } catch { return url; }
-  }
-  void name;
-  return '';
-}
-
-function friendlyLabel(name: string, state: ToolCallInfo['state'], input: unknown): string {
-  const running = state === 'input-available';
-  const map: Record<string, [string, string]> = {
-    search_docs:           ['Searching',  'Searched'],
-    zoho_kb_search:        ['Searching',  'Searched'],
-    get_page:              ['Reading',    'Read'],
-    list_products:         ['Listing',    'Listed'],
-    zoho_kb_list_products: ['Listing',    'Listed'],
-    zoho_api:              ['Fetching',   'Fetched'],
-  };
-  const snake = name.replace(/_/g, ' ');
-  const [present, past] = map[name] ?? [snake, snake];
-  const verb = running ? present : past;
-  const detail = inputSummary(name, input);
-  return detail ? `${verb} ${detail}` : verb;
-}
-
-export function ToolCallRow({ toolName, state, input, index }: ToolCallInfo & { index: number }) {
-  const running = state === 'input-available';
-  const errored = state === 'output-error';
-
-  return (
-    <div className="tool-row-enter flex items-center gap-2" style={{ animationDelay: `${index * 65}ms` }}>
-      {running
-        ? <div className="thinking-dots shrink-0"><span/><span/><span/></div>
-        : errored
-          ? <div className="w-2 h-2 rounded-full bg-red-400 shrink-0" />
-          : <div className="w-2 h-2 rounded-full bg-green-400 shrink-0" />}
-
-      <span className={`text-xs ${running ? 'text-kumo-default' : 'text-kumo-subtle'}`}>
-        {friendlyLabel(toolName, state, input)}
-      </span>
-    </div>
-  );
-}
-
-
-function ToolActivity() {
-  const { toolCalls, isRunning } = useFlueActivity();
-  const lastCalls = useRef<ToolCallInfo[]>([]);
-  if (toolCalls.length > 0) lastCalls.current = toolCalls;
-
-  const [mounted, setMounted] = useState(false);
-  const [exiting, setExiting] = useState(false);
-
-  useEffect(() => {
-    if (isRunning) {
-      setMounted(true);
-      setExiting(false);
-    } else if (mounted) {
-      setExiting(true);
-      const t = setTimeout(() => { setMounted(false); setExiting(false); }, 300);
-      return () => clearTimeout(t);
-    }
-  }, [isRunning]);
-
-  if (!mounted) return null;
-
-  const hasCalls = lastCalls.current.length > 0;
-
-  return (
-    <div className={`msg-assistant mb-4${exiting ? ' tool-activity-exit' : ''}`}>
-      <div className="msg-avatar">Z</div>
-      <LayerCard className="flex-1 min-w-0 px-3.5 py-3 rounded-tl-sm">
-        {!hasCalls ? (
-          <div className="flex items-center gap-2">
-            <div className="thinking-dots"><span/><span/><span/></div>
-            <p className="text-sm text-kumo-default">Thinking</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            {lastCalls.current.map((tc, i) => <ToolCallRow key={tc.toolCallId} {...tc} index={i} />)}
-          </div>
-        )}
-      </LayerCard>
     </div>
   );
 }

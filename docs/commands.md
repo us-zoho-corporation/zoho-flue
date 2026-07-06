@@ -33,5 +33,6 @@ pnpm exec tsc --noEmit
 pnpm exec oxlint src/
 ```
 
-`pnpm test:browser` runs `*.browser.test.tsx` files via `vitest.browser.config.ts`. It is
-excluded from the default `pnpm test`. One-time setup: `pnpm exec playwright install chromium`.
+The three suites are Vitest `projects` in one `vitest.config.ts`, selected via `--project`:
+`unit` (node, the default `pnpm test`), `browser` (`*.browser.test.tsx` in headless Chromium),
+and `smoke` (live credentials). One-time for browser: `pnpm exec playwright install chromium`.

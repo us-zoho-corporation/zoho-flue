@@ -69,7 +69,7 @@ export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSetti
                     <span className="flex flex-col gap-0.5 flex-1 min-w-0">
                       <span className="text-sm truncate">{session.title}</span>
                       <span className="flex items-center gap-1.5">
-                        <span className="text-xs text-kumo-subtle">{session.agentName}</span>
+                        <span className="text-xs text-kumo-subtle">{session.modelLabel}</span>
                         <span className="text-xs text-kumo-subtle opacity-50">·</span>
                         <span className="text-xs text-kumo-subtle opacity-50">{timeAgo(session.createdAt)}</span>
                       </span>

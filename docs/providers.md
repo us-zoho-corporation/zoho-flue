@@ -1,6 +1,14 @@
 # Providers
 
-Custom integrations in `src/providers/`, registered once in `src/app.ts` via `registerProvider` / `registerApiProvider` from `@flue/runtime`. Runtime provider setup belongs in `app.ts`, not in agent modules — Flue loads `app.ts` in every run mode, so the provider is registered before any agent resolves its model.
+Every **model provider** (in the Flue sense — `registerProvider` / `registerApiProvider`) lives in `src/providers/` and is wired in through one `registerProviders()` call (`src/providers/index.ts`) that `src/app.ts` invokes at startup. Provider setup belongs here, not in agent modules — Flue loads `app.ts` in every run mode, so providers are registered before any agent resolves its model.
+
+Credential/OAuth helpers are **not** providers; they live in `src/auth/` (see [architecture.md](architecture.md) → Auth).
+
+| File | Provider |
+|---|---|
+| `index.ts` | `registerProviders()` — registers all of the below |
+| `catalyst-glm.ts` | Zoho Catalyst QuickML GLM (custom `registerApiProvider` adapter) |
+| `anthropic.ts` | Anthropic Claude (built-in Flue provider; credential-only) |
 
 ## `catalyst-glm.ts`
 
@@ -30,13 +38,21 @@ When sending multi-turn history back, Catalyst GLM rejects unrecognised keys wit
 - `tool_call_id` on any message
 
 **Workaround (already implemented in `convertMessages`):**
-- Assistant messages carry only their text content — `tool_calls` is stripped
+- Assistant messages carry only their text content — `tool_calls` is stripped. It does **not**
+  echo a synthetic `[tool_call …]` line either; a weak model imitates that and emits tool calls
+  as prose instead of real calls.
 - Tool results are sent as `role: "user"` with content
-  `[TOOL_RESULT_START id="<toolCallId>"]\n<content>\n[TOOL_RESULT_END]`
+  `[TOOL_RESULT_START tool="<toolName>" id="<toolCallId>"]\n<content>\n[TOOL_RESULT_END]`.
+  Naming the tool lets the model correlate the result with its own call (stops re-search loops);
+  forged `[TOOL_RESULT_*]` tokens in `<content>` are neutralized.
 
 `convertMessages` does wire-format translation only — it does not truncate history. Context
 size is managed by Flue's built-in compaction, which `registerCatalystGLM` enables by passing
 `contextWindow` (`config.catalystContextWindow`, 200k).
+
+**Tolerant tool-call parsing:** the response handler never throws on a malformed/truncated
+`arguments` JSON — it emits the call with `{}` args so Flue's schema validation returns a
+recoverable tool error the model can retry, rather than aborting the whole turn.
 
 ### Model ID format
 
@@ -48,15 +64,10 @@ size is managed by Flue's built-in compaction, which `registerCatalystGLM` enabl
 
 ---
 
-## `zoho-auth.ts`
+## `anthropic.ts`
 
-Exchanges `ZOHO_OAUTH_REFRESH_TOKEN` for a live Zoho access token via:
+Anthropic Claude is one of Flue's **built-in catalog providers**, so it needs no `registerApiProvider` — only `ANTHROPIC_API_KEY`. `registerAnthropic()` is its declared home (mirroring `catalyst-glm.ts`): it fails fast at startup if an `anthropic/*` model is offered in `config.chatModels` without a key, then layers that key onto the catalog provider via `registerProvider('anthropic', { apiKey })`.
 
-```
-POST https://accounts.zoho.com/oauth/v2/token
-  grant_type=refresh_token
-```
+---
 
-Called from `src/app.ts` at startup (top-level `await`) when registering the Catalyst provider — token is always fresh on startup, never static.
-
-See [environment.md](environment.md) for the required env variables and [setup.md](setup.md) for how to obtain them.
+Zoho OAuth token exchange used to live here but is **not a provider** — it moved to `src/auth/zoho-auth.ts`. See [architecture.md](architecture.md) → Auth, and the `zoho-oauth` skill for the credential flow. It is consumed here by `catalyst-glm.ts` for the provider's bearer token.

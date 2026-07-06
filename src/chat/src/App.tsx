@@ -9,12 +9,17 @@ import { Skills } from './Skills.tsx';
 import { Thread } from './Thread.tsx';
 import { Workflows } from './Workflows.tsx';
 
+// Used by the Agents admin view (the deployed-agent manifest), not the chat picker.
 export type AgentEntry = {
   name: string;
   description?: string;
   transports: { http?: true };
   defined: boolean;
 };
+
+// A selectable provider-model (from /api/models). The chat runs one `assistant`
+// agent; the chosen model is carried per conversation in the instance id.
+export type ModelOption = { key: string; label: string };
 
 export type UserProfile = {
   displayName: string;
@@ -26,12 +31,20 @@ export type UserProfile = {
 
 export interface Session {
   id: string;
-  agentName: string;
+  modelKey: string;
+  modelLabel: string;
   title: string;
   createdAt: number;
 }
 
-const STORE_KEY = 'flue:sessions:v2';
+const STORE_KEY = 'flue:sessions:v3';
+
+// The single assistant agent. Its behavior is fixed; only the model varies, chosen
+// per conversation and carried in the instance id (`<modelKey>__<id>`).
+const ASSISTANT_AGENT = 'assistant';
+
+// Used before /api/models resolves, and if it fails. Matches config.defaultChatModelKey.
+const FALLBACK_MODEL: ModelOption = { key: 'claude', label: 'Claude Sonnet 5' };
 
 function loadSessions(): Session[] {
   try { return JSON.parse(localStorage.getItem(STORE_KEY) ?? '[]'); } catch { return []; }
@@ -41,8 +54,8 @@ function saveSessions(sessions: Session[]) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(sessions)); } catch {}
 }
 
-function makeSession(agentName: string): Session {
-  return { id: crypto.randomUUID(), agentName, title: 'New conversation', createdAt: Date.now() };
+function makeSession(model: ModelOption): Session {
+  return { id: crypto.randomUUID(), modelKey: model.key, modelLabel: model.label, title: 'New conversation', createdAt: Date.now() };
 }
 
 export function App() {
@@ -51,25 +64,29 @@ export function App() {
     const saved = loadSessions();
     const sessions = saved.length
       ? saved
-      : (() => { const s = [makeSession('main')]; saveSessions(s); return s; })();
+      : (() => { const s = [makeSession(FALLBACK_MODEL)]; saveSessions(s); return s; })();
     initRef.current = { sessions, activeId: sessions[sessions.length - 1].id };
   }
 
   const [sessions, setSessions] = useState<Session[]>(initRef.current.sessions);
   const [activeId, setActiveId] = useState<string>(initRef.current.activeId);
-  const [agents, setAgents] = useState<AgentEntry[]>([]);
-  const [agentsLoading, setAgentsLoading] = useState(true);
+  const [models, setModels] = useState<ModelOption[]>([FALLBACK_MODEL]);
+  const [defaultKey, setDefaultKey] = useState<string>(FALLBACK_MODEL.key);
+  const [modelsLoading, setModelsLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [view, setView] = useState<'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs'>('chat');
 
   useEffect(() => { saveSessions(sessions); }, [sessions]);
 
   useEffect(() => {
-    fetch('/api/agents')
-      .then((r) => r.json() as Promise<AgentEntry[]>)
-      .then((data) => setAgents(data.filter((a) => a.transports.http && a.defined)))
+    fetch('/api/models')
+      .then((r) => r.json() as Promise<{ models: ModelOption[]; defaultKey: string }>)
+      .then((data) => {
+        if (data.models?.length) setModels(data.models);
+        if (data.defaultKey) setDefaultKey(data.defaultKey);
+      })
       .catch(() => {})
-      .finally(() => setAgentsLoading(false));
+      .finally(() => setModelsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -79,23 +96,22 @@ export function App() {
       .catch(() => {});
   }, []);
 
+  const defaultModel = models.find((m) => m.key === defaultKey) ?? models[0] ?? FALLBACK_MODEL;
   const activeSession = sessions.find((s) => s.id === activeId) ?? sessions[sessions.length - 1];
+  const modelOf = (key: string): ModelOption => models.find((m) => m.key === key) ?? defaultModel;
 
-  const handleNewSession = useCallback(
-    (agentName?: string) => {
-      const s = makeSession(agentName ?? activeSession?.agentName ?? 'main');
-      setSessions((prev) => [...prev, s]);
-      setActiveId(s.id);
-    },
-    [activeSession],
-  );
+  const handleNewSession = useCallback(() => {
+    const s = makeSession(modelOf(activeSession?.modelKey ?? defaultModel.key));
+    setSessions((prev) => [...prev, s]);
+    setActiveId(s.id);
+  }, [activeSession, defaultModel, models]);
 
   const handleDeleteSession = useCallback(
     (id: string) => {
       setSessions((prev) => {
         const next = prev.filter((s) => s.id !== id);
         if (next.length === 0) {
-          const s = makeSession(activeSession?.agentName ?? 'main');
+          const s = makeSession(defaultModel);
           saveSessions([s]);
           setActiveId(s.id);
           return [s];
@@ -104,26 +120,30 @@ export function App() {
         return next;
       });
     },
-    [activeId, activeSession],
+    [activeId, defaultModel],
   );
 
-  const handleAgentChange = useCallback((agentName: string) => {
-    const s = makeSession(agentName);
+  // Selecting a different model starts a fresh conversation — a thread stays on one
+  // model, so history never mixes voices.
+  const handleModelChange = useCallback((key: string) => {
+    const s = makeSession(modelOf(key));
     setSessions((prev) => [...prev, s]);
     setActiveId(s.id);
-  }, []);
+  }, [models, defaultModel]);
 
   const handleFirstMessage = useCallback((text: string) => {
     const title = text.trim().slice(0, 40) + (text.trim().length > 40 ? '…' : '');
     setSessions((prev) => prev.map((s) => s.id === activeId ? { ...s, title } : s));
   }, [activeId]);
 
+  const active = activeSession ?? makeSession(defaultModel);
+
   return (
     <SidebarProvider collapsible="offcanvas" defaultOpen className="h-screen overflow-hidden">
       <FlueAssistantBridge
-        key={activeId}
-        agentName={activeSession?.agentName ?? 'main'}
-        conversationId={activeId}
+        key={active.id}
+        agentName={ASSISTANT_AGENT}
+        conversationId={`${active.modelKey}__${active.id}`}
         onFirstMessage={handleFirstMessage}
       >
         <Sidebar
@@ -149,10 +169,10 @@ export function App() {
           : view === 'runs'
           ? <Runs onBack={() => setView('chat')} />
           : <Thread
-              agents={agents}
-              agentsLoading={agentsLoading}
-              agentName={activeSession?.agentName ?? 'main'}
-              onAgentChange={handleAgentChange}
+              models={models}
+              modelsLoading={modelsLoading}
+              modelKey={active.modelKey}
+              onModelChange={handleModelChange}
               profile={profile}
             />
         }

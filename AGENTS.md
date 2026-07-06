@@ -4,16 +4,21 @@ Exploratory repo for building LLM agents on [Flue](https://flueframework.com/) b
 
 ## Directory map
 
-| Path | Purpose |
-|---|---|
-| `src/agents/` | Agent entry points — one file per agent name |
-| `src/config.ts` | All env reads and static constants |
-| `src/tools/` | Application-controlled tool definitions |
-| `src/providers/` | LLM and auth provider registrations |
-| `src/mcp/` | Programmatic MCP server clients |
-| `src/channels/` | Flue channel bindings |
-| `src/sandboxes/` | Sandbox provider configurations |
-| `src/workflows/` | Multi-step workflow definitions |
+Flue discovers `agents/`, `workflows/`, and `channels/` by filename, plus `app.ts`/`db.ts`/`cloudflare.ts`. Everything else under `src/` is our own organization ("organize supporting code however you prefer").
+
+| Path | Purpose | Flue-discovered |
+|---|---|---|
+| `src/app.ts` | Application entrypoint — Flue routes, `/api/*`, CORS, provider wiring | yes |
+| `src/agents/` | Addressable agents — one file per agent name | yes (by filename) |
+| `src/workflows/` | Finite workflows — one file per name (add when needed) | yes (by filename) |
+| `src/channels/` | Verified provider HTTP ingress (add when needed) | yes (by filename) |
+| `src/config.ts` | All env reads and static constants | — |
+| `src/providers/` | Model/LLM provider registrations only (`registerProvider` / `registerApiProvider`); wired via `providers/index.ts`'s `registerProviders()` | — |
+| `src/auth/` | OAuth / credential helpers (e.g. Zoho token exchange) — not model providers | — |
+| `src/tools/` | Application-controlled tool definitions | — |
+| `src/mcp/` | Programmatic MCP server clients | — |
+| `src/sandboxes/` | Sandbox configs (`flue add sandbox <provider>`); wired via `sandbox:` in `defineAgent` | — |
+| `src/chat/` | Browser chat UI (Vite + React) | — |
 
 ## Code conventions
 

@@ -52,8 +52,9 @@ Copy the value into `.env` as `ZOHO_OAUTH_REFRESH_TOKEN`. It is long-lived.
 
 ## How auth works at runtime
 
-`src/app.ts` exchanges the refresh token for a live access token at startup (top-level `await`
-via `getZohoAccessToken`) and registers the Catalyst GLM provider with it. On a 401,
-`src/providers/catalyst-glm.ts` refreshes the token once via `getZohoAccessToken` and retries
-automatically. `ZOHO_DOCS_BEARER_TOKEN` is used directly by the KB MCP client
-(`src/mcp/zoho-kb.ts`) and is not refreshed automatically.
+Token exchange lives in `src/auth/zoho-auth.ts` (`getZohoAccessToken`, cached + auto-refreshed) —
+it is an auth helper, not a Flue model provider. At startup `registerProviders()`
+(`src/providers/index.ts`, invoked from `app.ts`) fetches a live access token and hands it to
+the Catalyst GLM provider. On a 401, `src/providers/catalyst-glm.ts` refreshes the token once
+via `getZohoAccessToken` and retries automatically. `ZOHO_DOCS_BEARER_TOKEN` is used directly by
+the KB MCP client (`src/mcp/zoho-kb.ts`) and is not refreshed automatically.

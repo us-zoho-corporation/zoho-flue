@@ -2,8 +2,9 @@
 
 ## Prerequisites
 
+- An Anthropic API key — required for the default `claude-sonnet-5` model (startup fails without it)
 - A Zoho OAuth client (Self Client) registered at [api-console.zoho.com](https://api-console.zoho.com/)
-- A Catalyst project with QuickML GLM enabled
+- A Catalyst project with QuickML GLM enabled — for the selectable `glm` model
 
 ## One-time: obtain a refresh token
 
@@ -31,6 +32,7 @@ Copy the `refresh_token` value into `.env` as `ZOHO_OAUTH_REFRESH_TOKEN`. It is 
 Copy the template below, fill in your values, and save as `.env` at the repo root.
 
 ```
+ANTHROPIC_API_KEY=
 ZOHO_OAUTH_CLIENT_ID=
 ZOHO_OAUTH_CLIENT_SECRET=
 ZOHO_OAUTH_REFRESH_TOKEN=
@@ -60,6 +62,6 @@ By default agents use Flue's in-memory virtual sandbox (just-bash) — no config
 
 These task workflows are owned by skills — activate the relevant one rather than copying steps here:
 
-- **New agent** → `add-agent` skill. (Providers are registered in `src/app.ts`, never in the agent module.)
-- **New provider** → `add-provider` skill. (Register once in `src/app.ts`; set `contextWindow` for compaction.)
+- **New agent** → `add-agent` skill. (Providers live in `src/providers/`, never in the agent module.)
+- **New provider** → `add-provider` skill. (Wire it into `registerProviders()` in `src/providers/index.ts`; set `contextWindow` for compaction.)
 - **New skill** → `add-skill` skill. (agentskills.io spec + four-tier context conventions.)

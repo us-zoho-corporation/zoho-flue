@@ -1,6 +1,6 @@
 import { registerApiProvider, registerProvider } from '@flue/runtime';
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai';
-import { evictZohoToken, getZohoAccessToken, type OAuthCredentials } from './zoho-auth';
+import { evictZohoToken, getZohoAccessToken, type OAuthCredentials } from '../auth/zoho-auth';
 import type {
 	Api,
 	AssistantMessage,
@@ -48,6 +48,7 @@ export function blocksToText(blocks: (TextContent | ImageContent)[]): string {
 	return blocks.map(c => (c.type === 'text' ? c.text : '[image]')).join('');
 }
 
+
 /**
  * Converts a Flue Context into Catalyst's message array.
  *
@@ -68,17 +69,25 @@ export function convertMessages(context: Context): CatalystMessage[] {
 				content: typeof msg.content === 'string' ? msg.content : blocksToText(msg.content),
 			});
 		} else if (msg.role === 'assistant') {
-			// Keep the assistant turn even when it carried only a tool call (empty text):
-			// dropping it breaks the conversation structure Catalyst expects.
-			const text = msg.content
-				.filter((c): c is TextContent => c.type === 'text')
-				.map(c => c.text)
+			// Send only the model's own text back. Catalyst rejects native tool_calls,
+			// and echoing a synthetic "[tool_call …]" line into history teaches the
+			// model to emit tool calls as prose instead of real calls. The paired
+			// tool-result message (below) names the tool, which is the coherence signal
+			// the model needs to correlate its action with the result.
+			const text = (msg.content as ReadonlyArray<{ type: string; text?: string }>)
+				.filter(c => c.type === 'text')
+				.map(c => c.text ?? '')
 				.join('');
 			messages.push({ role: 'assistant', content: text });
 		} else if (msg.role === 'toolResult') {
+			// Name the tool that produced the result so the model can correlate it with
+			// its own call, and neutralize any forged delimiter tokens in the (model- or
+			// web-sourced) content so it can't fake a tool boundary.
+			const body = blocksToText(msg.content).replace(/\[TOOL_RESULT_(START|END)\b/gi, '[tool_result_$1');
+			const tool = msg.toolName ? ` tool="${msg.toolName}"` : '';
 			messages.push({
 				role: 'user',
-				content: `[TOOL_RESULT_START id="${msg.toolCallId}"]\n${blocksToText(msg.content)}\n[TOOL_RESULT_END]`,
+				content: `[TOOL_RESULT_START${tool} id="${msg.toolCallId}"]\n${body}\n[TOOL_RESULT_END]`,
 			});
 		}
 	}
@@ -168,15 +177,18 @@ function catalystStream(
 		if (data.tool_calls?.length) {
 			output.stopReason = 'toolUse';
 			for (const tc of data.tool_calls) {
-				let parsedArgs: Record<string, unknown>;
+				let parsedArgs: Record<string, unknown> = {};
 				try {
 					const raw: unknown = JSON.parse(tc.function.arguments);
-					if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-						throw new TypeError('expected object');
+					if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+						parsedArgs = raw as Record<string, unknown>;
 					}
-					parsedArgs = raw as Record<string, unknown>;
 				} catch {
-					throw new Error(`Invalid arguments for tool '${tc.function.name}'`);
+					// Malformed or truncated arguments (e.g. a large spec cut off by
+					// max_tokens). Don't abort the turn: emit the call with empty args so
+					// the tool's schema validation returns a recoverable error the model
+					// can react to, rather than killing the whole response.
+					parsedArgs = {};
 				}
 				const toolCall: ToolCall = {
 					type: 'toolCall',

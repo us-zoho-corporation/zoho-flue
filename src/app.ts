@@ -5,8 +5,8 @@ import { cors } from 'hono/cors';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { config } from './config';
-import { getZohoAccessToken } from './providers/zoho-auth';
-import { registerCatalystGLM } from './providers/catalyst-glm';
+import { getZohoAccessToken } from './auth/zoho-auth';
+import { registerProviders } from './providers';
 
 if (config._devWarnings.noApiSecret) {
 	console.warn('[security] FLUE_API_SECRET is not set — all /api/* routes are unauthenticated. Set this in production.');
@@ -33,6 +33,14 @@ if (config.apiSecret) {
 }
 
 app.get('/api/agents', async (c) => c.json(await listAgents()));
+
+// Provider-models the chat offers as a selectable option (single source of truth
+// with the `assistant` agent's model resolution). The client carries the chosen
+// `key` in the conversation id; the agent maps it back to a model spec.
+app.get('/api/models', (c) => c.json({
+	models: config.chatModels.map(({ key, label }) => ({ key, label })),
+	defaultKey: config.defaultChatModelKey,
+}));
 
 app.get('/api/skills', async (c) => {
 	const skillsDir = resolve('.agents/skills');
@@ -82,16 +90,9 @@ const oauthCreds = {
 	refreshToken: config.zohoRefreshToken,
 };
 
-// Register the Catalyst GLM provider once at startup (runtime provider setup
-// belongs in app.ts, not in agent modules). The provider refreshes the token
-// itself via oauth on a 401. contextWindow lets Flue's compaction trigger.
-registerCatalystGLM({
-	endpoint: config.catalystEndpoint,
-	orgId: config.catalystOrgId,
-	token: await getZohoAccessToken(oauthCreds),
-	oauth: oauthCreds,
-	contextWindow: config.catalystContextWindow,
-});
+// Register all model/auth providers once at startup. Their setup lives in
+// src/providers/; app.ts just wires it in.
+await registerProviders();
 
 app.get('/api/me', async (c) => {
 	const token = await getZohoAccessToken(oauthCreds);

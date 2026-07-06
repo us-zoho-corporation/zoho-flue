@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { getZohoAccessToken } from '../../src/providers/zoho-auth.js';
+import { getZohoAccessToken } from '../../src/auth/zoho-auth.js';
 
 function loadDotenv(): void {
     try {
