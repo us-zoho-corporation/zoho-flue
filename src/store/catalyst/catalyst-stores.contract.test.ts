@@ -38,21 +38,24 @@ function table(name: string): Map<string, Row> {
 
 const json = (data: unknown) => ({ ok: true, status: 200, json: async () => ({ data }) });
 
-/** Tiny ZCQL evaluator for the exact query shapes the repos emit. */
+/** Tiny ZCQL evaluator for the query shapes the repos emit (WHERE …[AND …][ORDER BY …] LIMIT n). */
 function runZcql(query: string): unknown[] {
-	const m = query.match(/^SELECT (ROWID|\*) FROM (\w+) WHERE (\w+) = '(.*)' LIMIT (\d+)$/s);
+	const m = query.match(/^SELECT (ROWID|\*) FROM (\w+) WHERE (.+?)(?: ORDER BY (\w+))? LIMIT (\d+)$/s);
 	if (!m) throw new Error(`fake ZCQL cannot parse: ${query}`);
-	const [, projection, tableName, col, rawVal, limit] = m;
-	const val = rawVal.replace(/''/g, "'");
-	const out: unknown[] = [];
-	for (const [rowId, row] of table(tableName)) {
-		if (String(row[col]) === val) {
-			const projected = projection === 'ROWID' ? { ROWID: rowId } : { ROWID: rowId, ...row };
-			out.push({ [tableName]: projected });
-			if (out.length >= Number(limit)) break;
-		}
-	}
-	return out;
+	const [, projection, tableName, whereClause, orderBy, limit] = m;
+
+	const conds = whereClause.split(/\s+AND\s+/).map((c) => {
+		const cm = c.match(/^(\w+) = '(.*)'$/s);
+		if (!cm) throw new Error(`fake ZCQL cannot parse condition: ${c}`);
+		return { col: cm[1], val: cm[2].replace(/''/g, "'") };
+	});
+
+	let rows = [...table(tableName)].map(([rowId, row]) => ({ rowId, row }));
+	rows = rows.filter(({ row }) => conds.every((c) => String(row[c.col]) === c.val));
+	if (orderBy) rows.sort((a, b) => Number(a.row[orderBy] ?? 0) - Number(b.row[orderBy] ?? 0));
+
+	return rows.slice(0, Number(limit)).map(({ rowId, row }) =>
+		({ [tableName]: projection === 'ROWID' ? { ROWID: rowId } : { ROWID: rowId, ...row } }));
 }
 
 function handleCatalyst(url: string, init: RequestInit) {

@@ -140,5 +140,53 @@ export function runStoresContract(name: string, makeStores: () => Stores): void 
 				expect(got?.updatedAt).toBe(5000);
 			});
 		});
+
+		describe('mcpServers', () => {
+			const server = {
+				id: 'srv-1',
+				userId: 'zuid-1',
+				name: 'Docs',
+				url: 'https://mcp.example.com/mcp',
+				transport: 'http' as const,
+				authTokenEnc: 'v1:k1:enc',
+				enabled: true,
+				createdAt: 6000,
+				updatedAt: 6000,
+			};
+
+			it('creates, lists, gets, updates, and deletes', async () => {
+				await stores.mcpServers.create(server);
+				expect(await stores.mcpServers.listForUser('zuid-1')).toEqual([server]);
+				expect(await stores.mcpServers.get('zuid-1', 'srv-1')).toEqual(server);
+
+				await stores.mcpServers.update({ ...server, name: 'Docs v2', enabled: false, updatedAt: 7000 });
+				const updated = await stores.mcpServers.get('zuid-1', 'srv-1');
+				expect(updated?.name).toBe('Docs v2');
+				expect(updated?.enabled).toBe(false);
+
+				await stores.mcpServers.delete('zuid-1', 'srv-1');
+				expect(await stores.mcpServers.get('zuid-1', 'srv-1')).toBeNull();
+				expect(await stores.mcpServers.listForUser('zuid-1')).toEqual([]);
+			});
+
+			it('isolates servers by user (no cross-user read/delete)', async () => {
+				await stores.mcpServers.create(server);
+				await stores.mcpServers.create({ ...server, id: 'srv-2', userId: 'zuid-2', createdAt: 6500 });
+
+				expect((await stores.mcpServers.listForUser('zuid-1')).map((s) => s.id)).toEqual(['srv-1']);
+				expect(await stores.mcpServers.get('zuid-2', 'srv-1')).toBeNull();
+
+				// Deleting as the wrong user is a no-op.
+				await stores.mcpServers.delete('zuid-2', 'srv-1');
+				expect(await stores.mcpServers.get('zuid-1', 'srv-1')).not.toBeNull();
+			});
+
+			it('lists in creation order', async () => {
+				await stores.mcpServers.create({ ...server, id: 'a', createdAt: 300 });
+				await stores.mcpServers.create({ ...server, id: 'b', createdAt: 100 });
+				await stores.mcpServers.create({ ...server, id: 'c', createdAt: 200 });
+				expect((await stores.mcpServers.listForUser('zuid-1')).map((s) => s.id)).toEqual(['b', 'c', 'a']);
+			});
+		});
 	});
 }

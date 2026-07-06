@@ -1,5 +1,6 @@
 import type { Stores } from '../types';
 import { CatalystDataStoreClient, type CatalystClientOptions } from './data-store-client';
+import { CatalystMcpServerStore } from './mcp-server-repo';
 import { CatalystPreferenceStore } from './preference-repo';
 import { CatalystSessionStore } from './session-repo';
 import { CatalystTokenStore } from './token-repo';
@@ -13,5 +14,6 @@ export function createCatalystStores(opts: CatalystClientOptions): Stores {
 		tokens: new CatalystTokenStore(client),
 		sessions: new CatalystSessionStore(client),
 		preferences: new CatalystPreferenceStore(client),
+		mcpServers: new CatalystMcpServerStore(client),
 	};
 }

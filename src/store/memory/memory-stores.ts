@@ -1,4 +1,6 @@
 import type {
+	McpServer,
+	McpServerStore,
 	Preferences,
 	PreferenceStore,
 	Session,
@@ -91,6 +93,31 @@ class MemoryPreferenceStore implements PreferenceStore {
 	}
 }
 
+class MemoryMcpServerStore implements McpServerStore {
+	private readonly rows = new Map<string, McpServer>();
+
+	async listForUser(userId: string): Promise<McpServer[]> {
+		return [...this.rows.values()]
+			.filter((s) => s.userId === userId)
+			.sort((a, b) => a.createdAt - b.createdAt)
+			.map(clone);
+	}
+	async get(userId: string, id: string): Promise<McpServer | null> {
+		const row = this.rows.get(id);
+		return row && row.userId === userId ? clone(row) : null;
+	}
+	async create(server: McpServer): Promise<void> {
+		this.rows.set(server.id, clone(server));
+	}
+	async update(server: McpServer): Promise<void> {
+		this.rows.set(server.id, clone(server));
+	}
+	async delete(userId: string, id: string): Promise<void> {
+		const row = this.rows.get(id);
+		if (row && row.userId === userId) this.rows.delete(id);
+	}
+}
+
 /** Builds a fresh in-memory `Stores` instance. */
 export function createMemoryStores(): Stores {
 	return {
@@ -98,5 +125,6 @@ export function createMemoryStores(): Stores {
 		tokens: new MemoryTokenStore(),
 		sessions: new MemorySessionStore(),
 		preferences: new MemoryPreferenceStore(),
+		mcpServers: new MemoryMcpServerStore(),
 	};
 }
