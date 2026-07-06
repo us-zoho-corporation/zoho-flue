@@ -155,6 +155,16 @@ export function App() {
     setSessions((prev) => prev.map((s) => s.id === activeId ? { ...s, title } : s));
   }, [activeId]);
 
+  // Redirect to the server-side Zoho OAuth flow; it returns here after consent.
+  const handleSignIn = useCallback(() => {
+    window.location.assign('/api/auth/login?returnTo=/');
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+    setProfile(null);
+  }, []);
+
   const active = activeSession ?? makeSession(defaultModel);
 
   return (
@@ -171,6 +181,8 @@ export function App() {
           sessions={sessions}
           activeId={activeId}
           profile={profile}
+          onSignIn={handleSignIn}
+          onSignOut={handleSignOut}
           onSelect={(id) => { setView('chat'); setActiveId(id); }}
           onNew={() => { setView('chat'); handleNewSession(); }}
           onDelete={handleDeleteSession}
