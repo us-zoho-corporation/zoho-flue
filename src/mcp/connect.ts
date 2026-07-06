@@ -1,6 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 export type McpTransport = 'http' | 'sse';
 
@@ -20,11 +22,45 @@ export type ProbeResult =
 	| { ok: false; error: string };
 
 const CONNECT_TIMEOUT_MS = 10_000;
+const BLOCKED_HOST = 'That host is not allowed.';
+
+/** True for an IPv4 address in a loopback / private / link-local / reserved range. */
+function isPrivateV4(ip: string): boolean {
+	const parts = ip.split('.').map(Number);
+	if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true; // malformed → treat as unsafe
+	const [a, b] = parts;
+	return (
+		a === 0 ||            // 0.0.0.0/8
+		a === 10 ||           // private
+		a === 127 ||          // loopback
+		(a === 100 && b >= 64 && b <= 127) || // CGNAT 100.64/10
+		(a === 169 && b === 254) ||           // link-local / cloud metadata
+		(a === 172 && b >= 16 && b <= 31) ||  // private /12
+		(a === 192 && b === 168) ||           // private
+		(a === 198 && (b === 18 || b === 19)) || // benchmarking
+		a >= 224              // multicast / reserved / broadcast
+	);
+}
+
+/** True for any loopback / private / link-local / unique-local / mapped address. */
+export function isPrivateIp(ip: string): boolean {
+	const addr = ip.toLowerCase().replace(/%.*$/, '').replace(/^\[|\]$/g, ''); // strip zone id + brackets
+	const mapped = addr.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); // IPv4-mapped IPv6
+	if (mapped) return isPrivateV4(mapped[1]);
+	if (addr.includes(':')) {
+		if (addr === '::' || addr === '::1') return true; // unspecified / loopback
+		if (addr.startsWith('fc') || addr.startsWith('fd')) return true; // ULA fc00::/7
+		if (/^fe[89ab]/.test(addr)) return true; // link-local fe80::/10
+		return false;
+	}
+	return isPrivateV4(addr);
+}
 
 /**
- * Validates a user-supplied MCP server URL. The server connects to this URL, so
- * this is an SSRF guard: HTTPS only, and no loopback / link-local / private hosts.
- * Returns an error string, or null when the URL is acceptable.
+ * Synchronous, format-level guard used by input validation. The server connects
+ * to this URL, so this is a first-line SSRF filter: HTTPS only; reject obvious
+ * internal names and literal private/loopback IPs. Domain names are resolved and
+ * re-checked at connect time (see {@link probeMcpServer}).
  */
 export function validateMcpUrl(raw: string): string | null {
 	let u: URL;
@@ -34,43 +70,48 @@ export function validateMcpUrl(raw: string): string | null {
 		return 'Enter a valid URL.';
 	}
 	if (u.protocol !== 'https:') return 'MCP server URL must use https://.';
-
-	const host = u.hostname.toLowerCase();
-	const isPrivate =
-		host === 'localhost' ||
-		host === '::1' ||
-		host.endsWith('.localhost') ||
-		host.endsWith('.internal') ||
-		host.startsWith('127.') ||
-		host.startsWith('10.') ||
-		host.startsWith('192.168.') ||
-		host.startsWith('169.254.') ||
-		host.startsWith('0.') ||
-		/^172\.(1[6-9]|2\d|3[01])\./.test(host); // private /12 block
-	if (isPrivate) return 'That host is not allowed.';
+	const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+	if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal')) return BLOCKED_HOST;
+	if (isIP(host) && isPrivateIp(host)) return BLOCKED_HOST;
 	return null;
 }
 
+/** Resolves the host and returns true if ANY resolved address is unsafe (SSRF/DNS-rebinding guard). */
+async function resolvesToPrivate(host: string): Promise<boolean> {
+	try {
+		// An IP literal is returned as-is (no DNS query); a name is fully resolved.
+		const results = await lookup(host, { all: true, verbatim: true });
+		return results.length === 0 || results.some((r) => isPrivateIp(r.address));
+	} catch {
+		return true; // unresolvable → treat as unsafe
+	}
+}
+
 function makeTransport(url: URL, transport: McpTransport, authToken?: string | null) {
-	const headers = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
+	const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+	// `redirect: 'error'` prevents a public URL from redirecting into an internal host.
+	const requestInit: RequestInit = { headers, redirect: 'error' };
 	if (transport === 'sse') {
-		// Auth header applied to both the SSE stream request and the POST-back channel.
 		return new SSEClientTransport(url, {
-			...(headers ? { eventSourceInit: { fetch: (u, init) => fetch(u, { ...init, headers: { ...init?.headers, ...headers } }) } } : {}),
-			...(headers ? { requestInit: { headers } } : {}),
+			requestInit,
+			eventSourceInit: { fetch: (u, init) => fetch(u, { ...init, redirect: 'error', headers: { ...init?.headers, ...headers } }) },
 		});
 	}
-	return new StreamableHTTPClientTransport(url, headers ? { requestInit: { headers } } : undefined);
+	return new StreamableHTTPClientTransport(url, { requestInit });
 }
 
 /**
  * Connects to an external MCP server and lists its tools — the "test connection"
- * primitive. Never throws: connection/protocol failures come back as
- * `{ ok: false, error }`. Always closes the client.
+ * primitive and the single guarded entry point for reaching a user-supplied URL.
+ * Never throws: failures come back as `{ ok: false, error }`. Always closes.
  */
 export async function probeMcpServer(opts: ProbeOptions): Promise<ProbeResult> {
 	const urlError = validateMcpUrl(opts.url);
 	if (urlError) return { ok: false, error: urlError };
+
+	// DNS-resolve and re-check every address (defeats names that point at private
+	// IPs, e.g. the cloud metadata endpoint) before we open any connection.
+	if (await resolvesToPrivate(new URL(opts.url).hostname)) return { ok: false, error: BLOCKED_HOST };
 
 	const client = new Client({ name: 'zoho-flue', version: '1.0.0' });
 	let timer: ReturnType<typeof setTimeout> | undefined;
