@@ -44,9 +44,11 @@ public so users can log in.
 ## API scopes
 
 Granted scopes are stored on `UserTokens.Scopes` and merged (union) on every login, so
-`GET /api/auth/login?scopes=<extra>` performs **incremental authorization**. Gate
-scope-dependent features with `hasScope(deps, userId, scope)`. The minimal login scope is
-`AaaServer.profile.READ`.
+`GET /api/auth/login?scopes=<extra>` performs **incremental authorization** (comma- or
+space-separated; sent to Zoho comma-delimited). Gate scope-dependent features with
+`hasScope(deps, userId, scope)`. Default login scopes are `AaaServer.profile.READ`
+(identity) and `QuickML.deployment.READ` (so the user's token can reach the Zoho GLM 4.7
+Flash endpoint).
 
 ## Per-user tokens
 

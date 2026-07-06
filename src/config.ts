@@ -13,11 +13,12 @@ export const config = {
 	catalystEndpoint: required('CATALYST_ENDPOINT'),
 	catalystOrgId: required('CATALYST_ORG_ID'),
 
-	// Per-user Zoho OAuth login (authorization-code flow).
-	// `zohoLoginScopes` is the minimal scope set requested at login; granted scopes
-	// are stored per user and can be expanded incrementally.
+	// Per-user Zoho OAuth login (authorization-code flow). Scopes may be comma- or
+	// space-separated; granted scopes are stored per user and can be expanded.
+	// Profile for identity, plus QuickML.deployment.READ so the user's token can
+	// reach the Catalyst GLM (Zoho GLM 4.7 Flash) endpoint.
 	zohoOAuthRedirectUri: required('ZOHO_OAUTH_REDIRECT_URI'),
-	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ',
+	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ,QuickML.deployment.READ',
 	// HMAC secret for signed session/login cookies (≥32 bytes recommended).
 	sessionSecret: required('SESSION_SECRET'),
 	// Session lifetime; default 30 days.

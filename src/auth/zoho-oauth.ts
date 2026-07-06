@@ -104,7 +104,8 @@ export async function exchangeCodeForTokens(params: ExchangeParams): Promise<Tok
 		accessToken: data.access_token,
 		refreshToken: data.refresh_token ?? null,
 		expiresIn: data.expires_in ?? 3600,
-		scopes: scope ? scope.split(/\s+/) : [],
+		// Zoho returns granted scopes comma-delimited; tolerate spaces too.
+		scopes: scope ? scope.split(/[\s,]+/) : [],
 		apiDomain: data.api_domain ?? '',
 	};
 }

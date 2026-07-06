@@ -10,7 +10,7 @@ Stored in `.env` at the repo root.
 | `CATALYST_ENDPOINT` | QuickML GLM chat endpoint URL |
 | `CATALYST_ORG_ID` | Catalyst org ID — sent as `CATALYST-ORG` request header |
 | `ZOHO_OAUTH_REDIRECT_URI` | Per-user OAuth callback URL, registered on the Zoho OAuth client (e.g. `http://localhost:3583/api/auth/callback`) |
-| `ZOHO_LOGIN_SCOPES` | *(Optional)* Minimal scopes requested at login. Default `AaaServer.profile.READ`. Granted scopes are stored per user and expanded incrementally. |
+| `ZOHO_LOGIN_SCOPES` | *(Optional)* Scopes requested at login (comma- or space-separated). Default `AaaServer.profile.READ,QuickML.deployment.READ` (profile for identity; QuickML so the user's token can reach the Zoho GLM 4.7 Flash endpoint). Granted scopes are stored per user and expanded incrementally. |
 | `SESSION_SECRET` | HMAC key for signed session/login cookies (≥32 bytes) |
 | `DATA_ENCRYPTION_KEY` | AES-256-GCM key(s) for encrypting stored refresh tokens. Form `keyId:base64(32B)`, comma-separated; first = active for new writes, all usable for decryption (rotation) |
 | `CATALYST_PROJECT_ID` | Catalyst project ID (from `.catalystrc`) — used in Data Store REST URLs |
