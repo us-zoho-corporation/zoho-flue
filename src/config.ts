@@ -35,6 +35,8 @@ export const config = {
 	catalystApiBaseUrl: process.env['CATALYST_API_BASE_URL'] ?? 'https://api.catalyst.zoho.com/baas/v1',
 	// Which store implementation to use: 'catalyst' (Data Store) or 'memory' (dev/tests).
 	storeBackend: (process.env['STORE_BACKEND'] ?? 'catalyst') as 'catalyst' | 'memory',
+	// Max external MCP servers a single user may connect.
+	mcpMaxServersPerUser: Number(process.env['MCP_MAX_SERVERS_PER_USER'] ?? 20),
 
 	zohoDocsBearerToken: process.env['ZOHO_DOCS_BEARER_TOKEN'] ?? '',
 

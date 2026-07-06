@@ -77,6 +77,7 @@ admin-scoped via the service token, so App User table permissions are not requir
 - **UserTokens**: `UserId`(unique) · `RefreshTokenEnc` · `Scopes` · `AccountsServer` · `UpdatedAt`(BigInt)
 - **Sessions**: `SessionId`(unique) · `UserId` · `CreatedAt`(BigInt) · `ExpiresAt`(BigInt) · `LastSeenAt`(BigInt)
 - **Preferences**: `UserId`(unique) · `PreferredModelKey` · `Data`(text/JSON) · `UpdatedAt`(BigInt)
+- **McpServers**: `Id`(unique) · `UserId` · `Name` · `Url` · `Transport` · `AuthTokenEnc` · `Enabled`(boolean) · `CreatedAt`(BigInt) · `UpdatedAt`(BigInt)
 
 ## Setup checklist
 

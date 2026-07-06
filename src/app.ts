@@ -7,6 +7,8 @@ import { join, resolve } from 'node:path';
 import { config } from './config';
 import { registerProviders } from './providers';
 import { getAuth } from './auth';
+import { parseKeyring } from './auth/crypto';
+import { createMcpRoutes } from './mcp/routes';
 import { getStores } from './store';
 
 if (config._devWarnings.noApiSecret) {
@@ -46,6 +48,15 @@ if (config.apiSecret) {
 }
 
 app.route('/api/auth', auth.routes);
+
+// Per-user external MCP server connections (CRUD + test). Behind requireUser.
+app.use('/api/mcp-servers', auth.requireUser);
+app.use('/api/mcp-servers/*', auth.requireUser);
+app.route('/api/mcp-servers', createMcpRoutes({
+	stores,
+	keyring: parseKeyring(config.dataEncryptionKey),
+	maxServers: config.mcpMaxServersPerUser,
+}));
 
 // Per-user preferences (Catalyst-backed). Requires a valid session.
 app.get('/api/preferences', auth.requireUser, async (c) => {

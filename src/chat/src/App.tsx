@@ -4,6 +4,7 @@ import { Agents } from './Agents.tsx';
 import { FlueAssistantBridge } from './FlueRuntime.tsx';
 import { Runs } from './Runs.tsx';
 import { Settings } from './Settings.tsx';
+import { McpServers } from './McpServers.tsx';
 import { Sidebar } from './Sidebar.tsx';
 import { Skills } from './Skills.tsx';
 import { Thread } from './Thread.tsx';
@@ -86,7 +87,7 @@ export function App() {
   const storedPrefRef = useRef<string | null>(loadPreferredModel());
   const [preferredModelKey, setPreferredModelKey] = useState<string>(storedPrefRef.current ?? FALLBACK_MODEL.key);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [view, setView] = useState<'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs'>('chat');
+  const [view, setView] = useState<'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs' | 'mcp'>('chat');
   const [theme, setTheme] = useState<Theme>(loadTheme);
 
   useEffect(() => { applyTheme(theme); saveTheme(theme); }, [theme]);
@@ -192,6 +193,7 @@ export function App() {
           onSkills={() => setView('skills')}
           onAgents={() => setView('agents')}
           onRuns={() => setView('runs')}
+          onMcp={() => setView('mcp')}
         />
         {view === 'settings'
           ? <Settings
@@ -210,6 +212,8 @@ export function App() {
           ? <Agents onBack={() => setView('chat')} />
           : view === 'runs'
           ? <Runs onBack={() => setView('chat')} />
+          : view === 'mcp'
+          ? <McpServers onBack={() => setView('chat')} onSignIn={handleSignIn} />
           : <Thread
               modelLabel={active.modelLabel}
               requiresAuth={models.find((m) => m.key === active.modelKey)?.requiresAuth ?? false}

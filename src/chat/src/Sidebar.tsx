@@ -4,6 +4,7 @@ import {
   GearSix,
   Lightning,
   MagnifyingGlass,
+  Plugs,
   Plus,
   Robot,
   SignOut,
@@ -45,23 +46,25 @@ interface SidebarProps {
   onSkills: () => void;
   onAgents: () => void;
   onRuns: () => void;
+  onMcp: () => void;
 }
 
 const WORKSPACE: { key: string; label: string; icon: typeof Robot }[] = [
   { key: 'agents', label: 'Agents', icon: Robot },
   { key: 'skills', label: 'Skills', icon: Lightning },
   { key: 'workflows', label: 'Workflows', icon: TreeStructure },
+  { key: 'mcp', label: 'MCP servers', icon: Plugs },
   { key: 'runs', label: 'Runs', icon: ClockCounterClockwise },
   { key: 'settings', label: 'Settings', icon: GearSix },
 ];
 
-export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns }: SidebarProps) {
+export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns, onMcp }: SidebarProps) {
   const { open } = useSidebar();
   const [search, setSearch] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
 
   const handlers: Record<string, () => void> = {
-    agents: onAgents, skills: onSkills, workflows: onWorkflows, runs: onRuns, settings: onSettings,
+    agents: onAgents, skills: onSkills, workflows: onWorkflows, mcp: onMcp, runs: onRuns, settings: onSettings,
   };
 
   const q = search.trim().toLowerCase();

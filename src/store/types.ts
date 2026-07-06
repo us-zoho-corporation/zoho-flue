@@ -66,10 +66,32 @@ export interface PreferenceStore {
 	put(prefs: Preferences): Promise<void>;
 }
 
+/** A user-connected external MCP server. */
+export interface McpServer {
+	id: string; // uuid
+	userId: string;
+	name: string;
+	url: string;
+	transport: 'http' | 'sse';
+	authTokenEnc: string | null; // AES-256-GCM envelope (see src/auth/crypto.ts), or null
+	enabled: boolean;
+	createdAt: number; // epoch ms
+	updatedAt: number; // epoch ms
+}
+
+export interface McpServerStore {
+	listForUser(userId: string): Promise<McpServer[]>;
+	get(userId: string, id: string): Promise<McpServer | null>;
+	create(server: McpServer): Promise<void>;
+	update(server: McpServer): Promise<void>;
+	delete(userId: string, id: string): Promise<void>;
+}
+
 /** Composition of every repository — the single dependency the app wires in. */
 export interface Stores {
 	users: UserStore;
 	tokens: TokenStore;
 	sessions: SessionStore;
 	preferences: PreferenceStore;
+	mcpServers: McpServerStore;
 }

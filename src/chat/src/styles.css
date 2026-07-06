@@ -308,6 +308,43 @@ body { background: var(--page-bg); color: var(--txt1); }
 }
 .composer-signin-btn:hover { background: var(--accent-fg); }
 .composer-signin-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.composer-signin-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ─── MCP servers view ───────────────────────────────────────────────────────── */
+.mcp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.mcp-card {
+  border-radius: 14px; padding: 14px 16px;
+  background: var(--glass); backdrop-filter: blur(var(--blur)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
+  border: 1px solid var(--gb); box-shadow: var(--ghi), var(--gsh);
+}
+.mcp-row { display: flex; align-items: center; gap: 12px; }
+.mcp-badge {
+  font: 600 10px var(--font-sans); text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--txt3); border: 1px solid var(--gb2); background: var(--glass2);
+  padding: 2px 7px; border-radius: 999px; flex-shrink: 0;
+}
+.mcp-field { display: flex; flex-direction: column; gap: 5px; }
+.mcp-field > span { font: 600 12px var(--font-sans); color: var(--txt2); }
+.mcp-field input, .mcp-field select {
+  width: 100%; box-sizing: border-box; padding: 9px 12px; border-radius: 10px;
+  border: 1px solid var(--gb2); background: var(--glass2); color: var(--txt1);
+  font: 400 13.5px var(--font-sans); outline: none;
+}
+.mcp-field input:focus, .mcp-field select:focus { box-shadow: var(--shadow-focus); border-color: var(--accent); }
+.mcp-test-ok { display: flex; align-items: center; gap: 6px; font: 500 12px var(--font-sans); color: var(--ok); margin-top: 6px; }
+.mcp-test-err { display: flex; align-items: center; gap: 6px; font: 500 12px var(--font-sans); color: var(--danger); margin-top: 6px; }
+.mcp-del:hover { color: var(--danger); }
+.mcp-toggle {
+  width: 34px; height: 20px; border-radius: 999px; border: none; padding: 0; cursor: pointer;
+  background: var(--gb2); position: relative; flex-shrink: 0; transition: background 180ms var(--ease-out);
+}
+.mcp-toggle[data-on="true"] { background: var(--accent); }
+.mcp-toggle > span {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(17,20,24,0.25); transition: left 180ms var(--ease-out);
+}
+.mcp-toggle[data-on="true"] > span { left: 16px; }
 .composer-disclaimer { font: 400 11.5px var(--font-sans); color: var(--txt3); margin: 8px 0 0; text-align: center; }
 
 /* ─── Markdown ───────────────────────────────────────────────────────────────── */
