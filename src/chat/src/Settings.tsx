@@ -1,13 +1,17 @@
 import { ArrowLeft } from '@phosphor-icons/react';
-import { Button, LayerCard } from '@cloudflare/kumo';
-import type { UserProfile } from './App.tsx';
+import { Button, LayerCard, Loader, Select } from '@cloudflare/kumo';
+import type { ModelOption, UserProfile } from './App.tsx';
 
 interface SettingsProps {
   profile: UserProfile | null;
+  models: ModelOption[];
+  modelsLoading: boolean;
+  modelKey: string;
+  onModelChange: (key: string) => void;
   onBack: () => void;
 }
 
-export function Settings({ profile, onBack }: SettingsProps) {
+export function Settings({ profile, models, modelsLoading, modelKey, onModelChange, onBack }: SettingsProps) {
   return (
     <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
       <div className="chat-topbar">
@@ -40,6 +44,32 @@ export function Settings({ profile, onBack }: SettingsProps) {
               ) : (
                 <p className="text-sm text-kumo-subtle">Not signed in</p>
               )}
+            </LayerCard>
+
+            <LayerCard className="px-5 py-4">
+              <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle mb-3">Model</h2>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-kumo-default">Default model</p>
+                  <p className="text-xs text-kumo-subtle mt-0.5">Used for new conversations. Existing threads keep the model they started on.</p>
+                </div>
+                {modelsLoading ? (
+                  <Loader size="sm" />
+                ) : (
+                  <Select
+                    size="sm"
+                    aria-label="Default model"
+                    value={modelKey}
+                    onValueChange={(v) => onModelChange(v as string)}
+                    renderValue={(v) => models.find((m) => m.key === v)?.label ?? String(v)}
+                    className="shrink-0"
+                  >
+                    {models.map((m) => (
+                      <Select.Option key={m.key} value={m.key}>{m.label}</Select.Option>
+                    ))}
+                  </Select>
+                )}
+              </div>
             </LayerCard>
           </div>
         </div>

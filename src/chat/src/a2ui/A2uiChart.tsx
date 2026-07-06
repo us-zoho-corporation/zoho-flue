@@ -4,14 +4,14 @@ import { useMemo } from 'react';
 import { A2uiFrame } from './Frame.tsx';
 import type { ChartSpec } from './spec.ts';
 
-// Kumo categorical palette (dark mode values), indexed by series position.
-const PALETTE = ['#4290F0', '#EEB720', '#E8649D', '#8D58EE', '#50C3B6', '#D37536'];
+// Kumo categorical palette, indexed by series position.
+const PALETTE = ['#2C7BE5', '#EEB720', '#E8649D', '#8D58EE', '#50C3B6', '#D37536'];
 
-// Colors tuned for the dark chat surface so axes/labels stay legible without
-// ECharts' built-in dark theme (which would paint its own background).
-const AXIS = 'rgba(232, 232, 240, 0.55)';
-const SPLIT = 'rgba(255, 255, 255, 0.08)';
-const LABEL = 'rgba(232, 232, 240, 0.92)';
+// Colors tuned for the light chat surface so axes/labels stay legible without
+// ECharts' built-in theme (which would paint its own background).
+const AXIS = 'rgba(17, 24, 39, 0.55)';
+const SPLIT = 'rgba(17, 24, 39, 0.1)';
+const LABEL = 'rgba(17, 24, 39, 0.9)';
 
 function buildOption(spec: ChartSpec): KumoChartOption {
 	const { chartType, categories, series, stacked } = spec;
@@ -38,7 +38,7 @@ function buildOption(spec: ChartSpec): KumoChartOption {
 					radius: ['42%', '68%'],
 					center: ['50%', '56%'],
 					avoidLabelOverlap: true,
-					itemStyle: { borderColor: '#0D0F17', borderWidth: 2 },
+					itemStyle: { borderColor: '#FFFFFF', borderWidth: 2 },
 					label: { color: AXIS, fontSize: 11 },
 					data,
 				},

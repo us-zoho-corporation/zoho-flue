@@ -6,7 +6,7 @@
 /* ─── Base ────────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
-html { color-scheme: dark; }
+html { color-scheme: light; }
 
 html, body, #root {
   height: 100%;
@@ -16,31 +16,43 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
-body { background: #0D0F17; }
+body { background: #F4F6F9; }
 
 #root {
   background:
-    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(228, 37, 39, 0.12) 0%, transparent 100%),
-    linear-gradient(160deg, #0F1119 0%, #0D0F17 60%, #100D17 100%);
+    radial-gradient(ellipse 70% 40% at 50% 100%, rgba(44, 123, 229, 0.06) 0%, transparent 100%),
+    linear-gradient(160deg, #F8FAFD 0%, #F4F6F9 60%, #EEF2F8 100%);
 }
 
 /* ─── Design tokens ──────────────────────────────────────────────────────────── */
+/* Light, Zoho-app-inspired surface. Zoho blue is the interactive accent; red is
+   reserved for the logo mark only (see .empty-logo). */
 :root {
-  --accent:    #E42527;
-  --accent-hi: #EF4444;
-  --glass-2:   rgba(255, 255, 255, 0.07);
-  --glass-3:   rgba(255, 255, 255, 0.11);
-  --border-1:  rgba(255, 255, 255, 0.09);
-  --border-2:  rgba(255, 255, 255, 0.15);
-  --text-1:    rgba(232, 232, 240, 0.92);
-  --text-2:    rgba(232, 232, 240, 0.55);
-  --text-3:    rgba(232, 232, 240, 0.3);
+  --accent:    #2C7BE5;   /* Zoho blue — primary actions, links, focus */
+  --accent-hi: #1F66C4;   /* hover / pressed */
+  --brand-red: #E42527;   /* logo mark only */
+
+  --glass-2:   rgba(255, 255, 255, 0.72);
+  --glass-3:   rgba(255, 255, 255, 0.92);
+  --border-1:  rgba(17, 24, 39, 0.08);
+  --border-2:  rgba(17, 24, 39, 0.14);
+  --text-1:    rgba(17, 24, 39, 0.92);
+  --text-2:    rgba(17, 24, 39, 0.58);
+  --text-3:    rgba(17, 24, 39, 0.36);
+
+  /* Retarget Kumo's brand tokens (default orange/blue) to Zoho blue so primary
+     buttons, links, and focus rings all read as Zoho. */
+  --color-kumo-brand:       #2C7BE5;
+  --color-kumo-brand-hover: #1F66C4;
+  --text-color-kumo-brand:  #2C7BE5;
+  --text-color-kumo-link:   #2C7BE5;
+  --color-kumo-focus:       #2C7BE5;
 }
 
 /* ─── Kumo sidebar override ──────────────────────────────────────────────────── */
 [data-slot="sidebar"],
 aside[data-slot="sidebar-root"] {
-  background: rgba(20, 22, 32, 0.82) !important;
+  background: rgba(255, 255, 255, 0.78) !important;
   backdrop-filter: blur(28px) !important;
   -webkit-backdrop-filter: blur(28px) !important;
   border-right: 1px solid var(--border-1) !important;
@@ -130,8 +142,8 @@ aside[data-slot="sidebar-root"] {
 .msg-user-bubble {
   padding: 11px 15px;
   border-radius: 16px 3px 16px 16px;
-  background: var(--glass-3);
-  border: 1px solid var(--border-2);
+  background: rgba(44, 123, 229, 0.08);
+  border: 1px solid rgba(44, 123, 229, 0.18);
   font-size: 14px;
   line-height: 1.65;
   color: var(--text-1);
@@ -156,8 +168,9 @@ aside[data-slot="sidebar-root"] {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  border: 1.5px solid var(--border-2);
-  color: var(--text-2);
+  border: 1.5px solid rgba(228, 37, 39, 0.28);
+  background: rgba(228, 37, 39, 0.06);
+  color: rgba(228, 37, 39, 0.9);
   font-size: 10px;
   font-weight: 700;
   display: flex;
@@ -223,7 +236,7 @@ aside[data-slot="sidebar-root"] {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: rgba(74, 222, 128, 0.85);
+  background: #16A34A;
 }
 .tool-row-label { font-size: 12.5px; color: var(--text-2); }
 .tool-row-label.is-running { color: var(--text-1); }
@@ -232,7 +245,7 @@ aside[data-slot="sidebar-root"] {
 .composer-wrap {
   padding: 10px 20px 22px;
   border-top: 1px solid var(--border-1);
-  background: rgba(13, 15, 23, 0.6);
+  background: rgba(247, 249, 252, 0.72);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   flex-shrink: 0;
@@ -255,8 +268,8 @@ aside[data-slot="sidebar-root"] {
 }
 
 .composer-root:focus-within {
-  border-color: rgba(228, 37, 39, 0.38);
-  box-shadow: 0 0 0 1px rgba(228, 37, 39, 0.1), 0 8px 40px rgba(0, 0, 0, 0.4);
+  border-color: rgba(44, 123, 229, 0.5);
+  box-shadow: 0 0 0 1px rgba(44, 123, 229, 0.12), 0 8px 28px rgba(17, 24, 39, 0.08);
 }
 
 .composer-root textarea {
@@ -280,10 +293,6 @@ aside[data-slot="sidebar-root"] {
   align-items: center;
   gap: 6px;
   padding: 6px 8px 8px;
-}
-
-.composer-agent-select {
-  flex-shrink: 0;
 }
 
 /* ─── Tool activity animations ───────────────────────────────────────────────── */
@@ -342,7 +351,7 @@ aside[data-slot="sidebar-root"] {
 .message-content > *:last-child  { margin-bottom: 0; }
 .message-content p               { margin: 0 0 0.65em; }
 .message-content h1, .message-content h2, .message-content h3 {
-  color: rgba(232, 232, 240, 0.97);
+  color: rgba(17, 24, 39, 0.95);
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 1.1em 0 0.35em;
@@ -352,44 +361,44 @@ aside[data-slot="sidebar-root"] {
 .message-content h3 { font-size: 0.95em; }
 .message-content ul, .message-content ol { padding-left: 1.3em; margin: 0.35em 0; }
 .message-content li   { margin: 0.18em 0; }
-.message-content strong { color: rgba(232, 232, 240, 0.97); font-weight: 600; }
+.message-content strong { color: rgba(17, 24, 39, 0.95); font-weight: 600; }
 .message-content code {
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(232, 232, 240, 0.88);
+  background: rgba(17, 24, 39, 0.05);
+  color: rgba(17, 24, 39, 0.86);
   padding: 0.1em 0.36em;
   border-radius: 4px;
   font-size: 0.86em;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
 }
 .message-content pre {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(17, 24, 39, 0.04);
   border: 1px solid var(--border-1);
   border-radius: 10px;
   padding: 12px 14px;
   overflow-x: auto;
   margin: 0.6em 0;
 }
-.message-content pre code { background: none; color: rgba(232,232,240,0.82); padding: 0; font-size: 0.84em; }
+.message-content pre code { background: none; color: rgba(17, 24, 39, 0.82); padding: 0; font-size: 0.84em; }
 .message-content blockquote {
   border-left: 2px solid var(--border-2);
   padding-left: 12px;
   margin: 0.5em 0;
   color: var(--text-2);
 }
-.message-content a { color: rgba(147, 197, 253, 0.85); text-decoration: none; }
+.message-content a { color: var(--accent); text-decoration: none; }
 .message-content a:hover { text-decoration: underline; }
 .message-content hr { border: none; border-top: 1px solid var(--border-1); margin: 0.8em 0; }
 
 /* ─── Scrollbars ─────────────────────────────────────────────────────────────── */
 .chat-viewport::-webkit-scrollbar              { width: 4px; }
 .chat-viewport::-webkit-scrollbar-track        { background: transparent; }
-.chat-viewport::-webkit-scrollbar-thumb        { background: rgba(255,255,255,0.08); border-radius: 2px; }
-.chat-viewport::-webkit-scrollbar-thumb:hover  { background: rgba(255,255,255,0.14); }
+.chat-viewport::-webkit-scrollbar-thumb        { background: rgba(17,24,39,0.14); border-radius: 2px; }
+.chat-viewport::-webkit-scrollbar-thumb:hover  { background: rgba(17,24,39,0.24); }
 
 .sidebar-recents { overflow-y: auto; scrollbar-width: thin; scrollbar-color: transparent transparent; }
-.sidebar-recents:hover { scrollbar-color: rgba(255,255,255,0.08) transparent; }
+.sidebar-recents:hover { scrollbar-color: rgba(17,24,39,0.14) transparent; }
 .sidebar-recents::-webkit-scrollbar              { width: 4px; }
 .sidebar-recents::-webkit-scrollbar-track        { background: transparent; }
 .sidebar-recents::-webkit-scrollbar-thumb        { background: transparent; border-radius: 2px; }
-.sidebar-recents:hover::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.08); }
-.sidebar-recents:hover::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+.sidebar-recents:hover::-webkit-scrollbar-thumb  { background: rgba(17,24,39,0.14); }
+.sidebar-recents:hover::-webkit-scrollbar-thumb:hover { background: rgba(17,24,39,0.24); }

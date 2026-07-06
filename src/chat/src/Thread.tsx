@@ -6,19 +6,16 @@ import {
   Info,
   WarningCircle,
 } from '@phosphor-icons/react';
-import { Badge, Banner, Button, Collapsible, Empty, Loader, Popover, Select, SidebarTrigger, useSidebar } from '@cloudflare/kumo';
+import { Badge, Banner, Button, Collapsible, Empty, Loader, Popover, SidebarTrigger, useSidebar } from '@cloudflare/kumo';
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
-import type { ModelOption, UserProfile } from './App.tsx';
+import type { UserProfile } from './App.tsx';
 import { type ToolCallInfo, type ChatMessage, isAssistantMessage, useFlueChat } from './FlueRuntime.tsx';
 import { A2uiPart } from './a2ui/index.ts';
 import type { FlueConversationMessage } from '@flue/react';
 
 interface ThreadProps {
-  models: ModelOption[];
-  modelsLoading: boolean;
-  modelKey: string;
-  onModelChange: (key: string) => void;
+  modelLabel: string;
   profile: UserProfile | null;
 }
 
@@ -26,7 +23,7 @@ function textOf(message: FlueConversationMessage): string {
   return message.parts.filter((p) => p.type === 'text').map((p) => ('text' in p ? p.text : '')).join('');
 }
 
-export function Thread({ models, modelsLoading, modelKey, onModelChange, profile }: ThreadProps) {
+export function Thread({ modelLabel, profile }: ThreadProps) {
   const { messages, timestamps, isRunning, historyReady, error, sendMessage } = useFlueChat();
   const { open: sidebarOpen } = useSidebar();
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -86,10 +83,7 @@ export function Thread({ models, modelsLoading, modelKey, onModelChange, profile
       <div className="composer-wrap">
         <div className="composer-inner">
           <Composer
-            models={models}
-            modelsLoading={modelsLoading}
-            modelKey={modelKey}
-            onModelChange={onModelChange}
+            modelLabel={modelLabel}
             isRunning={isRunning}
             onSend={sendMessage}
           />
@@ -120,20 +114,20 @@ function ProfileAvatar({ profile }: { profile: UserProfile }) {
   const largeAvatar = profile.photoUrl ? (
     <img src={profile.photoUrl} alt={profile.displayName} className="w-full h-full object-cover" />
   ) : (
-    <span className="text-xl font-semibold text-red-300">{initials}</span>
+    <span className="text-xl font-semibold text-blue-700">{initials}</span>
   );
 
   return (
     <Popover>
       <Popover.Trigger
-        className="w-7 h-7 rounded-full bg-red-600/20 border border-red-500/30 flex items-center justify-center text-xs font-semibold text-red-300 cursor-pointer select-none shrink-0 overflow-hidden hover:border-red-400/50 transition-colors"
+        className="w-7 h-7 rounded-full bg-blue-600/10 border border-blue-500/30 flex items-center justify-center text-xs font-semibold text-blue-700 cursor-pointer select-none shrink-0 overflow-hidden hover:border-blue-400/60 transition-colors"
         aria-label="Profile"
       >
         {avatarContent}
       </Popover.Trigger>
       <Popover.Content side="bottom" align="end" sideOffset={8} className="w-64 p-0 overflow-hidden">
         <div className="p-4 flex flex-col items-center gap-3 border-b border-kumo-line">
-          <div className="w-16 h-16 rounded-full bg-red-600/20 border-2 border-red-500/30 flex items-center justify-center overflow-hidden">
+          <div className="w-16 h-16 rounded-full bg-blue-600/10 border-2 border-blue-500/30 flex items-center justify-center overflow-hidden">
             {largeAvatar}
           </div>
           <div className="text-center">
@@ -143,7 +137,7 @@ function ProfileAvatar({ profile }: { profile: UserProfile }) {
         </div>
         <div className="p-2">
           <button
-            className="w-full text-left px-3 py-2 rounded-md text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+            className="w-full text-left px-3 py-2 rounded-md text-sm text-red-600 hover:bg-red-500/10 transition-colors"
             onClick={() => { /* sign-out placeholder */ }}
           >
             Sign out
@@ -396,18 +390,14 @@ export function NoReplyNotice({ error, onRetry }: { error?: Error; onRetry: () =
 // ─── Composer ─────────────────────────────────────────────────────────────────
 
 interface ComposerProps {
-  models: ModelOption[];
-  modelsLoading: boolean;
-  modelKey: string;
-  onModelChange: (key: string) => void;
+  modelLabel: string;
   isRunning: boolean;
   onSend: (text: string) => Promise<void>;
 }
 
-function Composer({ models, modelsLoading, modelKey, onModelChange, isRunning, onSend }: ComposerProps) {
+function Composer({ modelLabel, isRunning, onSend }: ComposerProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const hasChoice = models.length > 1;
 
   const handleSend = useCallback(() => {
     const text = value.trim();
@@ -443,23 +433,7 @@ function Composer({ models, modelsLoading, modelKey, onModelChange, isRunning, o
       />
 
       <div className="composer-footer">
-        {!modelsLoading && hasChoice && (
-          <Select
-            size="xs"
-            aria-label="Model"
-            value={modelKey}
-            onValueChange={(v) => onModelChange(v as string)}
-            renderValue={(v) => models.find((m) => m.key === v)?.label ?? String(v)}
-            className="composer-agent-select"
-          >
-            {models.map((m) => (
-              <Select.Option key={m.key} value={m.key}>{m.label}</Select.Option>
-            ))}
-          </Select>
-        )}
-        {!modelsLoading && !hasChoice && (
-          <span className="text-xs text-kumo-inactive px-1">{models.find((m) => m.key === modelKey)?.label ?? modelKey}</span>
-        )}
+        <span className="text-xs text-kumo-inactive px-1" title="Change the model for new conversations in Settings">{modelLabel}</span>
 
         <div className="ml-auto">
           {/* No cancel affordance: useFlueAgent exposes no abort. Send is disabled while a run is in flight. */}

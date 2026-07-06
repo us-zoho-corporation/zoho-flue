@@ -92,35 +92,35 @@ export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSetti
       <div className="shrink-0 border-t border-kumo-line">
         <button
           onClick={onAgents}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-white/5 transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
         >
           <Robot size={14} className="shrink-0" />
           Agents
         </button>
         <button
           onClick={onRuns}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-white/5 transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
         >
           <ClockCounterClockwise size={14} className="shrink-0" />
           Runs
         </button>
         <button
           onClick={onSkills}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-white/5 transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
         >
           <Lightning size={14} className="shrink-0" />
           Skills
         </button>
         <button
           onClick={onWorkflows}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-white/5 transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
         >
           <TreeStructure size={14} className="shrink-0" />
           Workflows
         </button>
         <button
           onClick={onSettings}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-white/5 transition-colors cursor-pointer"
+          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
         >
           <GearSix size={14} className="shrink-0" />
           Settings
