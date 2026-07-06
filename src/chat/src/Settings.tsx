@@ -31,7 +31,7 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
               {profile ? (
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-kumo-elevated border border-kumo-line flex items-center justify-center text-sm font-semibold text-kumo-default shrink-0">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold text-white shrink-0" style={{ background: 'var(--accent)' }}>
                       {[profile.firstName[0], profile.lastName[0]].filter(Boolean).join('').toUpperCase() || profile.displayName[0]?.toUpperCase()}
                     </div>
                     <div>
