@@ -1,4 +1,4 @@
-import { Hono, type MiddlewareHandler } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie';
 import { encryptSecret } from './crypto';
 import {
@@ -14,6 +14,7 @@ import {
 	issueSession,
 	optionalUser,
 	requireUser,
+	resolveUser,
 	safeReturnTo,
 	unionScopes,
 	LOGIN_COOKIE,
@@ -139,14 +140,26 @@ export interface Auth {
 	requireUser: MiddlewareHandler;
 	/** Live Zoho access token for a user (refreshes via their stored token). */
 	getUserToken(userId: string): Promise<string>;
+	/** Resolves the request's logged-in user and returns their live token, or null. */
+	resolveUserToken(c: Context): Promise<string | null>;
 }
 
-/** Bundles the auth sub-app + middleware + per-user token helper for app.ts. */
+/** Bundles the auth sub-app + middleware + per-user token helpers for app.ts and the agent route. */
 export function createAuth(deps: AuthDeps): Auth {
 	return {
 		routes: createAuthRoutes(deps),
 		optionalUser: optionalUser(deps),
 		requireUser: requireUser(deps),
 		getUserToken: (userId: string) => getUserToken(deps, userId),
+		resolveUserToken: async (c: Context) => {
+			const userId = await resolveUser(c, deps);
+			if (!userId) return null;
+			try {
+				return await getUserToken(deps, userId);
+			} catch {
+				// No stored token / revoked grant — treat as unauthenticated for provider use.
+				return null;
+			}
+		},
 	};
 }

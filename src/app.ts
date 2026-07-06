@@ -6,8 +6,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { config } from './config';
 import { registerProviders } from './providers';
-import { parseKeyring } from './auth/crypto';
-import { createAuth } from './auth/routes';
+import { getAuth } from './auth';
 import { getStores } from './store';
 
 if (config._devWarnings.noApiSecret) {
@@ -25,19 +24,7 @@ const app = new Hono();
 // User login + Catalyst-backed persistence. `stores` and `auth` are the only
 // wiring the app needs; both depend on interfaces, not on Catalyst directly.
 const stores = getStores();
-const auth = createAuth({
-	stores,
-	keyring: parseKeyring(config.dataEncryptionKey),
-	sessionSecret: config.sessionSecret,
-	sessionTtlSeconds: config.sessionTtlSeconds,
-	secureCookies: config.zohoOAuthRedirectUri.startsWith('https://'),
-	oauth: {
-		clientId: config.zohoClientId,
-		clientSecret: config.zohoClientSecret,
-		redirectUri: config.zohoOAuthRedirectUri,
-		loginScopes: config.zohoLoginScopes,
-	},
-});
+const auth = getAuth();
 
 app.get('/health', (c) => c.json({ ok: true }));
 
