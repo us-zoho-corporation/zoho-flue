@@ -18,12 +18,21 @@ export async function registerProviders(): Promise<void> {
 	// Built-in Anthropic provider (credential-only; validated for fail-fast).
 	registerAnthropic();
 
-	// Custom Catalyst GLM provider — warm a Zoho access token now; the provider
-	// refreshes it via oauth on a 401. contextWindow drives Flue's compaction.
+	// Custom Catalyst GLM provider. Warming the Zoho access token now is an
+	// optimization — the provider refreshes via oauth on a 401 anyway — so a
+	// failure here (e.g. a stale service-account refresh token) must NOT crash
+	// startup: it would take down the whole server, including per-user login,
+	// which does not depend on this token. Register with whatever we can warm.
+	let token = '';
+	try {
+		token = await getZohoAccessToken(oauth);
+	} catch (err) {
+		console.warn(`[providers] Could not warm the Catalyst GLM token at startup — the Zoho GLM model will error until the service-account ZOHO_OAUTH_REFRESH_TOKEN is valid for the current client. (${String(err)})`);
+	}
 	registerCatalystGLM({
 		endpoint: config.catalystEndpoint,
 		orgId: config.catalystOrgId,
-		token: await getZohoAccessToken(oauth),
+		token,
 		oauth,
 		contextWindow: config.catalystContextWindow,
 		maxTokens: config.catalystMaxTokens,
