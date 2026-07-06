@@ -1,16 +1,19 @@
-import { ChatCircle, ClockCounterClockwise, GearSix, Lightning, Robot, TreeStructure, Trash } from '@phosphor-icons/react';
 import {
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRoot,
-  SidebarTrigger,
-} from '@cloudflare/kumo';
-import type { Session } from './App.tsx';
+  CaretDown,
+  ClockCounterClockwise,
+  GearSix,
+  Lightning,
+  MagnifyingGlass,
+  Plus,
+  Robot,
+  Trash,
+  TreeStructure,
+  User,
+} from '@phosphor-icons/react';
+import { useSidebar } from '@cloudflare/kumo';
+import { useState } from 'react';
+import type { Session, UserProfile } from './App.tsx';
+import { ZohoLogo } from './ZohoLogo.tsx';
 
 function timeAgo(ts: number): string {
   const m = Math.floor((Date.now() - ts) / 60000);
@@ -22,9 +25,15 @@ function timeAgo(ts: number): string {
   return d === 1 ? 'Yesterday' : `${d}d ago`;
 }
 
+function initialsOf(profile: UserProfile): string {
+  const fromNames = [profile.firstName[0], profile.lastName[0]].filter(Boolean).join('');
+  return (fromNames || profile.displayName[0] || '?').toUpperCase();
+}
+
 interface SidebarProps {
   sessions: Session[];
   activeId: string;
+  profile: UserProfile | null;
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
@@ -35,97 +44,106 @@ interface SidebarProps {
   onRuns: () => void;
 }
 
-export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns }: SidebarProps) {
+const WORKSPACE: { key: string; label: string; icon: typeof Robot }[] = [
+  { key: 'agents', label: 'Agents', icon: Robot },
+  { key: 'skills', label: 'Skills', icon: Lightning },
+  { key: 'workflows', label: 'Workflows', icon: TreeStructure },
+  { key: 'runs', label: 'Runs', icon: ClockCounterClockwise },
+  { key: 'settings', label: 'Settings', icon: GearSix },
+];
+
+export function Sidebar({ sessions, activeId, profile, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns }: SidebarProps) {
+  const { open } = useSidebar();
+  const [search, setSearch] = useState('');
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
+
+  const handlers: Record<string, () => void> = {
+    agents: onAgents, skills: onSkills, workflows: onWorkflows, runs: onRuns, settings: onSettings,
+  };
+
+  const q = search.trim().toLowerCase();
+  const recents = [...sessions].reverse().filter((s) => !q || s.title.toLowerCase().includes(q));
+
   return (
-    <SidebarRoot>
-      <SidebarHeader className="flex flex-row items-center gap-2 px-3 py-3 pr-2">
-        <div className="w-6 h-6 rounded-md bg-red-600 flex items-center justify-center text-white text-xs font-black tracking-tighter shrink-0">Z</div>
-        <span className="text-sm font-semibold text-kumo-subtle tracking-tight">Zoho Assistant</span>
-        <SidebarTrigger className="ml-auto" />
-      </SidebarHeader>
-
-      <SidebarContent className="flex flex-col overflow-hidden flex-1 min-h-0">
-        <SidebarGroup className="shrink-0">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton onClick={onNew}>
-                <ChatCircle size={14} className="shrink-0 text-kumo-subtle" />
-                <span className="text-sm">New conversation</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroup>
-
-        <div className="flex-1 min-h-0 overflow-y-auto sidebar-recents">
-          <SidebarGroup>
-            <SidebarGroupLabel>Recents</SidebarGroupLabel>
-            <SidebarMenu>
-              {[...sessions].reverse().map((session) => (
-                <SidebarMenuItem key={session.id}>
-                  <SidebarMenuButton
-                    active={session.id === activeId}
-                    onClick={() => onSelect(session.id)}
-                  >
-                    <span className="flex flex-col gap-0.5 flex-1 min-w-0">
-                      <span className="text-sm truncate">{session.title}</span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-xs text-kumo-subtle">{session.modelLabel}</span>
-                        <span className="text-xs text-kumo-subtle opacity-50">·</span>
-                        <span className="text-xs text-kumo-subtle opacity-50">{timeAgo(session.createdAt)}</span>
-                      </span>
-                    </span>
-                    <button
-                      className="shrink-0 w-5 h-5 rounded flex items-center justify-center opacity-0 group-hover/menu-item:opacity-60 hover:!opacity-100 hover:bg-red-500/15 hover:text-red-400 transition-all text-kumo-inactive"
-                      onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
-                      title="Delete conversation"
-                    >
-                      <Trash size={11} />
-                    </button>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroup>
+    <aside className="sb-aside" style={{ width: open ? 308 : 0 }}>
+      <div className="sb-body">
+        <div className="sb-header" style={{ padding: '2px 6px 14px' }}>
+          <span style={{ color: 'var(--txt1)', display: 'flex' }}><ZohoLogo height={22} /></span>
+          <span style={{ flex: 1 }} />
+          <span className="sb-badge">AI preview</span>
         </div>
-      </SidebarContent>
 
-      <div className="shrink-0 border-t border-kumo-line">
-        <button
-          onClick={onAgents}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
-        >
-          <Robot size={14} className="shrink-0" />
-          Agents
+        <button className="sb-newchat" onClick={onNew}>
+          <Plus size={16} weight="bold" />
+          New chat
         </button>
-        <button
-          onClick={onRuns}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
-        >
-          <ClockCounterClockwise size={14} className="shrink-0" />
-          Runs
-        </button>
-        <button
-          onClick={onSkills}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
-        >
-          <Lightning size={14} className="shrink-0" />
-          Skills
-        </button>
-        <button
-          onClick={onWorkflows}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
-        >
-          <TreeStructure size={14} className="shrink-0" />
-          Workflows
-        </button>
-        <button
-          onClick={onSettings}
-          className="w-full flex items-center gap-2 px-4 py-3 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-black/5 transition-colors cursor-pointer"
-        >
-          <GearSix size={14} className="shrink-0" />
-          Settings
-        </button>
+
+        <div className="sb-search" style={{ margin: '12px 0 6px' }}>
+          <MagnifyingGlass size={15} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats" aria-label="Search chats" />
+        </div>
+
+        <div className="sb-label">Recent</div>
+
+        <div className="sidebar-recents" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {recents.map((session) => (
+            <div
+              key={session.id}
+              className="sb-item group"
+              data-active={session.id === activeId}
+              onClick={() => onSelect(session.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span className="sb-item-title" style={{ display: 'block' }}>{session.title}</span>
+                <span className="sb-item-sub" style={{ display: 'block' }}>{session.modelLabel} · {timeAgo(session.createdAt)}</span>
+              </span>
+              <button
+                className="sb-del"
+                onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
+                title="Delete conversation"
+                aria-label="Delete conversation"
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', padding: 2 }}
+              >
+                <Trash size={13} />
+              </button>
+            </div>
+          ))}
+          {recents.length === 0 && (
+            <div className="sb-item-sub" style={{ padding: '8px 10px' }}>{q ? 'No matching chats' : 'No chats yet'}</div>
+          )}
+        </div>
+
+        <div className="sb-ws-toggle" onClick={() => setWorkspaceOpen((v) => !v)}>
+          <span style={{ flex: 1, font: '600 11px var(--font-sans)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--txt3)' }}>Workspace</span>
+          <CaretDown size={13} style={{ color: 'var(--txt3)', transform: workspaceOpen ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 180ms var(--ease-out)' }} />
+        </div>
+
+        {workspaceOpen && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {WORKSPACE.map(({ key, label, icon: Icon }) => (
+              <div key={key} className="sb-nav" onClick={handlers[key]}>
+                <Icon size={16} />
+                <span style={{ flex: 1 }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="sb-user">
+          <div className="sb-avatar" data-guest={!profile}>
+            {profile?.photoUrl
+              ? <img src={profile.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : profile
+                ? <span>{initialsOf(profile)}</span>
+                : <User size={16} weight="regular" />}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div className="sb-user-name">{profile?.displayName ?? 'Not signed in'}</div>
+            <div className="sb-user-sub" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile?.email ?? 'Sign in to sync'}</div>
+          </div>
+        </div>
       </div>
-    </SidebarRoot>
+    </aside>
   );
 }

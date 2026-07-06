@@ -2,40 +2,45 @@ import {
   ArrowClockwise,
   ArrowUp,
   CaretRight,
+  ChartBar,
+  Check,
+  Cloud,
   Copy,
+  EnvelopeSimple,
+  Headset,
   Info,
+  Moon,
+  Sparkle,
+  Sun,
   WarningCircle,
 } from '@phosphor-icons/react';
-import { Badge, Banner, Button, Collapsible, Empty, Loader, Popover, SidebarTrigger, useSidebar } from '@cloudflare/kumo';
+import { Badge, Banner, Button, Collapsible, Loader, SidebarTrigger } from '@cloudflare/kumo';
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
-import type { UserProfile } from './App.tsx';
 import { type ToolCallInfo, type ChatMessage, isAssistantMessage, useFlueChat } from './FlueRuntime.tsx';
 import { A2uiPart } from './a2ui/index.ts';
+import type { Theme } from './theme.ts';
 import type { FlueConversationMessage } from '@flue/react';
 
 interface ThreadProps {
   modelLabel: string;
-  profile: UserProfile | null;
+  theme: Theme;
+  onToggleTheme: () => void;
 }
 
 function textOf(message: FlueConversationMessage): string {
   return message.parts.filter((p) => p.type === 'text').map((p) => ('text' in p ? p.text : '')).join('');
 }
 
-export function Thread({ modelLabel, profile }: ThreadProps) {
+export function Thread({ modelLabel, theme, onToggleTheme }: ThreadProps) {
   const { messages, timestamps, isRunning, historyReady, error, sendMessage } = useFlueChat();
-  const { open: sidebarOpen } = useSidebar();
   const viewportRef = useRef<HTMLDivElement>(null);
 
   const last = messages[messages.length - 1];
-  // The agent is working but hasn't produced its assistant turn yet (just
-  // submitted) — show a pending "Thinking" turn so the thread never sits silent.
+  // The agent is working but hasn't produced its assistant turn yet — show a
+  // pending "Thinking" turn so the thread never sits silent.
   const showPending = isRunning && (!last || last.role === 'user');
 
-  // A finished run whose final entry carries no answer (last visible entry is the
-  // user's message, or an assistant turn with steps but no text/visualization)
-  // means nothing was written back. Never leave the user with silence.
   const lastAssistantEmpty = !!last && last.role === 'assistant'
     && !last.parts.some((p) => p.type === 'text' && p.text)
     && (!isAssistantMessage(last) || last.uiParts.length === 0);
@@ -47,167 +52,100 @@ export function Thread({ modelLabel, profile }: ThreadProps) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, isRunning]);
 
+  const empty = historyReady && messages.length === 0 && !showPending;
+
   return (
     <div className="chat-area flex-1 min-w-0">
       <div className="chat-topbar">
-        {!sidebarOpen && <SidebarTrigger />}
-        <div className="ml-auto">
-          {profile && <ProfileAvatar profile={profile} />}
+        <div className="hdr-left">
+          <SidebarTrigger className="icon-btn" />
+          <div className="hdr-divider" />
+          <div className="hdr-spark"><Sparkle size={14} weight="fill" /></div>
+          <span className="hdr-title">Zoho AI</span>
+          <span className="hdr-sub">Across your Zoho One apps</span>
         </div>
+        <button className="icon-btn" onClick={onToggleTheme} title="Switch theme" aria-label="Switch theme">
+          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+        </button>
       </div>
+
       <div ref={viewportRef} className="chat-viewport">
-        <div className="chat-messages">
-          {!historyReady && (
-            <div className="history-loading"><Loader size="sm" /></div>
-          )}
-          {historyReady && messages.length === 0 && !showPending && (
-            <EmptyState />
-          )}
-          {messages.map((msg, idx) => (
-            msg.role === 'user'
-              ? <UserMessage key={msg.id} message={msg} ts={timestamps.get(msg.id)} />
-              : <AssistantTurn
-                  key={msg.id}
-                  message={msg as ChatMessage}
-                  ts={timestamps.get(msg.id)}
-                  running={isRunning && idx === messages.length - 1}
-                />
-          ))}
-          {showPending && <PendingTurn />}
-          {noReply && (
-            <NoReplyNotice error={error} onRetry={() => lastUserText && sendMessage(textOf(lastUserText))} />
-          )}
-        </div>
+        {empty ? (
+          <WelcomeState onPrompt={sendMessage} />
+        ) : (
+          <div className="chat-messages">
+            {!historyReady && <div className="history-loading"><Loader size="sm" /></div>}
+            {messages.map((msg, idx) => (
+              msg.role === 'user'
+                ? <UserMessage key={msg.id} message={msg} />
+                : <AssistantTurn
+                    key={msg.id}
+                    message={msg as ChatMessage}
+                    running={isRunning && idx === messages.length - 1}
+                  />
+            ))}
+            {showPending && <PendingTurn />}
+            {noReply && (
+              <NoReplyNotice error={error} onRetry={() => lastUserText && sendMessage(textOf(lastUserText))} />
+            )}
+          </div>
+        )}
       </div>
 
       <div className="composer-wrap">
         <div className="composer-inner">
-          <Composer
-            modelLabel={modelLabel}
-            isRunning={isRunning}
-            onSend={sendMessage}
-          />
+          <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} />
+        </div>
+        <p className="composer-disclaimer">Responses can contain mistakes — verify anything important.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Welcome / suggestions ───────────────────────────────────────────────────
+
+const SUGGESTIONS: { icon: typeof ChartBar; title: string; sub: string; prompt: string }[] = [
+  { icon: ChartBar, title: 'Zoho CRM workflows', sub: 'How do I automate a workflow rule?', prompt: 'How do I create a workflow rule in Zoho CRM?' },
+  { icon: EnvelopeSimple, title: 'Zoho Mail setup', sub: 'Filters, signatures, and forwarding', prompt: 'How do I set up email filters in Zoho Mail?' },
+  { icon: Headset, title: 'Zoho Desk tickets', sub: 'SLAs and ticket automation', prompt: 'How do I configure SLAs in Zoho Desk?' },
+  { icon: Cloud, title: 'Build on Catalyst', sub: 'Data Store, functions, and auth', prompt: 'What is the Zoho Catalyst Data Store and when should I use it?' },
+];
+
+function WelcomeState({ onPrompt }: { onPrompt: (text: string) => void }) {
+  return (
+    <div className="welcome">
+      <div className="welcome-inner">
+        <div className="welcome-mark"><Sparkle size={32} weight="regular" /></div>
+        <h1>What can I help with?</h1>
+        <p>Ask across your Zoho apps — summarize, draft, look things up in the docs, and take the next step.</p>
+        <div className="welcome-grid">
+          {SUGGESTIONS.map(({ icon: Icon, title, sub, prompt }) => (
+            <button key={title} className="welcome-card" onClick={() => onPrompt(prompt)}>
+              <span className="welcome-card-title"><Icon size={18} weight="fill" />{title}</span>
+              <span className="welcome-card-sub">{sub}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Profile avatar + popover ──────────────────────────────────────────────────
+// ─── User message ────────────────────────────────────────────────────────────
 
-function ProfileAvatar({ profile }: { profile: UserProfile }) {
-  const nameParts = profile.displayName.trim().split(/\s+/);
-  const initials = (
-    profile.firstName && profile.lastName
-      ? profile.firstName[0] + profile.lastName[0]
-      : nameParts.length >= 2
-        ? nameParts[0][0] + nameParts[nameParts.length - 1][0]
-        : nameParts[0]?.[0] ?? '?'
-  ).toUpperCase();
-
-  const avatarContent = profile.photoUrl ? (
-    <img src={profile.photoUrl} alt={profile.displayName} className="w-full h-full object-cover" />
-  ) : (
-    <span>{initials}</span>
-  );
-
-  const largeAvatar = profile.photoUrl ? (
-    <img src={profile.photoUrl} alt={profile.displayName} className="w-full h-full object-cover" />
-  ) : (
-    <span className="text-xl font-semibold text-blue-700">{initials}</span>
-  );
-
+function UserMessage({ message }: { message: FlueConversationMessage }) {
   return (
-    <Popover>
-      <Popover.Trigger
-        className="w-7 h-7 rounded-full bg-blue-600/10 border border-blue-500/30 flex items-center justify-center text-xs font-semibold text-blue-700 cursor-pointer select-none shrink-0 overflow-hidden hover:border-blue-400/60 transition-colors"
-        aria-label="Profile"
-      >
-        {avatarContent}
-      </Popover.Trigger>
-      <Popover.Content side="bottom" align="end" sideOffset={8} className="w-64 p-0 overflow-hidden">
-        <div className="p-4 flex flex-col items-center gap-3 border-b border-kumo-line">
-          <div className="w-16 h-16 rounded-full bg-blue-600/10 border-2 border-blue-500/30 flex items-center justify-center overflow-hidden">
-            {largeAvatar}
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-kumo-default">{profile.displayName}</p>
-            <p className="text-xs text-kumo-subtle mt-0.5">{profile.email}</p>
-          </div>
-        </div>
-        <div className="p-2">
-          <button
-            className="w-full text-left px-3 py-2 rounded-md text-sm text-red-600 hover:bg-red-500/10 transition-colors"
-            onClick={() => { /* sign-out placeholder */ }}
-          >
-            Sign out
-          </button>
-        </div>
-      </Popover.Content>
-    </Popover>
-  );
-}
-
-function formatTs(ts: number | undefined): string {
-  if (!ts) return '';
-  return Temporal.Instant.fromEpochMilliseconds(ts)
-    .toZonedDateTimeISO(Temporal.Now.timeZoneId())
-    .toLocaleString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-// ─── Empty state ───────────────────────────────────────────────────────────────
-
-function EmptyState() {
-  return (
-    <div className="empty-state">
-      <Empty
-        icon={<div className="empty-logo"><span className="empty-logo-glow" />Z</div>}
-        title="What can I help with?"
-        description="Ask about Zoho products, APIs, and workflows. Answers are grounded in the documentation, with sources."
-      />
-    </div>
-  );
-}
-
-// ─── User message ──────────────────────────────────────────────────────────────
-
-function UserMessage({ message, ts }: { message: FlueConversationMessage; ts?: number }) {
-  const [copied, setCopied] = useState(false);
-  const text = textOf(message);
-
-  const copy = useCallback(() => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }, [text]);
-
-  return (
-    <div className="msg-user group">
+    <div className="msg-user msg-assistant-appear">
       <div className="msg-user-inner">
-        <div className="msg-user-bubble">{text}</div>
-        <div className="msg-action-bar justify-end">
-          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button variant="ghost" shape="square" size="xs" aria-label="Copy" onClick={copy} title={copied ? 'Copied!' : 'Copy'}>
-              <Copy size={11} weight="fill" />
-            </Button>
-          </div>
-          <span className="text-[11px] text-kumo-inactive">{ts ? formatTs(ts) : ''}</span>
-        </div>
+        <div className="msg-user-bubble">{textOf(message)}</div>
       </div>
     </div>
   );
 }
 
 // ─── Assistant turn ──────────────────────────────────────────────────────────
-//
-// One continuous turn, answer-first. The tool trace (the process) sits quietly on
-// top — a live panel while running, a collapsed Kumo Badge/Collapsible once done.
-// The written answer is the hero: borderless prose, not a boxed card. Any
-// visualizations render below it in framed surfaces. Nothing teleports between the
-// running and finished states.
 
-export function AssistantTurn({ message, ts, running }: { message: ChatMessage; ts?: number; running: boolean }) {
+export function AssistantTurn({ message, running }: { message: ChatMessage; running: boolean }) {
   const [copied, setCopied] = useState(false);
   const textParts = message.parts.filter((p) => p.type === 'text' && 'text' in p && p.text);
   const fullText = textParts.map((p) => ('text' in p ? p.text : '')).join('');
@@ -225,8 +163,8 @@ export function AssistantTurn({ message, ts, running }: { message: ChatMessage; 
   const thinking = running && steps.length === 0 && !hasContent;
 
   return (
-    <div className="msg-assistant msg-assistant-appear group">
-      <div className="msg-avatar">Z</div>
+    <div className="msg-assistant msg-assistant-appear">
+      <div className="msg-avatar"><Sparkle size={15} weight="fill" /></div>
       <div className="msg-assistant-content">
         {steps.length > 0 && <ToolTrace steps={steps} running={running} />}
 
@@ -248,10 +186,9 @@ export function AssistantTurn({ message, ts, running }: { message: ChatMessage; 
 
         {!running && hasContent && (
           <div className="msg-action-bar">
-            <Button variant="ghost" shape="square" size="xs" aria-label="Copy answer" onClick={copy} title={copied ? 'Copied!' : 'Copy'} className="opacity-100">
-              <Copy size={11} weight="fill" />
-            </Button>
-            <span className="text-[11px] text-kumo-inactive">{ts ? formatTs(ts) : ''}</span>
+            <button className="icon-btn" aria-label="Copy answer" onClick={copy} title={copied ? 'Copied!' : 'Copy'}>
+              <Copy size={14} />
+            </button>
           </div>
         )}
       </div>
@@ -264,8 +201,7 @@ export function AssistantTurn({ message, ts, running }: { message: ChatMessage; 
 function ToolTrace({ steps, running }: { steps: ToolCallInfo[]; running: boolean }) {
   const [open, setOpen] = useState(false);
 
-  // While running, the steps are the live focus — a quiet panel that sits in the
-  // exact place the collapsed summary will occupy once the turn settles.
+  // While running, the steps are the live focus — glass cards in place.
   if (running) {
     return (
       <div className="tool-trace-live">
@@ -274,7 +210,7 @@ function ToolTrace({ steps, running }: { steps: ToolCallInfo[]; running: boolean
     );
   }
 
-  // Finished: collapse in place to a compact Kumo Badge, expandable.
+  // Finished: collapse to a compact Kumo Badge, expandable.
   const errored = steps.some((s) => s.state === 'output-error');
   const label = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
   return (
@@ -292,36 +228,28 @@ function ToolTrace({ steps, running }: { steps: ToolCallInfo[]; running: boolean
 
 function ThinkingRow() {
   return (
-    <div className="assistant-status">
-      <Loader size="sm" />
-      <span>Thinking…</span>
-    </div>
+    <div className="thinking-dots"><span /><span /><span /></div>
   );
 }
 
 function PendingTurn() {
   return (
     <div className="msg-assistant msg-assistant-appear">
-      <div className="msg-avatar">Z</div>
-      <div className="msg-assistant-content">
-        <ThinkingRow />
-      </div>
+      <div className="msg-avatar"><Sparkle size={15} weight="fill" /></div>
+      <div className="msg-assistant-content"><ThinkingRow /></div>
     </div>
   );
 }
 
-function inputSummary(name: string, input: unknown): string {
+function inputSummary(input: unknown): string {
   if (!input || typeof input !== 'object') return '';
   const obj = input as Record<string, unknown>;
-  // Prefer explicit query/search/keyword fields
   const query = obj['query'] ?? obj['search'] ?? obj['keyword'] ?? obj['q'];
   if (typeof query === 'string' && query.trim()) return `“${query.trim()}”`;
-  // For URL-based tools show the path
   const url = obj['url'] ?? obj['path'] ?? obj['endpoint'];
   if (typeof url === 'string') {
     try { return new URL(url).pathname; } catch { return url; }
   }
-  void name;
   return '';
 }
 
@@ -338,7 +266,7 @@ function friendlyLabel(name: string, state: ToolCallInfo['state'], input: unknow
   const snake = name.replace(/_/g, ' ');
   const [present, past] = map[name] ?? [snake, snake];
   const verb = running ? present : past;
-  const detail = inputSummary(name, input);
+  const detail = inputSummary(input);
   return detail ? `${verb} ${detail}` : verb;
 }
 
@@ -348,16 +276,13 @@ export function ToolCallRow({ toolName, state, input, index }: ToolCallInfo & { 
 
   return (
     <div className="tool-row tool-row-enter" style={{ animationDelay: `${index * 55}ms` }}>
-      <span className="tool-row-icon">
-        {running
-          ? <Loader size={13} />
-          : errored
-            ? <WarningCircle size={13} weight="fill" className="text-kumo-danger" />
-            : <span className="tool-row-dot" />}
-      </span>
-      <span className={`tool-row-label${running ? ' is-running' : ''}`}>
+      <span className="tool-row-icon"><Sparkle size={15} weight="fill" /></span>
+      <span className={`tool-row-label${running ? ' is-running' : ''}`} style={{ flex: 1, minWidth: 0 }}>
         {friendlyLabel(toolName, state, input)}
       </span>
+      {running && <div className="tool-spinner" />}
+      {!running && errored && <WarningCircle size={18} weight="fill" style={{ color: 'var(--danger)', flexShrink: 0 }} />}
+      {!running && !errored && <span className="tool-row-dot"><Check size={12} weight="bold" /></span>}
     </div>
   );
 }
@@ -367,7 +292,7 @@ export function ToolCallRow({ toolName, state, input, index }: ToolCallInfo & { 
 export function NoReplyNotice({ error, onRetry }: { error?: Error; onRetry: () => void }) {
   return (
     <div className="msg-assistant msg-assistant-appear">
-      <div className="msg-avatar">Z</div>
+      <div className="msg-avatar"><Sparkle size={15} weight="fill" /></div>
       <div className="msg-assistant-content">
         <Banner
           variant={error ? 'error' : 'secondary'}
@@ -422,26 +347,21 @@ function Composer({ modelLabel, isRunning, onSend }: ComposerProps) {
 
   return (
     <div className="composer-root">
-      <textarea
-        ref={textareaRef}
-        autoFocus
-        placeholder="Ask anything…"
-        rows={1}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-      />
-
-      <div className="composer-footer">
-        <span className="text-xs text-kumo-inactive px-1" title="Change the model for new conversations in Settings">{modelLabel}</span>
-
-        <div className="ml-auto">
-          {/* No cancel affordance: useFlueAgent exposes no abort. Send is disabled while a run is in flight. */}
-          <Button variant="primary" shape="square" size="sm" aria-label="Send" onClick={handleSend} disabled={!value.trim() || isRunning}>
-            <ArrowUp size={15} />
-          </Button>
-        </div>
+      <div className="composer-row">
+        <textarea
+          ref={textareaRef}
+          autoFocus
+          placeholder="Ask anything about your Zoho workspace"
+          rows={1}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <button className="composer-send" aria-label="Send" onClick={handleSend} disabled={!value.trim() || isRunning}>
+          <ArrowUp size={17} weight="bold" />
+        </button>
       </div>
+      <span className="composer-model" title="Change the model for new conversations in Settings">{modelLabel}</span>
     </div>
   );
 }
