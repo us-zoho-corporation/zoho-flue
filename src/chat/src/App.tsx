@@ -8,6 +8,7 @@ import { Sidebar } from './Sidebar.tsx';
 import { Skills } from './Skills.tsx';
 import { Thread } from './Thread.tsx';
 import { Workflows } from './Workflows.tsx';
+import { applyTheme, loadTheme, saveTheme, type Theme } from './theme.ts';
 
 // Used by the Agents admin view (the deployed-agent manifest), not the chat picker.
 export type AgentEntry = {
@@ -85,6 +86,10 @@ export function App() {
   const [preferredModelKey, setPreferredModelKey] = useState<string>(storedPrefRef.current ?? FALLBACK_MODEL.key);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [view, setView] = useState<'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs'>('chat');
+  const [theme, setTheme] = useState<Theme>(loadTheme);
+
+  useEffect(() => { applyTheme(theme); saveTheme(theme); }, [theme]);
+  const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
 
   useEffect(() => { saveSessions(sessions); }, [sessions]);
 
@@ -153,6 +158,8 @@ export function App() {
   const active = activeSession ?? makeSession(defaultModel);
 
   return (
+    <>
+      <div className="ambient" />
     <SidebarProvider collapsible="offcanvas" defaultOpen className="h-screen overflow-hidden">
       <FlueAssistantBridge
         key={active.id}
@@ -163,6 +170,7 @@ export function App() {
         <Sidebar
           sessions={sessions}
           activeId={activeId}
+          profile={profile}
           onSelect={(id) => { setView('chat'); setActiveId(id); }}
           onNew={() => { setView('chat'); handleNewSession(); }}
           onDelete={handleDeleteSession}
@@ -191,10 +199,12 @@ export function App() {
           ? <Runs onBack={() => setView('chat')} />
           : <Thread
               modelLabel={active.modelLabel}
-              profile={profile}
+              theme={theme}
+              onToggleTheme={toggleTheme}
             />
         }
       </FlueAssistantBridge>
     </SidebarProvider>
+    </>
   );
 }
