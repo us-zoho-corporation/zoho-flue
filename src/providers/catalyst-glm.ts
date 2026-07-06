@@ -152,11 +152,17 @@ function catalystStream(
 		}
 
 		if (!res.ok) {
-			// Log full error server-side; surface only the status to the client.
+			// Log full error server-side; surface a concise message to the client.
 			const errBody = await res.text().catch(() => res.statusText);
 			console.error(`[catalyst-glm] provider error ${res.status}:`, errBody);
 			output.stopReason = 'error';
-			(output as never as { errorMessage: string }).errorMessage = `LLM request failed (${res.status})`;
+			const authFailed = res.status === 401 || res.status === 403;
+			const message = authFailed
+				? (userToken
+					? 'Your Zoho session couldn’t authorize Zoho GLM 4.7 Flash. Please sign in again.'
+					: 'Sign in with Zoho to use Zoho GLM 4.7 Flash.')
+				: `LLM request failed (${res.status})`;
+			(output as never as { errorMessage: string }).errorMessage = message;
 			eventStream.push({ type: 'error', reason: 'error', error: output });
 			return;
 		}

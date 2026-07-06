@@ -20,7 +20,8 @@ export type AgentEntry = {
 
 // A selectable provider-model (from /api/models). The chat runs one `assistant`
 // agent; the chosen model is carried per conversation in the instance id.
-export type ModelOption = { key: string; label: string };
+// `requiresAuth` models run as the logged-in user, so the chat prompts sign-in.
+export type ModelOption = { key: string; label: string; requiresAuth?: boolean };
 
 export type UserProfile = {
   displayName: string;
@@ -47,7 +48,7 @@ const MODEL_KEY = 'flue:model:v1';
 const ASSISTANT_AGENT = 'assistant';
 
 // Used before /api/models resolves, and if it fails. Matches config.defaultChatModelKey.
-const FALLBACK_MODEL: ModelOption = { key: 'claude', label: 'Claude Sonnet 5' };
+const FALLBACK_MODEL: ModelOption = { key: 'claude', label: 'Claude Sonnet 5', requiresAuth: false };
 
 function loadSessions(): Session[] {
   try { return JSON.parse(localStorage.getItem(STORE_KEY) ?? '[]'); } catch { return []; }
@@ -211,6 +212,9 @@ export function App() {
           ? <Runs onBack={() => setView('chat')} />
           : <Thread
               modelLabel={active.modelLabel}
+              requiresAuth={models.find((m) => m.key === active.modelKey)?.requiresAuth ?? false}
+              isSignedIn={!!profile}
+              onSignIn={handleSignIn}
               theme={theme}
               onToggleTheme={toggleTheme}
             />

@@ -291,6 +291,23 @@ body { background: var(--page-bg); color: var(--txt1); }
 .composer-send:hover:not(:disabled) { background: var(--accent-fg); }
 .composer-send:disabled { opacity: 0.4; cursor: default; }
 .composer-model { font: 400 11.5px var(--font-sans); color: var(--txt3); padding: 0 4px; }
+
+/* Sign-in gate that replaces the composer when a model requires login. */
+.composer-signin {
+  display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: 18px;
+  background: var(--glass); backdrop-filter: blur(var(--blur)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.6);
+  border: 1px solid var(--gb); box-shadow: var(--ghi), var(--gsh);
+}
+.composer-signin-msg { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; font: 500 14px var(--font-sans); color: var(--txt1); }
+.composer-signin-msg svg { color: var(--accent-fg); flex-shrink: 0; }
+.composer-signin-btn {
+  flex-shrink: 0; border: none; border-radius: 10px; padding: 9px 16px; cursor: pointer;
+  background: var(--accent); color: #fff; font: 600 13px var(--font-sans);
+  transition: background 180ms var(--ease-out);
+}
+.composer-signin-btn:hover { background: var(--accent-fg); }
+.composer-signin-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
 .composer-disclaimer { font: 400 11.5px var(--font-sans); color: var(--txt3); margin: 8px 0 0; text-align: center; }
 
 /* ─── Markdown ───────────────────────────────────────────────────────────────── */

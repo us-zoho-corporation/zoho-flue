@@ -72,7 +72,7 @@ app.get('/api/agents', async (c) => c.json(await listAgents()));
 // with the `assistant` agent's model resolution). The client carries the chosen
 // `key` in the conversation id; the agent maps it back to a model spec.
 app.get('/api/models', (c) => c.json({
-	models: config.chatModels.map(({ key, label }) => ({ key, label })),
+	models: config.chatModels.map(({ key, label, requiresAuth }) => ({ key, label, requiresAuth })),
 	defaultKey: config.defaultChatModelKey,
 }));
 

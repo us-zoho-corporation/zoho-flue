@@ -24,6 +24,9 @@ import type { FlueConversationMessage } from '@flue/react';
 
 interface ThreadProps {
   modelLabel: string;
+  requiresAuth: boolean;
+  isSignedIn: boolean;
+  onSignIn: () => void;
   theme: Theme;
   onToggleTheme: () => void;
 }
@@ -32,8 +35,10 @@ function textOf(message: FlueConversationMessage): string {
   return message.parts.filter((p) => p.type === 'text').map((p) => ('text' in p ? p.text : '')).join('');
 }
 
-export function Thread({ modelLabel, theme, onToggleTheme }: ThreadProps) {
-  const { messages, timestamps, isRunning, historyReady, error, sendMessage } = useFlueChat();
+export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, theme, onToggleTheme }: ThreadProps) {
+  const { messages, isRunning, historyReady, error, sendMessage } = useFlueChat();
+  // This conversation's model runs as the logged-in user, but nobody is signed in.
+  const authGate = requiresAuth && !isSignedIn;
   const viewportRef = useRef<HTMLDivElement>(null);
 
   const last = messages[messages.length - 1];
@@ -71,7 +76,7 @@ export function Thread({ modelLabel, theme, onToggleTheme }: ThreadProps) {
 
       <div ref={viewportRef} className="chat-viewport">
         {empty ? (
-          <WelcomeState onPrompt={sendMessage} />
+          <WelcomeState onPrompt={authGate ? () => onSignIn() : sendMessage} />
         ) : (
           <div className="chat-messages">
             {!historyReady && <div className="history-loading"><Loader size="sm" /></div>}
@@ -94,7 +99,17 @@ export function Thread({ modelLabel, theme, onToggleTheme }: ThreadProps) {
 
       <div className="composer-wrap">
         <div className="composer-inner">
-          <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} />
+          {authGate ? (
+            <div className="composer-signin">
+              <span className="composer-signin-msg">
+                <Sparkle size={16} weight="fill" />
+                Sign in with Zoho to use {modelLabel}
+              </span>
+              <button className="composer-signin-btn" onClick={onSignIn}>Sign in</button>
+            </div>
+          ) : (
+            <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} />
+          )}
         </div>
         <p className="composer-disclaimer">Responses can contain mistakes — verify anything important.</p>
       </div>

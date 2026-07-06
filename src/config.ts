@@ -59,10 +59,12 @@ export const config = {
 	// Provider-models selectable in the chat. `spec` is a Flue model specifier
 	// (`<provider>/<model>`); `key` is a URL-safe token carried in the conversation
 	// id (`<key>__<uuid>`) so a single `assistant` agent can resolve the chosen
-	// model per conversation. The default is `defaultChatModelKey`.
+	// model per conversation. `requiresAuth` marks models that run as the logged-in
+	// user (their token must carry the needed scope), so the chat can prompt sign-in.
+	// The default is `defaultChatModelKey`.
 	chatModels: [
-		{ key: 'claude', label: 'Claude Sonnet 5', spec: 'anthropic/claude-sonnet-5' },
-		{ key: 'glm', label: 'Zoho GLM 4.7 Flash', spec: 'catalyst-glm/crm-di-glm47b_30b_it' },
+		{ key: 'claude', label: 'Claude Sonnet 5', spec: 'anthropic/claude-sonnet-5', requiresAuth: false },
+		{ key: 'glm', label: 'Zoho GLM 4.7 Flash', spec: 'catalyst-glm/crm-di-glm47b_30b_it', requiresAuth: true },
 	] as const,
 	defaultChatModelKey: 'claude',
 	// Catalyst GLM input context window (tokens). Drives Flue's built-in compaction.
