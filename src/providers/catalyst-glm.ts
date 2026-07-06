@@ -1,6 +1,7 @@
 import { registerApiProvider, registerProvider } from '@flue/runtime';
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai';
 import { evictZohoToken, getZohoAccessToken, type OAuthCredentials } from '../auth/zoho-auth';
+import { currentUserToken } from '../auth/request-context';
 import type {
 	Api,
 	AssistantMessage,
@@ -120,6 +121,10 @@ function catalystStream(
 		const creds = _credentials.get(model.provider);
 		if (!creds) throw new Error(`No credentials registered for provider '${model.provider}'`);
 
+		// Prefer the logged-in user's token (carries QuickML.deployment.READ) when the
+		// request set one; otherwise fall back to the shared service-account token.
+		const userToken = currentUserToken();
+
 		const body = JSON.stringify({
 			model: model.id,
 			messages: convertMessages(context),
@@ -135,9 +140,11 @@ function catalystStream(
 			signal: options?.signal,
 		});
 
-		let res = await doFetch(creds.token);
+		let res = await doFetch(userToken ?? creds.token);
 
-		if (res.status === 401 && creds.oauth) {
+		// Only the service-account token can be refreshed here (via its oauth creds).
+		// A per-user token was just resolved fresh, so a 401 on it surfaces as an error.
+		if (res.status === 401 && !userToken && creds.oauth) {
 			evictZohoToken(creds.oauth);
 			const refreshed = await getZohoAccessToken(creds.oauth);
 			creds.token = refreshed;

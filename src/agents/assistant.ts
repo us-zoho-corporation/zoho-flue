@@ -3,6 +3,9 @@ import { config } from '../config';
 import { defineZohoApiTool } from '../tools/zoho-api';
 import { a2uiTools } from '../tools/a2ui';
 import { zohoKbTools } from '../mcp/zoho-kb';
+import { getAuth } from '../auth';
+import { runWithRequestContext } from '../auth/request-context';
+import { CATALYST_GLM_API } from '../providers/catalyst-glm';
 
 // Tools hold these credentials in a closure; the model only ever sees parameter names.
 const oauth = {
@@ -54,7 +57,16 @@ export function modelForConversation(id: string): string {
 	return chosen.spec;
 }
 
-export const route: AgentRouteHandler = async (_c, next) => next();
+// Before running a turn, attach the logged-in user's token to the request context
+// for GLM conversations, so the Catalyst GLM provider can call the endpoint as the
+// user (their token carries QuickML.deployment.READ). Claude conversations use the
+// Anthropic key and need no per-user token. Guests fall back to the service token.
+export const route: AgentRouteHandler = async (c, next) => {
+	const id = decodeURIComponent(c.req.path.split('/').pop() ?? '');
+	if (!modelForConversation(id).startsWith(`${CATALYST_GLM_API}/`)) return next();
+	const userToken = await getAuth().resolveUserToken(c).catch(() => null);
+	return runWithRequestContext({ userToken: userToken ?? undefined }, () => next());
+};
 
 export default defineAgent(({ id }) => ({
 	profile: zohoAssistant,

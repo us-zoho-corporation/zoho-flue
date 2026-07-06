@@ -28,6 +28,7 @@ function makeApp(deps: AuthDeps) {
 	const auth = createAuth(deps);
 	app.use('*', auth.optionalUser);
 	app.get('/protected', auth.requireUser, (c) => c.json({ ok: true }));
+	app.get('/whoami-token', async (c) => c.json({ token: await auth.resolveUserToken(c) }));
 	app.route('/', auth.routes);
 	return app;
 }
@@ -149,5 +150,25 @@ describe('session lifecycle', () => {
 		const out = await app.request('/logout', { method: 'POST', headers: { Cookie: session } });
 		expect(await out.json()).toEqual({ ok: true });
 		expect((await app.request('/protected', { headers: { Cookie: session } })).status).toBe(401);
+	});
+});
+
+describe('resolveUserToken (per-user provider token)', () => {
+	it('returns the live user token when signed in, null for guests', async () => {
+		mockZoho();
+		const deps = makeDeps();
+		const app = makeApp(deps);
+
+		// Guest → null.
+		expect(await (await app.request('/whoami-token')).json()).toEqual({ token: null });
+
+		// Sign in, then resolve the token from the session.
+		const login = await app.request('/login');
+		const state = new URL(login.headers.get('location')!).searchParams.get('state')!;
+		const cb = await app.request(`/callback?code=abc&state=${encodeURIComponent(state)}`, {
+			headers: { Cookie: cookieHeader(jarFrom(login)) },
+		});
+		const session = cookieHeader(jarFrom(cb));
+		expect(await (await app.request('/whoami-token', { headers: { Cookie: session } })).json()).toEqual({ token: 'user-access' });
 	});
 });
