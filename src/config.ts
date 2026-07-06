@@ -13,6 +13,28 @@ export const config = {
 	catalystEndpoint: required('CATALYST_ENDPOINT'),
 	catalystOrgId: required('CATALYST_ORG_ID'),
 
+	// Per-user Zoho OAuth login (authorization-code flow).
+	// `zohoLoginScopes` is the minimal scope set requested at login; granted scopes
+	// are stored per user and can be expanded incrementally.
+	zohoOAuthRedirectUri: required('ZOHO_OAUTH_REDIRECT_URI'),
+	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ',
+	// HMAC secret for signed session/login cookies (≥32 bytes recommended).
+	sessionSecret: required('SESSION_SECRET'),
+	// Session lifetime; default 30 days.
+	sessionTtlSeconds: Number(process.env['SESSION_TTL_SECONDS'] ?? 60 * 60 * 24 * 30),
+	// AES-256-GCM key(s) for encrypting stored refresh tokens at rest. Raw form is
+	// `keyId:base64(32B)`, comma-separated (first = active for new writes; all usable
+	// for decryption to support rotation). Parsed by src/auth/crypto.ts.
+	dataEncryptionKey: required('DATA_ENCRYPTION_KEY'),
+
+	// Catalyst Data Store (REST persistence for users/tokens/sessions/preferences).
+	// Reached with the service-account admin token (same creds as the GLM provider).
+	catalystProjectId: required('CATALYST_PROJECT_ID'),
+	catalystEnvironment: process.env['CATALYST_ENVIRONMENT'] ?? 'Development',
+	catalystApiBaseUrl: process.env['CATALYST_API_BASE_URL'] ?? 'https://api.catalyst.zoho.com/baas/v1',
+	// Which store implementation to use: 'catalyst' (Data Store) or 'memory' (dev/tests).
+	storeBackend: (process.env['STORE_BACKEND'] ?? 'catalyst') as 'catalyst' | 'memory',
+
 	zohoDocsBearerToken: process.env['ZOHO_DOCS_BEARER_TOKEN'] ?? '',
 
 	// Anthropic is a built-in Flue provider — only its key is needed. Optional here;
@@ -30,6 +52,7 @@ export const config = {
 	_devWarnings: {
 		noApiSecret: !process.env['FLUE_API_SECRET'],
 		defaultCorsOrigins: !process.env['FLUE_CORS_ORIGINS'],
+		usingMemoryStore: (process.env['STORE_BACKEND'] ?? 'catalyst') === 'memory',
 	},
 
 	// Provider-models selectable in the chat. `spec` is a Flue model specifier

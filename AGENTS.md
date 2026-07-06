@@ -14,7 +14,8 @@ Flue discovers `agents/`, `workflows/`, and `channels/` by filename, plus `app.t
 | `src/channels/` | Verified provider HTTP ingress (add when needed) | yes (by filename) |
 | `src/config.ts` | All env reads and static constants | — |
 | `src/providers/` | Model/LLM provider registrations only (`registerProvider` / `registerApiProvider`); wired via `providers/index.ts`'s `registerProviders()` | — |
-| `src/auth/` | OAuth / credential helpers (e.g. Zoho token exchange) — not model providers | — |
+| `src/auth/` | OAuth / credential helpers (Zoho service-account token, per-user login, sessions, cookie crypto) — not model providers | — |
+| `src/store/` | Persistence — Catalyst-agnostic repository interfaces + Catalyst Data Store / in-memory implementations | — |
 | `src/tools/` | Application-controlled tool definitions | — |
 | `src/mcp/` | Programmatic MCP server clients | — |
 | `src/sandboxes/` | Sandbox configs (`flue add sandbox <provider>`); wired via `sandbox:` in `defineAgent` | — |

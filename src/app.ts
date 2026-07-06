@@ -5,8 +5,10 @@ import { cors } from 'hono/cors';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { config } from './config';
-import { getZohoAccessToken } from './auth/zoho-auth';
 import { registerProviders } from './providers';
+import { parseKeyring } from './auth/crypto';
+import { createAuth } from './auth/routes';
+import { getStores } from './store';
 
 if (config._devWarnings.noApiSecret) {
 	console.warn('[security] FLUE_API_SECRET is not set — all /api/* routes are unauthenticated. Set this in production.');
@@ -14,8 +16,28 @@ if (config._devWarnings.noApiSecret) {
 if (config._devWarnings.defaultCorsOrigins) {
 	console.warn('[security] FLUE_CORS_ORIGINS is not set — using localhost defaults. Set this in production.');
 }
+if (config._devWarnings.usingMemoryStore) {
+	console.warn('[store] STORE_BACKEND=memory — user data is in-process and non-durable. Use the Catalyst backend in production.');
+}
 
 const app = new Hono();
+
+// User login + Catalyst-backed persistence. `stores` and `auth` are the only
+// wiring the app needs; both depend on interfaces, not on Catalyst directly.
+const stores = getStores();
+const auth = createAuth({
+	stores,
+	keyring: parseKeyring(config.dataEncryptionKey),
+	sessionSecret: config.sessionSecret,
+	sessionTtlSeconds: config.sessionTtlSeconds,
+	secureCookies: config.zohoOAuthRedirectUri.startsWith('https://'),
+	oauth: {
+		clientId: config.zohoClientId,
+		clientSecret: config.zohoClientSecret,
+		redirectUri: config.zohoOAuthRedirectUri,
+		loginScopes: config.zohoLoginScopes,
+	},
+});
 
 app.get('/health', (c) => c.json({ ok: true }));
 
@@ -23,14 +45,39 @@ const corsOptions = { origin: config.corsOrigins, credentials: true };
 app.use('/agents/*', cors(corsOptions));
 app.use('/api/*', cors(corsOptions));
 
+// Attach the logged-in user (if any) to every /api/* request.
+app.use('/api/*', auth.optionalUser);
+
 if (config.apiSecret) {
 	app.use('/api/*', async (c, next) => {
-		if (c.req.header('x-flue-secret') !== config.apiSecret) {
-			return c.json({ error: 'Unauthorized' }, 401);
-		}
-		return next();
+		// Login/callback must be reachable without a session or the shared secret.
+		if (c.req.path.startsWith('/api/auth/')) return next();
+		// Accept either a valid user session (browser) or the machine-to-machine secret.
+		if (c.get('userId') || c.req.header('x-flue-secret') === config.apiSecret) return next();
+		return c.json({ error: 'Unauthorized' }, 401);
 	});
 }
+
+app.route('/api/auth', auth.routes);
+
+// Per-user preferences (Catalyst-backed). Requires a valid session.
+app.get('/api/preferences', auth.requireUser, async (c) => {
+	const prefs = await stores.preferences.get(c.get('userId') as string);
+	return c.json(prefs ?? { preferredModelKey: config.defaultChatModelKey, data: {} });
+});
+
+app.put('/api/preferences', auth.requireUser, async (c) => {
+	const userId = c.get('userId') as string;
+	const body = await c.req.json().catch(() => ({})) as { preferredModelKey?: unknown; data?: unknown };
+	// Only accept a known model key; ignore anything else.
+	const known = config.chatModels.some((m) => m.key === body.preferredModelKey);
+	const preferredModelKey = known ? (body.preferredModelKey as string) : config.defaultChatModelKey;
+	const data = body.data && typeof body.data === 'object' && !Array.isArray(body.data)
+		? (body.data as Record<string, unknown>)
+		: {};
+	await stores.preferences.put({ userId, preferredModelKey, data, updatedAt: Date.now() });
+	return c.json({ ok: true });
+});
 
 app.get('/api/agents', async (c) => c.json(await listAgents()));
 
@@ -84,40 +131,36 @@ app.get('/api/workflows', async (c) => {
 	return c.json({ workflows: names, runs });
 });
 
-const oauthCreds = {
-	clientId: config.zohoClientId,
-	clientSecret: config.zohoClientSecret,
-	refreshToken: config.zohoRefreshToken,
-};
-
 // Register all model/auth providers once at startup. Their setup lives in
 // src/providers/; app.ts just wires it in.
 await registerProviders();
 
-app.get('/api/me', async (c) => {
-	const token = await getZohoAccessToken(oauthCreds);
-	const res = await fetch('https://accounts.zoho.com/oauth/user/info', {
-		headers: { Authorization: `Zoho-oauthtoken ${token}` },
-	});
-	if (!res.ok) return c.json({ error: 'Failed to fetch user info' }, 502);
-	const data = await res.json() as Record<string, string>;
-	const rawPhotoId = data['Photo_ID'];
-	const photoId = /^\d+$/.test(rawPhotoId ?? '') ? rawPhotoId : null;
-	// Return a server-proxied URL so the client never constructs external URLs from API data.
-	const photoUrl = photoId ? `/api/photo?id=${photoId}` : null;
+// Per-user identity, served from the Catalyst-backed store (no Zoho round-trip;
+// the profile is captured at login). Requires a valid session.
+app.get('/api/me', auth.requireUser, async (c) => {
+	const user = await stores.users.getById(c.get('userId') as string);
+	if (!user) return c.json({ error: 'Failed to fetch user info' }, 404);
+	// Server-proxied photo URL so the client never constructs external URLs from API data.
+	const photoUrl = user.photoId ? `/api/photo?id=${user.photoId}` : null;
 	return c.json({
-		displayName: data['Display_Name'] ?? data['First_Name'] ?? '',
-		email: data['Email'] ?? '',
-		firstName: data['First_Name'] ?? '',
-		lastName: data['Last_Name'] ?? '',
+		displayName: user.displayName,
+		email: user.email,
+		firstName: user.firstName,
+		lastName: user.lastName,
 		photoUrl,
 	});
 });
 
-app.get('/api/photo', async (c) => {
+app.get('/api/photo', auth.requireUser, async (c) => {
 	const id = c.req.query('id') ?? '';
 	if (!/^\d+$/.test(id)) return c.json({ error: 'Invalid photo ID' }, 400);
-	const token = await getZohoAccessToken(oauthCreds);
+	let token: string;
+	try {
+		// Fetches the logged-in user's own photo; needs a contacts scope on their grant.
+		token = await auth.getUserToken(c.get('userId') as string);
+	} catch {
+		return c.json({ error: 'reauth_required' }, 401);
+	}
 	const res = await fetch(`https://contacts.zoho.com/file?ID=${id}&fs=thumb`, {
 		headers: { Authorization: `Zoho-oauthtoken ${token}` },
 	});
