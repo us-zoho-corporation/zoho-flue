@@ -11,7 +11,8 @@ Built on [Flue](https://flueframework.com/), a Node.js agent framework. Source l
 | `src/config.ts` | Single source of truth for all settings | below |
 | `src/tools/` | Application-controlled tool definitions | below |
 | `src/providers/` | Model/LLM provider registrations only | [providers.md](providers.md) |
-| `src/auth/` | OAuth / credential helpers (Zoho token exchange) | below |
+| `src/auth/` | OAuth / credential helpers (Zoho service-account token, per-user login, sessions, crypto) | below |
+| `src/store/` | Persistence — Catalyst-agnostic repository interfaces + Catalyst Data Store / in-memory implementations | [auth.md](auth.md) |
 | `src/mcp/` | Programmatic MCP server clients | [mcp-clients.md](mcp-clients.md) |
 | `src/chat/` | Browser chat UI | below |
 | **a2ui** | Generative UI streaming | [a2ui.md](a2ui.md) |
@@ -63,7 +64,19 @@ Tools hold credentials in closures — the model only sees parameter names and d
 
 ## Auth (`src/auth/`)
 
-Credential/OAuth helpers — distinct from `src/providers/` (which is only Flue model providers). `zoho-auth.ts` exchanges `ZOHO_OAUTH_REFRESH_TOKEN` for a live Zoho access token (cached, refreshed 5 min before expiry). Consumed by the Catalyst GLM provider (its bearer token) and the `/api/me` / `/api/photo` routes. See the `zoho-oauth` skill for the credential setup flow.
+Credential/OAuth helpers — distinct from `src/providers/` (which is only Flue model providers).
+
+- `zoho-auth.ts` — the **service-account** token cache: exchanges a refresh token for a live Zoho access token (cached, refreshed 5 min before expiry, concurrent-refresh dedup). Consumed by the Catalyst GLM provider, the Catalyst Data Store client, and — keyed per user — by `getUserToken`.
+- `zoho-oauth.ts` — the **per-user** authorization-code flow (PKCE + `state`): build the authorize URL, exchange the code for tokens, refresh a user's token.
+- `routes.ts` — Hono sub-app for `GET /api/auth/login`, `GET /api/auth/callback`, `POST /api/auth/logout`, `GET /api/auth/me`.
+- `session.ts` — `optionalUser` / `requireUser` middleware (signed cookie → session → user), `getUserToken(userId)`, and scope helpers.
+- `crypto.ts` — AES-256-GCM encrypt/decrypt for refresh tokens at rest (keyId-tagged envelope, multi-key for rotation).
+
+See [auth.md](auth.md) for the login flow, session model, scope management, and Data Store schema.
+
+## Store (`src/store/`)
+
+Persistence behind Catalyst-agnostic **repository interfaces** (`types.ts`): `UserStore`, `TokenStore`, `SessionStore`, `PreferenceStore`, composed as `Stores`. Two implementations — `store/catalyst/` (Catalyst Data Store over REST, using the service-account admin token, same pattern as the GLM provider) and `store/memory/` (in-memory, for unit tests and local dev before tables exist). `getStores()` selects the backend by `config.storeBackend`. The app depends only on the interfaces, so the backend is swappable.
 
 ## Chat UI (`src/chat/`)
 
