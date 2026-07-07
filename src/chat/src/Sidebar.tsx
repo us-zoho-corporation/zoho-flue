@@ -15,6 +15,7 @@ import {
 import { useSidebar } from '@cloudflare/kumo';
 import { useState } from 'react';
 import type { Session, UserProfile } from './App.tsx';
+import { useRunningIds } from './conversations.tsx';
 import { ZohoLogo } from './ZohoLogo.tsx';
 
 function timeAgo(ts: number): string {
@@ -67,6 +68,7 @@ export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSe
     agents: onAgents, skills: onSkills, workflows: onWorkflows, mcp: onMcp, runs: onRuns, settings: onSettings,
   };
 
+  const running = useRunningIds();
   const q = search.trim().toLowerCase();
   const recents = [...sessions].reverse().filter((s) => !q || s.title.toLowerCase().includes(q));
 
@@ -101,7 +103,10 @@ export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSe
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             >
               <span style={{ flex: 1, minWidth: 0 }}>
-                <span className="sb-item-title" style={{ display: 'block' }}>{session.title}</span>
+                <span className="sb-item-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {running.has(`${session.modelKey}__${session.id}`) && <span className="sb-running-dot" title="Responding…" />}
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</span>
+                </span>
                 <span className="sb-item-sub" style={{ display: 'block' }}>{session.modelLabel} · {timeAgo(session.createdAt)}</span>
               </span>
               <button

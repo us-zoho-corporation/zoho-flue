@@ -37,8 +37,10 @@ export class ConversationsStore {
   private entries = new Map<string, Entry>();
   private views = new Map<string, FlueChat>();
   private senders = new Map<string, (text: string) => Promise<void>>();
+  private stoppers = new Map<string, () => Promise<void>>();
   private listeners = new Set<() => void>();
   private activeId?: string;
+  private running: Set<string> = new Set(); // stable ref; replaced only when membership changes
 
   constructor(private readonly client: FlueClient, private readonly agentName: string) {}
 
@@ -52,6 +54,26 @@ export class ConversationsStore {
     let s = this.senders.get(convId);
     if (!s) { s = (text: string) => this.send(convId, text); this.senders.set(convId, s); }
     return s;
+  }
+  private stopperFor(convId: string): () => Promise<void> {
+    let s = this.stoppers.get(convId);
+    if (!s) { s = () => this.abort(convId); this.stoppers.set(convId, s); }
+    return s;
+  }
+
+  private setRunning(convId: string, isRunning: boolean) {
+    if (this.running.has(convId) === isRunning) return;
+    const next = new Set(this.running);
+    if (isRunning) next.add(convId); else next.delete(convId);
+    this.running = next;
+  }
+
+  /** Stable set of conversation ids with an in-flight response. */
+  runningIds(): Set<string> { return this.running; }
+
+  /** Aborts the in-flight response for a conversation. */
+  async abort(convId: string): Promise<void> {
+    try { await this.client.agents.abort(this.agentName, convId); } catch { /* ignore */ }
   }
 
   private ensureOpen(convId: string): Entry {
@@ -73,6 +95,7 @@ export class ConversationsStore {
     try { entry.observation.close(); } catch { /* ignore */ }
     this.entries.delete(convId);
     this.views.delete(convId);
+    this.setRunning(convId, false);
     this.emit();
   }
 
@@ -118,7 +141,9 @@ export class ConversationsStore {
       historyReady: snap.phase !== 'loading',
       error: snap.error,
       sendMessage: this.senderFor(convId),
+      stop: this.stopperFor(convId),
     });
+    this.setRunning(convId, running);
     this.reevaluateGc(convId);
     this.emit();
   }
@@ -134,6 +159,10 @@ export class ConversationsStore {
     this.recompute(convId); // reflect the echo immediately
     try {
       await this.client.agents.send(this.agentName, convId, { message: text });
+      // The instance may have been `absent` when we started observing (a brand-new
+      // conversation). `send` just created it, so refresh the observation to catch
+      // up and begin following the streamed response. (No-op if already live.)
+      entry.observation.refresh();
     } catch (err) {
       entry.overlay = undefined; // roll back the echo on failure
       this.recompute(convId);
@@ -144,16 +173,10 @@ export class ConversationsStore {
   getView(convId: string): FlueChat {
     let v = this.views.get(convId);
     if (!v) {
-      v = { messages: [], isRunning: false, historyReady: false, error: undefined, sendMessage: this.senderFor(convId) };
+      v = { messages: [], isRunning: false, historyReady: false, error: undefined, sendMessage: this.senderFor(convId), stop: this.stopperFor(convId) };
       this.views.set(convId, v);
     }
     return v;
-  }
-
-  runningIds(): Set<string> {
-    const ids = new Set<string>();
-    for (const [id, view] of this.views) if (view.isRunning) ids.add(id);
-    return ids;
   }
 }
 
@@ -177,6 +200,12 @@ export function useConversationsStore(): ConversationsStore {
 export function useConversation(convId: string): FlueChat {
   const store = useConversationsStore();
   return useSyncExternalStore(store.subscribe, () => store.getView(convId));
+}
+
+/** The set of conversation ids with an in-flight response (stable ref). */
+export function useRunningIds(): Set<string> {
+  const store = useConversationsStore();
+  return useSyncExternalStore(store.subscribe, () => store.runningIds());
 }
 
 /**
