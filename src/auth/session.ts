@@ -31,6 +31,8 @@ export interface AuthDeps {
 	sessionTtlSeconds: number;
 	/** Set the `Secure` cookie flag (true in production / https). */
 	secureCookies: boolean;
+	/** Dev/CI only: enable /api/auth/dev-login (fake user, no Zoho). Never in prod. */
+	devAuth: boolean;
 	oauth: AuthOAuthConfig;
 }
 

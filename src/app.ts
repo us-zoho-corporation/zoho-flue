@@ -21,6 +21,9 @@ if (config._devWarnings.defaultCorsOrigins) {
 if (config._devWarnings.usingMemoryStore) {
 	console.warn('[store] STORE_BACKEND=memory — user data is in-process and non-durable. Use the Catalyst backend in production.');
 }
+if (config._devWarnings.devAuth) {
+	console.warn(`[security] ENV=${config.env} — /api/auth/dev-login is enabled and mints fake sessions without Zoho. Only use ENV=local or ENV=CI; never in production.`);
+}
 
 const app = new Hono();
 

@@ -131,6 +131,33 @@ export function createAuthRoutes(deps: AuthDeps): Hono {
 		return c.json({ authenticated: true, user, scopes: token?.scopes ?? [] });
 	});
 
+	// Local/CI ONLY: mint a session for a fake user without Zoho — the test seam used
+	// by the e2e-chat harness. 404s unless ENV=local|CI (deps.devAuth). Never in prod.
+	app.get('/dev-login', async (c) => {
+		if (!deps.devAuth) return c.notFound();
+		const userId = c.req.query('userId') || 'dev-user';
+		const email = c.req.query('email') || 'dev@example.com';
+		const name = c.req.query('name') || 'Dev User';
+		const [firstName, ...rest] = name.trim().split(/\s+/);
+		const now = Date.now();
+		const existing = await deps.stores.users.getById(userId);
+		await deps.stores.users.upsert({
+			userId, email, displayName: name,
+			firstName: firstName || 'Dev', lastName: rest.join(' ') || 'User',
+			photoId: null, createdAt: existing?.createdAt ?? now, lastLoginAt: now,
+		});
+		await deps.stores.tokens.put({
+			userId,
+			// Placeholder — can't be refreshed against Zoho; fine for Claude + empty-state UX.
+			refreshTokenEnc: encryptSecret('dev-refresh-token-not-usable', deps.keyring),
+			scopes: ['AaaServer.profile.READ', 'QuickML.deployment.READ'],
+			accountsServer: 'https://accounts.zoho.com',
+			updatedAt: now,
+		});
+		await issueSession(c, deps, userId);
+		return c.redirect(safeReturnTo(c.req.query('returnTo')));
+	});
+
 	return app;
 }
 

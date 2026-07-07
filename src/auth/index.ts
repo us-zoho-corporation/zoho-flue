@@ -19,6 +19,7 @@ export function getAuth(): Auth {
 		sessionSecret: config.sessionSecret,
 		sessionTtlSeconds: config.sessionTtlSeconds,
 		secureCookies: config.zohoOAuthRedirectUri.startsWith('https://'),
+		devAuth: config.devAuth,
 		oauth: {
 			clientId: config.zohoClientId,
 			clientSecret: config.zohoClientSecret,
