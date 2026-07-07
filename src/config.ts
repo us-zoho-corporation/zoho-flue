@@ -1,9 +1,17 @@
+import { randomBytes } from 'node:crypto';
+
 /** Reads an environment variable, throwing at startup if it is absent. */
 function required(key: string): string {
 	const val = process.env[key];
 	if (!val) throw new Error(`Missing required environment variable: ${key}`);
 	return val;
 }
+
+// Cookie/token secrets are generated in-memory at startup, never configured.
+// They're opaque values that mean nothing as configuration — see config.sessionSecret /
+// config.dataEncryptionKey below for the (process-scoped) durability implication.
+const _sessionSecret = randomBytes(32).toString('base64');
+const _dataEncryptionKey = `ephemeral:${randomBytes(32).toString('base64')}`;
 
 export const config = {
 	// OAuth + Catalyst — read from environment at startup
@@ -19,14 +27,17 @@ export const config = {
 	// reach the Catalyst GLM (Zoho GLM 4.7 Flash) endpoint.
 	zohoOAuthRedirectUri: required('ZOHO_OAUTH_REDIRECT_URI'),
 	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ,QuickML.deployment.READ',
-	// HMAC secret for signed session/login cookies (≥32 bytes recommended).
-	sessionSecret: required('SESSION_SECRET'),
+	// HMAC secret for signed session/login cookies — generated in-memory at startup
+	// (not configurable). Process-scoped: sessions don't survive a restart or span
+	// instances, which is fine for this single-process app.
+	sessionSecret: _sessionSecret,
 	// Session lifetime; default 30 days.
 	sessionTtlSeconds: Number(process.env['SESSION_TTL_SECONDS'] ?? 60 * 60 * 24 * 30),
-	// AES-256-GCM key(s) for encrypting stored refresh tokens at rest. Raw form is
-	// `keyId:base64(32B)`, comma-separated (first = active for new writes; all usable
-	// for decryption to support rotation). Parsed by src/auth/crypto.ts.
-	dataEncryptionKey: required('DATA_ENCRYPTION_KEY'),
+	// AES-256-GCM keyring for encrypting refresh tokens at rest — generated in-memory
+	// at startup (not configurable). Process-scoped: tokens encrypted at rest (Catalyst
+	// store) can't be decrypted after a restart, so users re-auth — an acceptable
+	// tradeoff for not carrying an opaque key as configuration. Parsed by src/auth/crypto.ts.
+	dataEncryptionKey: _dataEncryptionKey,
 
 	// Catalyst Data Store (REST persistence for users/tokens/sessions/preferences).
 	// Reached with the service-account admin token (same creds as the GLM provider).
@@ -35,6 +46,11 @@ export const config = {
 	catalystApiBaseUrl: process.env['CATALYST_API_BASE_URL'] ?? 'https://api.catalyst.zoho.com/baas/v1',
 	// Which store implementation to use: 'catalyst' (Data Store) or 'memory' (dev/tests).
 	storeBackend: (process.env['STORE_BACKEND'] ?? 'catalyst') as 'catalyst' | 'memory',
+	// Deployment environment. Only 'local' and 'CI' enable the dev-login bypass below.
+	env: process.env['ENV'] ?? '',
+	// Local/CI ONLY: enables /api/auth/dev-login to mint a session for a fake user
+	// without Zoho OAuth (for local testing / the e2e-chat harness). Never in prod.
+	devAuth: process.env['ENV'] === 'local' || process.env['ENV'] === 'CI',
 
 	zohoDocsBearerToken: process.env['ZOHO_DOCS_BEARER_TOKEN'] ?? '',
 
@@ -54,6 +70,7 @@ export const config = {
 		noApiSecret: !process.env['FLUE_API_SECRET'],
 		defaultCorsOrigins: !process.env['FLUE_CORS_ORIGINS'],
 		usingMemoryStore: (process.env['STORE_BACKEND'] ?? 'catalyst') === 'memory',
+		devAuth: process.env['ENV'] === 'local' || process.env['ENV'] === 'CI',
 	},
 
 	// Provider-models selectable in the chat. `spec` is a Flue model specifier

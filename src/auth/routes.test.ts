@@ -14,6 +14,7 @@ function makeDeps(): AuthDeps {
 		sessionSecret: 'a-test-session-secret-at-least-32b',
 		sessionTtlSeconds: 3600,
 		secureCookies: false,
+		devAuth: false,
 		oauth: {
 			clientId: 'cid',
 			clientSecret: 'secret',
@@ -170,5 +171,44 @@ describe('resolveUserToken (per-user provider token)', () => {
 		});
 		const session = cookieHeader(jarFrom(cb));
 		expect(await (await app.request('/whoami-token', { headers: { Cookie: session } })).json()).toEqual({ token: 'user-access' });
+	});
+});
+
+describe('GET /dev-login (test seam)', () => {
+	it('404s when devAuth is disabled', async () => {
+		const app = makeApp(makeDeps()); // devAuth: false
+		expect((await app.request('/dev-login')).status).toBe(404);
+	});
+
+	it('mints a real session for a fake user when enabled', async () => {
+		const deps = { ...makeDeps(), devAuth: true };
+		const app = makeApp(deps);
+
+		const res = await app.request('/dev-login?returnTo=/');
+		expect(res.status).toBe(302);
+		expect(res.headers.get('location')).toBe('/');
+		const session = cookieHeader(jarFrom(res));
+		expect(session).toContain('flue_sid=');
+
+		// The minted cookie authenticates /me and the requireUser-gated /protected.
+		const me = await (await app.request('/me', { headers: { Cookie: session } })).json();
+		expect(me).toMatchObject({ authenticated: true, user: { userId: 'dev-user', email: 'dev@example.com' } });
+		expect(me.scopes).toContain('QuickML.deployment.READ');
+		expect((await app.request('/protected', { headers: { Cookie: session } })).status).toBe(200);
+
+		// Fake user + placeholder token were persisted.
+		expect(await deps.stores.users.getById('dev-user')).not.toBeNull();
+		expect(await deps.stores.tokens.get('dev-user')).not.toBeNull();
+	});
+
+	it('accepts a custom fake identity and only redirects to a safe path', async () => {
+		const deps = { ...makeDeps(), devAuth: true };
+		const app = makeApp(deps);
+
+		const res = await app.request('/dev-login?userId=u9&email=a@b.com&name=Ada%20Lovelace&returnTo=https://evil.example');
+		expect(res.headers.get('location')).toBe('/'); // open-redirect rejected
+		expect(await deps.stores.users.getById('u9')).toMatchObject({
+			email: 'a@b.com', displayName: 'Ada Lovelace', firstName: 'Ada', lastName: 'Lovelace',
+		});
 	});
 });

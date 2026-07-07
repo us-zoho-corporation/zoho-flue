@@ -57,14 +57,15 @@ Flash endpoint).
 independent caching, concurrent-refresh dedup, and 5-min skew handling for free. If a user
 has no stored token, callers get `reauth_required` (401).
 
-## Token encryption & key rotation
+## Token encryption
 
 Refresh tokens are AES-256-GCM encrypted; the envelope is `v1:<keyId>:<iv>:<tag>:<ct>`.
-`DATA_ENCRYPTION_KEY` is a comma-separated list of `keyId:base64(32B)` — the **first** key
-is active for new writes, **all** keys can decrypt. To rotate: prepend a new key (it becomes
-active), keep the old key present so existing rows still decrypt; each user's token is
-re-encrypted with the active key on their next login. Drop the old key once all users have
-re-logged in.
+The keyring (`keyId -> 32-byte key`, parsed by `src/auth/crypto.ts`) is generated
+in-memory at startup rather than configured — the active key encrypts new writes and any
+key in the ring can decrypt. Because it's process-scoped, a restart mints a fresh key:
+ciphertext written under the old key can no longer be decrypted, so those users simply
+re-authenticate on their next request. This keeps encryption-at-rest without carrying an
+opaque key as configuration.
 
 ## Data Store schema (case-sensitive)
 
@@ -84,6 +85,6 @@ admin-scoped via the service token, so App User table permissions are not requir
 1. Register `ZOHO_OAUTH_REDIRECT_URI` as an Authorized Redirect URI on the Zoho OAuth client.
 2. Ensure the **service-account** refresh token carries `ZohoCatalyst.tables.rows.{CREATE,READ,UPDATE,DELETE}` + `ZohoCatalyst.zcql.CREATE` (for Data Store writes).
 3. Create the four tables above; set `STORE_BACKEND=catalyst`.
-4. Set `SESSION_SECRET` and `DATA_ENCRYPTION_KEY` (see [environment.md](environment.md)).
+4. Nothing else to configure: the signed-cookie secret and the refresh-token encryption key are generated in-memory at startup (not env vars — see [environment.md](environment.md)). They're process-scoped, so sessions and tokens encrypted at rest don't survive a restart; users re-authenticate.
 
 Config keys: [environment.md](environment.md). Smoke test: `tests/smoke/` (live Development).
