@@ -8,6 +8,7 @@ import { config } from './config';
 import { registerProviders } from './providers';
 import { getAuth } from './auth';
 import { parseKeyring } from './auth/crypto';
+import { builtinMcpServers } from './mcp/builtins';
 import { createMcpRoutes } from './mcp/routes';
 import { getStores } from './store';
 
@@ -55,6 +56,7 @@ app.use('/api/mcp-servers/*', auth.requireUser);
 app.route('/api/mcp-servers', createMcpRoutes({
 	stores,
 	keyring: parseKeyring(config.dataEncryptionKey),
+	builtins: builtinMcpServers(),
 }));
 
 // Per-user preferences (Catalyst-backed). Requires a valid session.

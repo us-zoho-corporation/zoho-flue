@@ -362,6 +362,7 @@ body { background: var(--page-bg); color: var(--txt1); }
   font: 400 13.5px var(--font-sans); outline: none;
 }
 .mcp-field input:focus, .mcp-field select:focus { box-shadow: var(--shadow-focus); border-color: var(--accent); }
+.mcp-hint { margin: -4px 0 0; font: 400 12px/1.5 var(--font-sans); color: var(--txt3); }
 .mcp-test-ok { display: flex; align-items: center; gap: 6px; font: 500 12px var(--font-sans); color: var(--ok); margin-top: 6px; }
 .mcp-test-err { display: flex; align-items: center; gap: 6px; font: 500 12px var(--font-sans); color: var(--danger); margin-top: 6px; }
 .mcp-del:hover { color: var(--danger); }
