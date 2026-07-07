@@ -28,6 +28,7 @@ Flue discovers `agents/`, `workflows/`, and `channels/` by filename, plus `app.t
 - Unit tests colocated as `*.test.ts`; smoke tests in `tests/smoke/` (live credentials); optional browser component tests as `*.browser.test.tsx` (`pnpm test:browser`).
 - Use Zod for schema validation; Valibot only where `defineTool` requires it.
 - Tools hold credentials in closures — the model only sees parameter names, never raw tokens.
+- Every named function — function declarations, arrow/function expressions assigned to a `const`, and class/object methods — needs a TSDoc block (`/** ... */`) directly above it: a one-line description, `@param` per parameter, `@returns` (omit for `void`), and `@throws` for any error conditions it can raise (omit if it can't throw). Anonymous inline callbacks (e.g. `.map(x => ...)`) are exempt.
 
 ## Skills
 

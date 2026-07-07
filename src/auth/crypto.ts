@@ -21,6 +21,9 @@ export interface Keyring {
  * Parses `DATA_ENCRYPTION_KEY` — comma-separated `keyId:base64(32B)` entries.
  * The first entry is the active key used for new encryptions; all entries can
  * decrypt. Throws if malformed so misconfiguration fails fast at startup.
+ * @param raw - Raw `DATA_ENCRYPTION_KEY` env value.
+ * @returns The parsed keyring, with the first entry marked active.
+ * @throws {Error} If `raw` is empty, an entry is malformed, a key doesn't decode to `KEY_BYTES` bytes, or a key id is duplicated.
  */
 export function parseKeyring(raw: string): Keyring {
 	const entries = raw.split(',').map((s) => s.trim()).filter(Boolean);
@@ -43,7 +46,13 @@ export function parseKeyring(raw: string): Keyring {
 	return { activeKeyId, keys };
 }
 
-/** Encrypts a UTF-8 string with the keyring's active key. */
+/**
+ * Encrypts a UTF-8 string with the keyring's active key.
+ * @param plaintext - The secret to encrypt.
+ * @param keyring - Keyring providing the active key.
+ * @returns The versioned ciphertext envelope (`v1:<keyId>:<iv_b64>:<tag_b64>:<ct_b64>`).
+ * @throws {Error} If the active key id is not present in the keyring.
+ */
 export function encryptSecret(plaintext: string, keyring: Keyring): string {
 	const key = keyring.keys.get(keyring.activeKeyId);
 	if (!key) throw new Error(`Active key '${keyring.activeKeyId}' not present in keyring`);
@@ -54,7 +63,13 @@ export function encryptSecret(plaintext: string, keyring: Keyring): string {
 	return [VERSION, keyring.activeKeyId, iv.toString('base64'), tag.toString('base64'), ct.toString('base64')].join(':');
 }
 
-/** Decrypts an envelope produced by {@link encryptSecret}. Throws on tampering or unknown key. */
+/**
+ * Decrypts an envelope produced by {@link encryptSecret}. Throws on tampering or unknown key.
+ * @param envelope - The versioned ciphertext envelope to decrypt.
+ * @param keyring - Keyring used to look up the decryption key by id.
+ * @returns The original UTF-8 plaintext.
+ * @throws {Error} If the envelope is malformed, uses an unsupported version, references an unknown key id, or the auth tag fails to verify.
+ */
 export function decryptSecret(envelope: string, keyring: Keyring): string {
 	const parts = envelope.split(':');
 	if (parts.length !== 5) throw new Error('Malformed ciphertext envelope');
@@ -73,7 +88,12 @@ export function decryptSecret(envelope: string, keyring: Keyring): string {
 	return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
 }
 
-/** Constant-time string comparison for CSRF `state` / opaque tokens. */
+/**
+ * Constant-time string comparison for CSRF `state` / opaque tokens.
+ * @param a - First string to compare.
+ * @param b - Second string to compare.
+ * @returns True if `a` and `b` are equal.
+ */
 export function safeEqual(a: string, b: string): boolean {
 	const ab = Buffer.from(a);
 	const bb = Buffer.from(b);

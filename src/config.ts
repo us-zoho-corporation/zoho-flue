@@ -1,6 +1,11 @@
 import { randomBytes } from 'node:crypto';
 
-/** Reads an environment variable, throwing at startup if it is absent. */
+/**
+ * Reads an environment variable, throwing at startup if it is absent.
+ * @param key - Name of the environment variable to read.
+ * @returns The variable's string value.
+ * @throws {Error} If the environment variable is not set (or is an empty string).
+ */
 function required(key: string): string {
 	const val = process.env[key];
 	if (!val) throw new Error(`Missing required environment variable: ${key}`);

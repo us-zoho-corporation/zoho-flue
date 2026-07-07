@@ -11,8 +11,23 @@ const DISCOVERY_TTL_MS = 5 * 60 * 1000;
 const cache = new Map<string, { at: number; url: string; tools: ProbedTool[] }>();
 
 let _keyring: Keyring | undefined;
+/**
+ * Lazily parses the configured data-encryption keyring and caches it in module
+ * state so subsequent calls skip re-parsing.
+ * @returns The parsed keyring used to decrypt stored MCP server auth tokens.
+ * @throws {Error} If `config.dataEncryptionKey` is empty or malformed (see {@link parseKeyring}).
+ */
 const keyring = (): Keyring => (_keyring ??= parseKeyring(config.dataEncryptionKey));
 
+/**
+ * Looks up the cached tool list for an MCP server, probing the server over the
+ * network on a cache miss or once {@link DISCOVERY_TTL_MS} has elapsed (or if the
+ * server's URL has changed since the cached entry). A failed probe is cached as
+ * an empty tool list.
+ * @param server - The MCP server record to discover tools for.
+ * @param authToken - Decrypted bearer token to authenticate the probe, or null if the server has none.
+ * @returns The list of tools the server exposes (empty if discovery failed).
+ */
 async function discover(server: McpServer, authToken: string | null): Promise<ProbedTool[]> {
 	const hit = cache.get(server.id);
 	if (hit && hit.url === server.url && Date.now() - hit.at < DISCOVERY_TTL_MS) return hit.tools;
@@ -27,6 +42,9 @@ async function discover(server: McpServer, authToken: string | null): Promise<Pr
  * the assistant route to inject the tools into the conversation. Failures per
  * server are swallowed (that server contributes no tools) so one bad connection
  * never breaks the turn.
+ * @param userId - Id of the user whose enabled MCP servers should be loaded.
+ * @returns The Flue-compatible tools built from all successfully discovered servers.
+ * @throws {Error} If the data-encryption keyring is misconfigured or a stored auth token fails to decrypt.
  */
 export async function loadUserMcpTools(userId: string): Promise<ReturnType<typeof buildMcpTools>> {
 	const servers = (await getStores().mcpServers.listForUser(userId)).filter((s) => s.enabled);

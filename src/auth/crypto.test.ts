@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import { decryptSecret, encryptSecret, parseKeyring, safeEqual, type Keyring } from './crypto';
 
+/**
+ * Builds a `DATA_ENCRYPTION_KEY`-formatted `keyId:base64(32B)` entry for test fixtures.
+ * @param id - The key id to pair with a freshly generated random 32-byte key.
+ * @returns A single `keyId:base64` keyring entry.
+ */
 const key = (id: string) => `${id}:${randomBytes(32).toString('base64')}`;
 
 describe('parseKeyring', () => {

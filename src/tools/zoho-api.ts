@@ -3,7 +3,12 @@ import * as v from 'valibot';
 import { config } from '../config';
 import { getZohoAccessToken, type OAuthCredentials } from '../auth/zoho-auth';
 
-/** Returns true if `url`'s hostname matches or is a subdomain of an entry in `config.zohoAllowedHostnames`. */
+/**
+ * Returns true if `url`'s hostname matches or is a subdomain of an entry in `config.zohoAllowedHostnames`.
+ * @param url - The absolute URL to check.
+ * @returns `true` if the URL's hostname is an allowed Zoho domain or a subdomain of one,
+ * `false` if it is not allowed or `url` fails to parse.
+ */
 function isAllowedUrl(url: string): boolean {
 	try {
 		// Normalize: lowercase hostname, strip trailing dot (DNS absolute form).
@@ -20,6 +25,8 @@ function isAllowedUrl(url: string): boolean {
  * Returns a tool for making authenticated Zoho API calls. Credentials live in
  * a closure; the token is refreshed on every call via the shared token cache so
  * it never goes stale after the boot-time token expires.
+ * @param oauth - Zoho OAuth client credentials used to mint/refresh the bearer token.
+ * @returns A Flue tool named `zoho_api` that performs the authenticated HTTP request.
  */
 export function defineZohoApiTool(oauth: OAuthCredentials) {
 	return defineTool({
@@ -34,6 +41,15 @@ export function defineZohoApiTool(oauth: OAuthCredentials) {
 			status: v.number(),
 			body: v.string(),
 		}),
+		/**
+		 * Executes the authenticated Zoho API request, validating the target URL (and any
+		 * redirect hops) against `config.zohoAllowedHostnames` before attaching the bearer token.
+		 * @param input - The requested method, target URL, and optional request body.
+		 * @param signal - Abort signal forwarded to the underlying `fetch` call.
+		 * @returns The final response's HTTP status and body text.
+		 * @throws {Error} If the URL (or a redirect target) is not under an allowed Zoho domain,
+		 * or if the number of redirect hops exceeds `config.zohoApiMaxRedirects`.
+		 */
 		async run({ input, signal }) {
 			if (!isAllowedUrl(input.url)) {
 				throw new Error(

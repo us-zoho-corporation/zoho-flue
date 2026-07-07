@@ -6,7 +6,12 @@ import { CatalystSessionStore } from './session-repo';
 import { CatalystTokenStore } from './token-repo';
 import { CatalystUserStore } from './user-repo';
 
-/** Assembles the Catalyst Data Store repositories over one shared REST client. */
+/**
+ * Assembles the Catalyst Data Store repositories over one shared REST client.
+ * @param opts - Connection settings (base URL, project/org ids, environment) and
+ * the service-account OAuth credentials shared by every repository's REST calls.
+ * @returns A `Stores` instance backed by Catalyst Data Store tables.
+ */
 export function createCatalystStores(opts: CatalystClientOptions): Stores {
 	const client = new CatalystDataStoreClient(opts);
 	return {

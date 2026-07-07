@@ -21,7 +21,11 @@ const _credentials = new Map<string, ProviderCredentials>();
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 
-/** Creates a zeroed AssistantMessage skeleton that the stream mutates as events arrive. */
+/**
+ * Creates a zeroed AssistantMessage skeleton that the stream mutates as events arrive.
+ * @param model - The Flue model the assistant message is being produced for.
+ * @returns A fresh `AssistantMessage` with empty content, zeroed usage/cost, and `stopReason: 'stop'`.
+ */
 function makeOutput(model: Model<Api>): AssistantMessage {
 	return {
 		role: 'assistant',
@@ -44,7 +48,11 @@ function makeOutput(model: Model<Api>): AssistantMessage {
 
 type CatalystMessage = { role: string; content: string };
 
-/** Flattens content blocks to a plain string; image blocks become `[image]`. */
+/**
+ * Flattens content blocks to a plain string; image blocks become `[image]`.
+ * @param blocks - Ordered text/image content blocks to flatten.
+ * @returns The concatenated text, with each image block replaced by the literal `[image]`.
+ */
 export function blocksToText(blocks: (TextContent | ImageContent)[]): string {
 	return blocks.map(c => (c.type === 'text' ? c.text : '[image]')).join('');
 }
@@ -58,6 +66,8 @@ export function blocksToText(blocks: (TextContent | ImageContent)[]): string {
  * tool calls are dropped (text kept) and tool results are folded into a user
  * message with explicit delimiters the model can recognise. Context size is
  * managed by Flue's built-in compaction via the provider's `contextWindow`.
+ * @param context - The Flue conversation context (system prompt + message history) to convert.
+ * @returns The equivalent Catalyst `{ role, content }` message array.
  */
 export function convertMessages(context: Context): CatalystMessage[] {
 	const messages: CatalystMessage[] = [];
@@ -96,7 +106,12 @@ export function convertMessages(context: Context): CatalystMessage[] {
 	return messages;
 }
 
-/** Converts Flue tool definitions to Catalyst's function-calling format. */
+/**
+ * Converts Flue tool definitions to Catalyst's function-calling format.
+ * @param tools - Flue tool definitions from the conversation context, if any.
+ * @returns The tools mapped to Catalyst's `{ type: 'function', function: {...} }` shape,
+ * or `undefined` if `tools` is `undefined`.
+ */
 export function convertTools(tools?: Context['tools']) {
 	return tools?.map((t) => ({
 		type: 'function' as const,
@@ -104,7 +119,15 @@ export function convertTools(tools?: Context['tools']) {
 	}));
 }
 
-/** Flue StreamFunction implementation for Catalyst GLM; retries once on 401 with a refreshed token. */
+/**
+ * Flue StreamFunction implementation for Catalyst GLM; retries once on 401 with a refreshed token.
+ * @param model - The resolved Flue model, including its `baseUrl`, `headers`, and `provider` id.
+ * @param context - The Flue conversation context to send to Catalyst.
+ * @param options - Optional stream options; only `signal` (for abort) is used.
+ * @returns An `AssistantMessageEventStream` that emits `start`/`text_*`/`toolcall_*`/`done`/`error`
+ * events as the (non-streamed) Catalyst response is translated into Flue's streaming event shape.
+ * Request failures are reported via an `error` event on the stream rather than a thrown exception.
+ */
 function catalystStream(
 	model: Model<Api>,
 	context: Context,
@@ -260,7 +283,16 @@ export interface RegisterCatalystGLMOptions {
 	contextWindow?: number;
 }
 
-/** Registers the Catalyst GLM API provider with Flue and stores credentials for token refresh. */
+/**
+ * Registers the Catalyst GLM API provider with Flue and stores credentials for token refresh.
+ * @param options.endpoint - The Catalyst QuickML deployment URL to send requests to.
+ * @param options.orgId - Zoho Catalyst org id, sent as the `CATALYST-ORG` header.
+ * @param options.token - Bearer token used for requests (service-account or warmed token).
+ * @param options.oauth - OAuth credentials used to refresh `token` on a 401, if provided.
+ * @param options.providerId - Flue provider id to register under; defaults to `'catalyst-glm'`.
+ * @param options.maxTokens - Default max output tokens per request; defaults to `2048`.
+ * @param options.contextWindow - Input context window in tokens, for Flue's built-in compaction.
+ */
 export function registerCatalystGLM({
 	endpoint,
 	orgId,

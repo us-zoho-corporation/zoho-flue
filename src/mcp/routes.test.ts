@@ -14,6 +14,13 @@ import type { BuiltinMcpServer } from './builtins';
 
 const KEY = 'k1:' + Buffer.alloc(32, 7).toString('base64');
 
+/**
+ * Builds a test Hono app with in-memory stores and the MCP routes mounted,
+ * simulating `requireUser` by setting `userId` from an `x-test-user` request
+ * header (defaulting to `'u1'`).
+ * @param builtins - Built-in servers to surface alongside the user's own connections; defaults to none.
+ * @returns The test app plus its underlying stores and keyring for assertions.
+ */
 function makeApp(builtins: BuiltinMcpServer[] = []) {
 	const stores = createMemoryStores();
 	const keyring = parseKeyring(KEY);
@@ -24,6 +31,15 @@ function makeApp(builtins: BuiltinMcpServer[] = []) {
 	return { app, stores, keyring };
 }
 
+/**
+ * Issues a JSON POST request against a test app, optionally impersonating a
+ * given user via the `x-test-user` header.
+ * @param app - The Hono app to send the request to.
+ * @param path - Request path.
+ * @param body - Value to JSON-serialize as the request body.
+ * @param user - If given, sent as the `x-test-user` header to impersonate that user.
+ * @returns The resulting Response.
+ */
 const post = (app: Hono, path: string, body: unknown, user?: string) =>
 	app.request(path, { method: 'POST', headers: { 'content-type': 'application/json', ...(user ? { 'x-test-user': user } : {}) }, body: JSON.stringify(body) });
 

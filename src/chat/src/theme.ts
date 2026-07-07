@@ -6,6 +6,10 @@ export type Theme = 'light' | 'dark';
 
 const STORE_KEY = 'flue:theme';
 
+/**
+ * Reads the persisted theme preference from localStorage.
+ * @returns The stored theme if it is a valid `Theme` value; otherwise `'light'` (also the fallback used when `localStorage` access throws, e.g. in private browsing).
+ */
 export function loadTheme(): Theme {
 	try {
 		const v = localStorage.getItem(STORE_KEY);
@@ -14,7 +18,10 @@ export function loadTheme(): Theme {
 	return 'light';
 }
 
-/** Applies the theme to <html> so both our CSS vars and Kumo's tokens flip. */
+/**
+ * Applies the theme to <html> so both our CSS vars and Kumo's tokens flip.
+ * @param theme - The theme to apply.
+ */
 export function applyTheme(theme: Theme): void {
 	const root = document.documentElement;
 	root.dataset.theme = theme;
@@ -23,6 +30,10 @@ export function applyTheme(theme: Theme): void {
 	root.style.colorScheme = theme;
 }
 
+/**
+ * Persists the given theme preference to localStorage.
+ * @param theme - The theme to persist.
+ */
 export function saveTheme(theme: Theme): void {
 	try { localStorage.setItem(STORE_KEY, theme); } catch {}
 }

@@ -9,24 +9,55 @@ class FakeObservation {
   snap: Snap = { conversation: undefined, offset: undefined, phase: 'loading', error: undefined };
   listeners = new Set<() => void>();
   closed = false;
+  /**
+   * test helper: returns the current fake snapshot.
+   * @returns The current snapshot.
+   */
   getSnapshot() { return this.snap; }
+  /**
+   * test helper: registers a change listener, mirroring the real observation's subscribe API.
+   * @param fn - The listener to invoke on each `set` call.
+   * @returns A function that unsubscribes `fn`.
+   */
   subscribe(fn: () => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
+  /** test helper: no-op stand-in for the real observation's refresh. */
   refresh() {}
+  /** test helper: marks this fake observation as closed. */
   close() { this.closed = true; }
-  /** test helper: update snapshot + notify subscribers */
+  /**
+   * test helper: update snapshot + notify subscribers
+   * @param snap - Partial snapshot fields to merge into the current snapshot.
+   */
   set(snap: Partial<Snap>) { this.snap = { ...this.snap, ...snap }; for (const fn of [...this.listeners]) fn(); }
 }
 
+/**
+ * Builds a fake Flue client whose `agents.observe`/`agents.send` are backed by
+ * `FakeObservation` instances, for driving `ConversationsStore` in tests.
+ * @returns The fake client plus the `observations` map and `sends` log used to inspect what the store did.
+ */
 function makeClient() {
   const observations = new Map<string, FakeObservation>();
   const sends: { id: string; message: string }[] = [];
   const client = {
     agents: {
+      /**
+       * test helper: creates and registers a `FakeObservation` for a conversation id.
+       * @param _name - The agent name (unused by the fake).
+       * @param id - The conversation id to observe.
+       * @returns The newly created fake observation.
+       */
       observe: (_name: string, id: string) => {
         const o = new FakeObservation();
         observations.set(id, o);
         return o;
       },
+      /**
+       * test helper: records a send call instead of making a real request.
+       * @param _name - The agent name (unused by the fake).
+       * @param id - The conversation id the message was sent to.
+       * @param opts - The send options containing the message text.
+       */
       send: async (_name: string, id: string, opts: { message: string }) => { sends.push({ id, message: opts.message }); },
     },
   };
@@ -34,8 +65,26 @@ function makeClient() {
 }
 
 // Minimal materialized conversation.
+/**
+ * Builds a minimal materialized user message for test conversations.
+ * @param text - The message text.
+ * @param submissionId - Optional submission id to attach.
+ * @returns A plain object shaped like a user `FlueConversationMessage`.
+ */
 const userMsg = (text: string, submissionId?: string) => ({ id: `u-${text}-${submissionId ?? 'x'}`, role: 'user', submissionId, parts: [{ type: 'text', text, state: 'done' }] });
+/**
+ * Builds a minimal materialized assistant message for test conversations.
+ * @param text - The message text.
+ * @param submissionId - Optional submission id to attach.
+ * @returns A plain object shaped like an assistant `FlueConversationMessage`.
+ */
 const asstMsg = (text: string, submissionId?: string) => ({ id: `a-${text}`, role: 'assistant', submissionId, parts: [{ type: 'text', text, state: 'done' }] });
+/**
+ * Builds a minimal materialized conversation state for test fixtures.
+ * @param messages - The conversation's messages.
+ * @param settlements - Settlement records for submissions in `messages`; defaults to none.
+ * @returns A plain object shaped like a `FlueConversationState`.
+ */
 const conv = (messages: unknown[], settlements: { submissionId: string; outcome: string }[] = []) => ({ conversationId: 'c', messages, settlements });
 
 let ctx: ReturnType<typeof makeClient>;

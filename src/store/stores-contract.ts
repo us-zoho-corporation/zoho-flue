@@ -6,6 +6,8 @@ import type { Stores } from './types';
  * `*.test.ts` with a factory that returns a fresh, empty `Stores`. The same suite
  * runs against the in-memory backend and (with a mocked-fetch client) the Catalyst
  * backend, guaranteeing parity. This file is not itself a test file.
+ * @param name - Label identifying the backend under test, used in the outer `describe` block.
+ * @param makeStores - Factory returning a fresh, empty `Stores` instance for each test.
  */
 export function runStoresContract(name: string, makeStores: () => Stores): void {
 	describe(`Stores contract: ${name}`, () => {

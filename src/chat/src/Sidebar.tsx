@@ -20,6 +20,11 @@ import type { Session, UserProfile } from './App.tsx';
 import { useRunningIds } from './conversations.tsx';
 import { ZohoLogo } from './ZohoLogo.tsx';
 
+/**
+ * Formats a timestamp as a short relative-time label for sidebar rows.
+ * @param ts - The timestamp (epoch milliseconds) to compare against now.
+ * @returns A human-readable relative time such as "Just now", "5m ago", "3h ago", "Yesterday", or "4d ago".
+ */
 function timeAgo(ts: number): string {
   const m = Math.floor((Date.now() - ts) / 60000);
   if (m < 1) return 'Just now';
@@ -30,6 +35,11 @@ function timeAgo(ts: number): string {
   return d === 1 ? 'Yesterday' : `${d}d ago`;
 }
 
+/**
+ * Derives the avatar initials shown for a signed-in user.
+ * @param profile - The signed-in user's profile.
+ * @returns The uppercased first-and-last-name initials, falling back to the first character of the display name or `?` if none are available.
+ */
 function initialsOf(profile: UserProfile): string {
   const fromNames = [profile.firstName[0], profile.lastName[0]].filter(Boolean).join('');
   return (fromNames || profile.displayName[0] || '?').toUpperCase();
@@ -61,6 +71,27 @@ const WORKSPACE: { key: string; label: string; icon: typeof Robot }[] = [
   { key: 'settings', label: 'Settings', icon: GearSix },
 ];
 
+/**
+ * Renders the app sidebar: the Zoho logo header, new-chat button, chat search,
+ * the searchable recent-conversations list (with right-click delete menu and
+ * two-finger swipe-to-delete), the collapsible Workspace nav, and the
+ * signed-in user card or sign-in button.
+ * @param sessions - All chat sessions to list under "Recent".
+ * @param activeId - The id of the currently selected session, used to highlight its row.
+ * @param profile - The signed-in user's profile, or `null` if no one is signed in.
+ * @param onSignIn - Called when the guest "Sign in" control is clicked.
+ * @param onSignOut - Called when the signed-in user clicks "Sign out".
+ * @param onSelect - Called with a session id when its row (or its "Open chat" context-menu entry) is clicked.
+ * @param onNew - Called when "New chat" is clicked.
+ * @param onDelete - Called with a session id once its delete animation finishes and it should be removed.
+ * @param onSettings - Called when the "Settings" workspace item is clicked.
+ * @param onWorkflows - Called when the "Workflows" workspace item is clicked.
+ * @param onSkills - Called when the "Skills" workspace item is clicked.
+ * @param onAgents - Called when the "Agents" workspace item is clicked.
+ * @param onRuns - Called when the "Runs" workspace item is clicked.
+ * @param onMcp - Called when the "MCP servers" workspace item is clicked.
+ * @returns The sidebar `<aside>` plus a portal-rendered context menu overlay when one is open.
+ */
 export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns, onMcp }: SidebarProps) {
   const { open } = useSidebar();
   const [search, setSearch] = useState('');
@@ -87,7 +118,12 @@ export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSe
   const onDeleteRef = useRef(onDelete);
   onDeleteRef.current = onDelete;
 
-  // Play the slide-out, then actually remove the session.
+  /**
+   * Plays the slide-out animation for a session row, then removes the
+   * session once the animation finishes. Ignores the call if a delete is
+   * already in progress.
+   * @param id - The id of the session to delete.
+   */
   const animateDelete = useCallback((id: string) => {
     if (deletingRef.current) return;
     deletingRef.current = id;
@@ -104,6 +140,13 @@ export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSe
   useEffect(() => {
     const el = recentsRef.current;
     if (!el) return;
+    /**
+     * Handles a trackpad wheel event over the recents list, translating a
+     * horizontal two-finger swipe into a live drag offset for the row under
+     * the cursor, and scheduling a delete once the gesture settles past the
+     * -72px threshold.
+     * @param e - The wheel event dispatched on the recents container.
+     */
     const onWheel = (e: WheelEvent) => {
       if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; // vertical scroll — leave it
       if (deletingRef.current) return;
@@ -133,6 +176,10 @@ export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSe
   // Dismiss the context menu on Escape.
   useEffect(() => {
     if (!ctx) return;
+    /**
+     * Closes the open context menu when the user presses Escape.
+     * @param e - The keydown event dispatched on the window.
+     */
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCtx(null); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

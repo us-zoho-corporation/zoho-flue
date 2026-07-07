@@ -15,16 +15,27 @@ export interface PkcePair {
 	challenge: string; // base64url(sha256(verifier))
 }
 
+/**
+ * Encodes a buffer as unpadded base64url.
+ * @param buf - The bytes to encode.
+ * @returns The base64url-encoded string.
+ */
 const b64url = (buf: Buffer): string => buf.toString('base64url');
 
-/** Creates a PKCE verifier + S256 challenge. */
+/**
+ * Creates a PKCE verifier + S256 challenge.
+ * @returns A fresh PKCE verifier/challenge pair.
+ */
 export function createPkcePair(): PkcePair {
 	const verifier = b64url(randomBytes(32));
 	const challenge = b64url(createHash('sha256').update(verifier).digest());
 	return { verifier, challenge };
 }
 
-/** Creates an opaque CSRF `state` value. */
+/**
+ * Creates an opaque CSRF `state` value.
+ * @returns A fresh random base64url-encoded state string.
+ */
 export function createState(): string {
 	return b64url(randomBytes(24));
 }
@@ -38,7 +49,11 @@ export interface AuthorizeUrlParams {
 	codeChallenge: string;
 }
 
-/** Builds the Zoho consent URL the user is redirected to. */
+/**
+ * Builds the Zoho consent URL the user is redirected to.
+ * @param params - Authorize-request parameters (client id, redirect URI, scopes, state, PKCE challenge).
+ * @returns The full Zoho `/oauth/v2/auth` URL to redirect the user to.
+ */
 export function buildAuthorizeUrl(params: AuthorizeUrlParams): string {
 	const base = params.accountsBase ?? DEFAULT_ACCOUNTS_BASE;
 	const q = new URLSearchParams({
@@ -72,7 +87,12 @@ export interface ExchangeParams {
 	codeVerifier: string;
 }
 
-/** Exchanges an authorization code (+ PKCE verifier) for tokens. */
+/**
+ * Exchanges an authorization code (+ PKCE verifier) for tokens.
+ * @param params - Token-exchange parameters (client credentials, redirect URI, code, PKCE verifier).
+ * @returns The parsed token response (access/refresh tokens, expiry, granted scopes, API domain).
+ * @throws {Error} If the HTTP response is not ok, the body carries an error, or no `access_token` is returned.
+ */
 export async function exchangeCodeForTokens(params: ExchangeParams): Promise<TokenResponse> {
 	const base = params.accountsBase ?? DEFAULT_ACCOUNTS_BASE;
 	const res = await fetch(`${base}/oauth/v2/token`, {
@@ -119,7 +139,13 @@ export interface ZohoUserInfo {
 	photoId: string | null;
 }
 
-/** Fetches the profile of the user who owns `accessToken`. */
+/**
+ * Fetches the profile of the user who owns `accessToken`.
+ * @param accessToken - A valid Zoho access token for the target user.
+ * @param accountsBase - The Zoho accounts host to query; defaults to {@link DEFAULT_ACCOUNTS_BASE}.
+ * @returns The user's profile info, with a non-numeric `Photo_ID` normalized to `null`.
+ * @throws {Error} If the HTTP response is not ok.
+ */
 export async function fetchUserInfo(accessToken: string, accountsBase = DEFAULT_ACCOUNTS_BASE): Promise<ZohoUserInfo> {
 	const res = await fetch(`${accountsBase}/oauth/user/info`, {
 		headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },

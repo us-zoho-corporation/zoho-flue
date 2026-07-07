@@ -5,9 +5,15 @@ import { ZohoLogo } from './ZohoLogo.tsx';
  * Login gate shown when no user is signed in. The button hands off to the Zoho
  * OAuth flow via `onSignIn` (which redirects to `/api/auth/login`), so it enters
  * a one-way "busy" state on click.
+ * @param onSignIn - Called to kick off the Zoho sign-in redirect when the button is clicked.
+ * @returns The rendered sign-in screen.
  */
 export function Welcome({ onSignIn }: { onSignIn: () => void }) {
   const [busy, setBusy] = useState(false);
+  /**
+   * Starts the sign-in flow by flipping the button into its busy state and
+   * invoking `onSignIn`. No-ops if already busy, since the flow is one-way.
+   */
   const go = () => {
     if (busy) return;
     setBusy(true);

@@ -14,6 +14,11 @@ interface RunsProps {
   onBack: () => void;
 }
 
+/**
+ * Picks the icon representing a workflow run's current status.
+ * @param status - The run's status.
+ * @returns The status icon element (a pulsing circle for an active/unknown status).
+ */
 function statusIcon(status: RunPointer['status']) {
   switch (status) {
     case 'completed': return <CheckCircle size={14} className="text-green-600 shrink-0" />;
@@ -23,12 +28,24 @@ function statusIcon(status: RunPointer['status']) {
   }
 }
 
+/**
+ * Formats an epoch-millisecond timestamp as a short, locale-aware date/time string in the viewer's local time zone.
+ * @param ts - Epoch milliseconds to format.
+ * @returns A string like "Jan 5, 3:45 PM".
+ * @throws {RangeError} If `ts` is outside the range representable by `Temporal.Instant`.
+ */
 function formatTime(ts: number): string {
   return Temporal.Instant.fromEpochMilliseconds(ts)
     .toZonedDateTimeISO(Temporal.Now.timeZoneId())
     .toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+/**
+ * Formats the elapsed time between a run's start and end (or now, if still running) as a compact human-readable string.
+ * @param start - Epoch milliseconds when the run started.
+ * @param end - Epoch milliseconds when the run ended; if omitted, the duration is computed against the current time.
+ * @returns A string like "420ms", "1.2s", or "2m 5s".
+ */
 function duration(start: number, end?: number): string {
   const ms = (end ?? Date.now()) - start;
   if (ms < 1000) return `${ms}ms`;
@@ -36,6 +53,11 @@ function duration(start: number, end?: number): string {
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
 }
 
+/**
+ * Full-page view listing recent Flue workflow runs, fetched from the run store on mount.
+ * @param onBack - Called when the user clicks the back button to leave this view.
+ * @returns The rendered runs list page, showing a loading state, an empty state, or the list of run cards.
+ */
 export function Runs({ onBack }: RunsProps) {
   const [runs, setRuns] = useState<RunPointer[]>([]);
   const [loading, setLoading] = useState(true);

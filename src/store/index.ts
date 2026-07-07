@@ -9,6 +9,8 @@ export type { Stores } from './types';
  * Returns the app's `Stores`, selecting the backend by `config.storeBackend`.
  * Memoized on `globalThis` so HMR module re-evaluation reuses one instance
  * (mirrors the token-cache anchoring in `src/auth/zoho-auth.ts`).
+ * @returns The shared `Stores` instance for this process — in-memory when
+ * `config.storeBackend === 'memory'`, otherwise Catalyst Data Store-backed.
  */
 export function getStores(): Stores {
 	const existing = (globalThis as Record<string, unknown>).__flueStores as Stores | undefined;

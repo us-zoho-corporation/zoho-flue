@@ -8,6 +8,13 @@ const TREND_META: Record<StatTrend, { icon: typeof TrendUp; className: string }>
 	flat: { icon: Minus, className: 'text-kumo-subtle' },
 };
 
+/**
+ * Renders a single stat card: label, value, an optional trend-colored delta
+ * badge (with up/down/flat icon), and an optional help caption.
+ * @param props - Component props.
+ * @param props.card - The stat card data to render.
+ * @returns The rendered stat card element.
+ */
 function Card({ card }: { card: StatCard }) {
 	const trend = card.trend ? TREND_META[card.trend] : null;
 	const TrendIcon = trend?.icon;
@@ -28,6 +35,13 @@ function Card({ card }: { card: StatCard }) {
 	);
 }
 
+/**
+ * Renders a ready `StatCardsSpec` as a row of wrapping stat cards inside an
+ * `A2uiFrame`, using the spec's title for the frame header.
+ * @param props - Component props.
+ * @param props.spec - The normalized, ready-to-render stat cards spec.
+ * @returns The framed row of stat card elements.
+ */
 export function A2uiStatCards({ spec }: { spec: StatCardsSpec }) {
 	return (
 		<A2uiFrame title={spec.title}>

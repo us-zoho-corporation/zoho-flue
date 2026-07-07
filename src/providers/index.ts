@@ -13,6 +13,9 @@ const oauth = {
  * Registers every model/auth provider the app uses. Called once from `app.ts`
  * at startup — provider setup lives here in `src/providers/`, not inline in the
  * app or in agent modules.
+ * @throws {Error} If an `anthropic/*` model is configured but `ANTHROPIC_API_KEY`
+ * is not set (propagated from `registerAnthropic`). Failure to warm the Catalyst
+ * GLM token is handled internally and does not throw.
  */
 export async function registerProviders(): Promise<void> {
 	// Built-in Anthropic provider (credential-only; validated for fail-fast).

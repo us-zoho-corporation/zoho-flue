@@ -1,6 +1,12 @@
-// Zoho brand wordmark. The four-square mark keeps its brand colors; the "Zoho"
-// lettering uses `currentColor` so it adapts to the surface (dark ink on light,
-// white on dark). Sourced from the Zoho design-system assets.
+/**
+ * Renders the Zoho brand wordmark as an inline SVG. The four-square mark
+ * keeps its brand colors; the "Zoho" lettering uses `currentColor` so it
+ * adapts to the surface (dark ink on light, white on dark). Sourced from the
+ * Zoho design-system assets.
+ * @param height - The rendered height in pixels; width scales proportionally. Defaults to 24.
+ * @param className - An optional CSS class applied to the `<svg>` element.
+ * @returns The Zoho logo SVG.
+ */
 export function ZohoLogo({ height = 24, className }: { height?: number; className?: string }) {
 	return (
 		<svg viewBox="0 0 1024 450" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ height, width: 'auto', display: 'block' }} className={className} aria-label="Zoho">

@@ -7,6 +7,12 @@ vi.mock('./connect', async (orig) => ({ ...(await orig<typeof import('./connect'
 const { buildMcpTools, jsonSchemaToValibot } = await import('./tools');
 import type { McpServer } from '../store/types';
 
+/**
+ * Builds a minimal `McpServer` fixture for tests, with sensible defaults for
+ * every field, allowing individual fields to be overridden per test case.
+ * @param over - Partial `McpServer` fields to override the defaults with.
+ * @returns A complete `McpServer` object suitable for passing to `buildMcpTools`.
+ */
 const server = (over: Partial<McpServer> = {}): McpServer => ({
 	id: 's1', userId: 'u1', name: 'My Server', url: 'https://a.example.com/mcp',
 	transport: 'http', authTokenEnc: null, enabled: true, createdAt: 0, updatedAt: 0, ...over,

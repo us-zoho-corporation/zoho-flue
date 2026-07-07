@@ -5,15 +5,40 @@ import { collapseTurns, isAssistantMessage, type AssistantMessage } from './flue
 // ─── builders ────────────────────────────────────────────────────────────────
 
 let n = 0;
+/**
+ * Generates a unique, incrementing test message id.
+ * @returns A fresh id string of the form `m<n>`.
+ */
 const id = () => `m${n++}`;
 
+/**
+ * Builds a user message with a single text part, for test fixtures.
+ * @param t - The message text.
+ * @returns A `FlueConversationMessage` with role `'user'`.
+ */
 function user(t: string): FlueConversationMessage {
 	return { id: id(), role: 'user', parts: [text(t)] };
 }
+/**
+ * Builds an assistant message from the given parts, for test fixtures.
+ * @param parts - The message parts (text and/or tool calls) to include.
+ * @returns A `FlueConversationMessage` with role `'assistant'`.
+ */
 function assistant(...parts: FlueConversationPart[]): FlueConversationMessage {
 	return { id: id(), role: 'assistant', parts };
 }
+/**
+ * Builds a completed text message part, for test fixtures.
+ * @param t - The text content.
+ * @returns A `FlueConversationPart` of type `'text'` in the `'done'` state.
+ */
 const text = (t: string): FlueConversationPart => ({ type: 'text', text: t, state: 'done' });
+/**
+ * Builds a completed dynamic-tool message part with a unique call id, for test fixtures.
+ * @param toolName - The name of the tool that was called.
+ * @param input - The input passed to the tool; defaults to an empty object.
+ * @returns A `FlueConversationPart` of type `'dynamic-tool'` in the `'output-available'` state.
+ */
 const tool = (toolName: string, input: unknown = {}): FlueConversationPart => ({
 	type: 'dynamic-tool',
 	toolName,
@@ -23,6 +48,11 @@ const tool = (toolName: string, input: unknown = {}): FlueConversationPart => ({
 	output: { ok: true },
 });
 
+/**
+ * Filters `collapseTurns` output down to just the assistant entries.
+ * @param msgs - The collapsed messages to filter.
+ * @returns The subset of `msgs` that are assistant messages.
+ */
 function assistants(msgs: ReturnType<typeof collapseTurns>): AssistantMessage[] {
 	return msgs.filter(isAssistantMessage);
 }

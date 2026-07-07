@@ -14,7 +14,12 @@ export interface BuiltinMcpServer {
 	hasAuth: boolean;
 }
 
-/** The built-in servers that are currently active (i.e. their env config is present). */
+/**
+ * Lists the built-in servers that are currently active, based on whether the
+ * environment configuration each one needs is present.
+ * @returns The active built-in MCP servers to surface as read-only rows on
+ * the MCP servers page.
+ */
 export function builtinMcpServers(): BuiltinMcpServer[] {
 	const list: BuiltinMcpServer[] = [];
 	// The Zoho KB client (src/mcp/zoho-kb.ts) is only wired in when its token is set.

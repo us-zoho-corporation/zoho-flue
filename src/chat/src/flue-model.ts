@@ -18,10 +18,21 @@ export interface AssistantMessage extends FlueConversationMessage {
 
 export type ChatMessage = FlueConversationMessage | AssistantMessage;
 
+/**
+ * Narrows a chat message to an `AssistantMessage`, i.e. one carrying the
+ * collapsed `toolSteps`/`uiParts` produced by {@link collapseTurns}.
+ * @param m - The chat message to check.
+ * @returns Whether `m` is an assistant message.
+ */
 export function isAssistantMessage(m: ChatMessage): m is AssistantMessage {
 	return m.role === 'assistant';
 }
 
+/**
+ * Extracts the display-relevant fields from a raw `dynamic-tool` message part.
+ * @param part - The dynamic-tool part to convert.
+ * @returns The corresponding `ToolCallInfo`.
+ */
 function toToolCall(part: Extract<FlueConversationMessage['parts'][number], { type: 'dynamic-tool' }>): ToolCallInfo {
 	return { toolCallId: part.toolCallId, toolName: part.toolName, state: part.state, input: part.input };
 }
@@ -37,6 +48,8 @@ function toToolCall(part: Extract<FlueConversationMessage['parts'][number], { ty
  *     — otherwise the reply looks like it never arrived.
  *   - A turn with visualizations but no answer text (chart-only, or still
  *     streaming) is surfaced on a body-less entry.
+ * @param msgs - The flat, chronological list of conversation messages.
+ * @returns The messages with consecutive assistant runs collapsed into single entries.
  */
 export function collapseTurns(msgs: FlueConversationMessage[]): ChatMessage[] {
 	const result: ChatMessage[] = [];

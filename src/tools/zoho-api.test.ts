@@ -21,6 +21,11 @@ const OAUTH = { clientId: 'id', clientSecret: 'secret', refreshToken: 'refresh' 
 
 afterEach(() => vi.restoreAllMocks());
 
+/**
+ * Stubs the global `fetch` to return canned responses in sequence, repeating the
+ * last one for any calls past the end of the list (used to simulate redirect chains).
+ * @param responses - Canned responses, each with a status, optional `Location` header, and body text.
+ */
 function mockFetch(responses: Array<{ status: number; location?: string; body?: string }>) {
     let call = 0;
     vi.stubGlobal('fetch', vi.fn(() => {
@@ -33,6 +38,10 @@ function mockFetch(responses: Array<{ status: number; location?: string; body?: 
     }));
 }
 
+/**
+ * Builds a fresh `zoho_api` tool instance using the fixed test OAuth credentials.
+ * @returns The `zoho_api` Flue tool under test.
+ */
 function tool() {
     return defineZohoApiTool(OAUTH);
 }

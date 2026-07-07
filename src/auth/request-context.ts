@@ -15,17 +15,28 @@ export interface RequestContext {
 
 const storage = new AsyncLocalStorage<RequestContext>();
 
-/** Runs `fn` with `ctx` active for all async continuations created within it. */
+/**
+ * Runs `fn` with `ctx` active for all async continuations created within it.
+ * @param ctx - The request context to expose to `fn` and its async continuations.
+ * @param fn - The function to run with `ctx` active.
+ * @returns Whatever `fn` returns.
+ */
 export function runWithRequestContext<T>(ctx: RequestContext, fn: () => T): T {
 	return storage.run(ctx, fn);
 }
 
-/** The current request's logged-in user token, if any. */
+/**
+ * The current request's logged-in user token, if any.
+ * @returns The active `userToken`, or `undefined` outside a request context or when absent.
+ */
 export function currentUserToken(): string | undefined {
 	return storage.getStore()?.userToken;
 }
 
-/** The current request's user-connected MCP tools, if any. */
+/**
+ * The current request's user-connected MCP tools, if any.
+ * @returns The active `mcpTools`, or `undefined` outside a request context or when absent.
+ */
 export function currentMcpTools(): unknown[] | undefined {
 	return storage.getStore()?.mcpTools;
 }

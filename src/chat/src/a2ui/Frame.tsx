@@ -5,6 +5,11 @@ import type { ReactNode } from 'react';
  * Shared chrome for every a2ui surface: an optional title, the body, and an
  * optional caption. Keeps charts, tables, and stat cards visually consistent
  * inside the assistant message.
+ * @param props - Component props.
+ * @param props.title - Optional heading shown above `children`.
+ * @param props.caption - Optional small text shown below `children`.
+ * @param props.children - The surface content (chart, table, or stat cards) to frame.
+ * @returns The framed card element.
  */
 export function A2uiFrame({
 	title,
@@ -24,7 +29,12 @@ export function A2uiFrame({
 	);
 }
 
-/** Placeholder shown while a spec is still streaming in and not yet renderable. */
+/**
+ * Placeholder shown while a spec is still streaming in and not yet renderable.
+ * @param props - Component props.
+ * @param props.title - Optional title surfaced early so the skeleton can label itself.
+ * @returns The framed loading skeleton element.
+ */
 export function A2uiPending({ title }: { title?: string }) {
 	return (
 		<A2uiFrame title={title}>

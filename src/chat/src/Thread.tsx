@@ -32,10 +32,27 @@ interface ThreadProps {
   onToggleTheme: () => void;
 }
 
+/**
+ * Concatenates all text parts of a conversation message into a single string.
+ * @param message - The conversation message to extract text from.
+ * @returns The joined text content of the message, or an empty string if it has none.
+ */
 function textOf(message: FlueConversationMessage): string {
   return message.parts.filter((p) => p.type === 'text').map((p) => ('text' in p ? p.text : '')).join('');
 }
 
+/**
+ * Renders the main chat pane: the top bar, the message viewport (welcome
+ * screen, message list with pending/no-reply states), and the composer or a
+ * sign-in prompt when the active model requires authentication.
+ * @param modelLabel - The display name of the active model, shown in the composer and sign-in prompt.
+ * @param requiresAuth - Whether the active model requires the user to be signed in to run.
+ * @param isSignedIn - Whether the user is currently signed in.
+ * @param onSignIn - Called to start the sign-in flow, from the welcome screen or the sign-in prompt.
+ * @param theme - The current color theme, used to pick the sun/moon toggle icon.
+ * @param onToggleTheme - Called when the theme toggle button is clicked.
+ * @returns The chat area, including top bar, message viewport, and composer.
+ */
 export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, theme, onToggleTheme }: ThreadProps) {
   const { messages, isRunning, historyReady, error, sendMessage, stop } = useFlueChat();
   // This conversation's model runs as the logged-in user, but nobody is signed in.
@@ -127,6 +144,12 @@ const SUGGESTIONS: { icon: typeof ChartBar; title: string; sub: string; prompt: 
   { icon: Cloud, title: 'Build on Catalyst', sub: 'Data Store, functions, and auth', prompt: 'What is the Zoho Catalyst Data Store and when should I use it?' },
 ];
 
+/**
+ * Renders the empty-thread welcome screen with a headline and a grid of
+ * suggested prompts.
+ * @param onPrompt - Called with a suggestion's prompt text when its card is clicked.
+ * @returns The welcome screen markup.
+ */
 function WelcomeState({ onPrompt }: { onPrompt: (text: string) => void }) {
   return (
     <div className="welcome">
@@ -149,6 +172,11 @@ function WelcomeState({ onPrompt }: { onPrompt: (text: string) => void }) {
 
 // ─── User message ────────────────────────────────────────────────────────────
 
+/**
+ * Renders a single user-authored chat bubble.
+ * @param message - The user's conversation message to display.
+ * @returns The rendered user message bubble.
+ */
 function UserMessage({ message }: { message: FlueConversationMessage }) {
   return (
     <div className="msg-user msg-assistant-appear">
@@ -161,6 +189,15 @@ function UserMessage({ message }: { message: FlueConversationMessage }) {
 
 // ─── Assistant turn ──────────────────────────────────────────────────────────
 
+/**
+ * Renders one assistant turn: its tool-call trace (live or collapsed), a
+ * "Thinking" indicator while waiting for the first content, the answer text
+ * (rendered as Markdown), any generative-UI parts, and a copy-answer action
+ * bar once the turn has finished.
+ * @param message - The assistant message/turn to render.
+ * @param running - Whether this turn is the currently streaming/in-flight turn.
+ * @returns The rendered assistant turn.
+ */
 export function AssistantTurn({ message, running }: { message: ChatMessage; running: boolean }) {
   const [copied, setCopied] = useState(false);
   const textParts = message.parts.filter((p) => p.type === 'text' && 'text' in p && p.text);
@@ -168,6 +205,10 @@ export function AssistantTurn({ message, running }: { message: ChatMessage; runn
   const steps = isAssistantMessage(message) ? message.toolSteps : [];
   const uiParts = isAssistantMessage(message) ? message.uiParts : [];
 
+  /**
+   * Copies the assistant turn's full answer text to the clipboard and
+   * briefly flips the copy button into a "Copied!" state.
+   */
   const copy = useCallback(() => {
     navigator.clipboard.writeText(fullText).then(() => {
       setCopied(true);
@@ -214,6 +255,14 @@ export function AssistantTurn({ message, running }: { message: ChatMessage; runn
 
 // ─── Tool trace (the process) ────────────────────────────────────────────────
 
+/**
+ * Renders the tool-call activity for an assistant turn: while running, each
+ * step is shown live as its own row; once finished, the steps collapse into
+ * an expandable Kumo Badge (flagged as an "issue" if any step errored).
+ * @param steps - The tool-call steps taken so far in this turn.
+ * @param running - Whether the turn is still in progress.
+ * @returns The live step rows, or a collapsible summary chip once finished.
+ */
 function ToolTrace({ steps, running }: { steps: ToolCallInfo[]; running: boolean }) {
   const [open, setOpen] = useState(false);
 
@@ -242,12 +291,22 @@ function ToolTrace({ steps, running }: { steps: ToolCallInfo[]; running: boolean
   );
 }
 
+/**
+ * Renders the three-dot "thinking" indicator shown while the assistant has
+ * no content to display yet.
+ * @returns The animated thinking-dots element.
+ */
 function ThinkingRow() {
   return (
     <div className="thinking-dots"><span /><span /><span /></div>
   );
 }
 
+/**
+ * Renders a placeholder assistant turn (avatar plus thinking indicator) shown
+ * while the agent is working but hasn't produced its own turn yet.
+ * @returns The pending assistant turn markup.
+ */
 function PendingTurn() {
   return (
     <div className="msg-assistant msg-assistant-appear">
@@ -257,6 +316,12 @@ function PendingTurn() {
   );
 }
 
+/**
+ * Extracts a short human-readable detail from a tool call's input, preferring
+ * a query/search term and falling back to a URL's path.
+ * @param input - The raw tool-call input to summarize.
+ * @returns A quoted query string, a URL pathname, or an empty string if nothing usable was found.
+ */
 function inputSummary(input: unknown): string {
   if (!input || typeof input !== 'object') return '';
   const obj = input as Record<string, unknown>;
@@ -269,6 +334,15 @@ function inputSummary(input: unknown): string {
   return '';
 }
 
+/**
+ * Builds the human-readable label for a tool-call row, e.g. "Searching
+ * "editions"" while running or "Searched "editions"" once done, falling back
+ * to a title-cased version of the tool name for unrecognized tools.
+ * @param name - The tool's name (e.g. `search_docs`, `zoho_api`).
+ * @param state - The tool call's current state, used to pick present vs. past tense.
+ * @param input - The tool call's input, used to append a query/path detail.
+ * @returns The friendly label to display for the tool call.
+ */
 function friendlyLabel(name: string, state: ToolCallInfo['state'], input: unknown): string {
   const running = state === 'input-available';
   const map: Record<string, [string, string]> = {
@@ -286,6 +360,15 @@ function friendlyLabel(name: string, state: ToolCallInfo['state'], input: unknow
   return detail ? `${verb} ${detail}` : verb;
 }
 
+/**
+ * Renders a single tool-call row with its icon, friendly label, and a
+ * trailing spinner, error icon, or checkmark depending on the call's state.
+ * @param toolName - The tool's name, used to derive its friendly label.
+ * @param state - The tool call's current state (in-flight, succeeded, or errored).
+ * @param input - The tool call's input, used to derive a detail suffix for the label.
+ * @param index - The row's position among the turn's steps, used to stagger its entrance animation.
+ * @returns The rendered tool-call row.
+ */
 export function ToolCallRow({ toolName, state, input, index }: ToolCallInfo & { index: number }) {
   const running = state === 'input-available';
   const errored = state === 'output-error';
@@ -305,6 +388,14 @@ export function ToolCallRow({ toolName, state, input, index }: ToolCallInfo & { 
 
 // ─── No-reply / error fallback ───────────────────────────────────────────────
 
+/**
+ * Renders a fallback banner shown when a turn finished without producing a
+ * reply: an error banner with the failure message if the run errored, or a
+ * neutral "couldn't find an answer" banner otherwise. Both offer a retry action.
+ * @param error - The error that caused the run to fail, if any.
+ * @param onRetry - Called when the "Ask again" button is clicked.
+ * @returns The rendered fallback banner.
+ */
 export function NoReplyNotice({ error, onRetry }: { error?: Error; onRetry: () => void }) {
   return (
     <div className="msg-assistant msg-assistant-appear">
@@ -337,10 +428,24 @@ interface ComposerProps {
   onStop: () => void;
 }
 
+/**
+ * Renders the message input row: an auto-growing textarea plus a send/stop
+ * button that toggles based on whether a turn is currently running, and the
+ * active model's label.
+ * @param modelLabel - The display name of the active model, shown below the input row.
+ * @param isRunning - Whether a turn is currently in flight; toggles the button between send and stop.
+ * @param onSend - Called with the trimmed message text when the user sends it.
+ * @param onStop - Called when the stop button is clicked to cancel the in-flight turn.
+ * @returns The rendered composer.
+ */
 function Composer({ modelLabel, isRunning, onSend, onStop }: ComposerProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  /**
+   * Trims and sends the current composer text, then clears the input. No-ops
+   * if the trimmed text is empty or a turn is already running.
+   */
   const handleSend = useCallback(() => {
     const text = value.trim();
     if (!text || isRunning) return;
@@ -348,6 +453,11 @@ function Composer({ modelLabel, isRunning, onSend, onStop }: ComposerProps) {
     onSend(text);
   }, [value, isRunning, onSend]);
 
+  /**
+   * Sends the message when Enter is pressed without Shift, preventing the
+   * default newline insertion.
+   * @param e - The textarea keydown event.
+   */
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();

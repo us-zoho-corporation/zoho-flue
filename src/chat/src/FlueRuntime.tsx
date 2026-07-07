@@ -29,4 +29,8 @@ export const FlueChatContext = createContext<FlueChat>({
   stop: async () => {},
 });
 
+/**
+ * Reads the live view of the active conversation from `FlueChatContext`.
+ * @returns The current `FlueChat` value (messages, running/history-ready flags, error, and the `sendMessage`/`stop` actions) for the nearest `FlueChatContext.Provider`, or the inert default context value if none is present.
+ */
 export const useFlueChat = () => useContext(FlueChatContext);

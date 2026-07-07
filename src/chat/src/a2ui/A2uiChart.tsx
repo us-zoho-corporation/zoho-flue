@@ -13,6 +13,12 @@ const AXIS = 'rgba(17, 24, 39, 0.55)';
 const SPLIT = 'rgba(17, 24, 39, 0.1)';
 const LABEL = 'rgba(17, 24, 39, 0.9)';
 
+/**
+ * Builds the ECharts option object for a chart spec, branching between a pie
+ * layout and a shared category-axis layout for bar/line/area charts.
+ * @param spec - The normalized chart spec to render.
+ * @returns The ECharts/Kumo chart option describing colors, axes, legend, and series.
+ */
 function buildOption(spec: ChartSpec): KumoChartOption {
 	const { chartType, categories, series, stacked } = spec;
 	const multi = series.length > 1;
@@ -84,6 +90,13 @@ function buildOption(spec: ChartSpec): KumoChartOption {
 	};
 }
 
+/**
+ * Renders a ready `ChartSpec` as an ECharts bar/line/area/pie chart inside an
+ * `A2uiFrame`, using the spec's title/description for the frame header.
+ * @param props - Component props.
+ * @param props.spec - The normalized, ready-to-render chart spec.
+ * @returns The framed chart element.
+ */
 export function A2uiChart({ spec }: { spec: ChartSpec }) {
 	const options = useMemo(() => buildOption(spec), [spec]);
 	return (

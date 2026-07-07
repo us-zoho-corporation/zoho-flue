@@ -6,6 +6,12 @@ const opts = { clientId: 'id', clientSecret: 'secret', refreshToken: 'refresh' }
 beforeEach(() => evictZohoToken(opts));
 afterEach(() => vi.restoreAllMocks());
 
+/**
+ * Builds a mock `fetch` that resolves successfully with a Zoho-shaped token response.
+ * @param token - The `access_token` value the mock response should return.
+ * @param expiresIn - The `expires_in` value (seconds) the mock response should return.
+ * @returns A vitest mock function suitable for `vi.stubGlobal('fetch', ...)`.
+ */
 function mockFetch(token: string, expiresIn = 3600) {
 	return vi.fn().mockResolvedValue({
 		ok: true,
