@@ -7,6 +7,8 @@ import { config } from '../config';
  * the declared home for the provider (mirroring `catalyst-glm.ts`), so its
  * credential is wired from `config` rather than an implicit env lookup, and so
  * startup fails fast when an `anthropic/*` model is offered without a key.
+ * @throws {Error} If an `anthropic/*` model is configured in `config.chatModels`
+ * but `ANTHROPIC_API_KEY` is not set.
  */
 export function registerAnthropic(): void {
 	const usesAnthropic = config.chatModels.some((m) => m.spec.startsWith('anthropic/'));

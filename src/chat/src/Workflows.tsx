@@ -19,6 +19,11 @@ interface WorkflowsProps {
   onBack: () => void;
 }
 
+/**
+ * Picks the icon representing a workflow run's status.
+ * @param status - The run's current status.
+ * @returns A filled check circle for completed runs, an X circle for failed runs, a warning circle for cancelled runs, or a pulsing outline circle for active runs.
+ */
 function statusIcon(status: RunPointer['status']) {
   switch (status) {
     case 'completed': return <CheckCircle size={13} className="text-green-600 shrink-0" />;
@@ -28,6 +33,12 @@ function statusIcon(status: RunPointer['status']) {
   }
 }
 
+/**
+ * Formats the elapsed time of a workflow run as a compact duration string.
+ * @param start - The run's start timestamp (epoch milliseconds).
+ * @param end - The run's end timestamp (epoch milliseconds), or `undefined` if it's still active (elapsed time is measured against now).
+ * @returns The duration formatted as milliseconds, seconds, or minutes and seconds.
+ */
 function duration(start: number, end?: number): string {
   const ms = (end ?? Date.now()) - start;
   if (ms < 1000) return `${ms}ms`;
@@ -35,6 +46,13 @@ function duration(start: number, end?: number): string {
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
 }
 
+/**
+ * Displays the workflows defined under `src/workflows/` and their recent
+ * runs, fetched from `/api/workflows`, grouping runs by workflow name and
+ * showing each run's status and duration.
+ * @param onBack - Called when the "Back" button is clicked.
+ * @returns The workflows page, showing a loading state, an empty state, or the list of workflow cards with their runs.
+ */
 export function Workflows({ onBack }: WorkflowsProps) {
   const [data, setData] = useState<WorkflowsData | null>(null);
   const [loading, setLoading] = useState(true);

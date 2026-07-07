@@ -5,6 +5,12 @@ import { collapseTurns } from './flue-model.ts';
 import type { AssistantMessage, ChatMessage } from './FlueRuntime.tsx';
 import type { FlueConversationMessage, FlueConversationPart } from '@flue/react';
 
+/**
+ * Builds a minimal `AssistantMessage` fixture for `AssistantTurn` tests,
+ * with sensible empty defaults for parts, tool steps, and UI parts.
+ * @param over - Fields to override on the default fixture.
+ * @returns The assembled assistant message fixture.
+ */
 function turn(over: Partial<AssistantMessage> = {}): AssistantMessage {
 	return {
 		id: 't1',
@@ -15,7 +21,18 @@ function turn(over: Partial<AssistantMessage> = {}): AssistantMessage {
 		...over,
 	} as AssistantMessage;
 }
+/**
+ * Builds a completed text message part fixture.
+ * @param t - The text content of the part.
+ * @returns A `text` part with `state: 'done'`.
+ */
 const textPart = (t: string) => ({ type: 'text' as const, text: t, state: 'done' as const });
+/**
+ * Builds a completed tool-call step fixture.
+ * @param toolName - The tool's name, also used to derive its `toolCallId`.
+ * @param input - The tool call's input payload.
+ * @returns A tool-call step fixture with `state: 'output-available'`.
+ */
 const step = (toolName: string, input: unknown = {}) => ({
 	toolCallId: `${toolName}-1`, toolName, state: 'output-available' as const, input,
 });
@@ -113,12 +130,33 @@ describe('AssistantTurn (browser) — unified tool-call flow', () => {
 describe('AssistantTurn streaming transition (browser)', () => {
 	const userMsg: FlueConversationMessage = { id: 'u', role: 'user', parts: [{ type: 'text', text: 'compare editions', state: 'done' }] };
 	let k = 0;
+	/**
+	 * Builds an assistant `FlueConversationMessage` fixture with an
+	 * auto-incrementing id, wrapping the given parts.
+	 * @param parts - The conversation parts to attach to the message.
+	 * @returns The assembled assistant message fixture.
+	 */
 	const asst = (...parts: FlueConversationPart[]): FlueConversationMessage => ({ id: `a${k++}`, role: 'assistant', parts });
+	/**
+	 * Builds a `dynamic-tool` conversation part fixture, shaped as either an
+	 * in-flight call (no output) or a completed call (with a stub `{ ok: true }` output).
+	 * @param toolName - The tool's name, also used as its `toolCallId`.
+	 * @param state - Whether the call is still in flight or has completed.
+	 * @param input - The tool call's input payload.
+	 * @returns The assembled `dynamic-tool` part fixture.
+	 */
 	const toolPart = (toolName: string, state: 'input-available' | 'output-available', input: unknown): FlueConversationPart =>
 		state === 'input-available'
 			? { type: 'dynamic-tool', toolName, toolCallId: toolName, state, input }
 			: { type: 'dynamic-tool', toolName, toolCallId: toolName, state, input, output: { ok: true } };
 
+	/**
+	 * Runs a list of raw conversation messages through the real `collapseTurns`
+	 * pipeline and returns the resulting trailing assistant turn.
+	 * @param msgs - The raw conversation messages to collapse.
+	 * @returns The trailing collapsed assistant turn.
+	 * @throws If the collapsed history is empty or its last entry isn't an assistant turn.
+	 */
 	const trailingTurn = (msgs: FlueConversationMessage[]): ChatMessage => {
 		const entry = collapseTurns(msgs).at(-1);
 		if (!entry || entry.role !== 'assistant') throw new Error('expected a trailing assistant turn');

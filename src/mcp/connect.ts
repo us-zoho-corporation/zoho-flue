@@ -26,7 +26,11 @@ const CONNECT_TIMEOUT_MS = 10_000;
 const MAX_RESULT_CHARS = 12_000;
 const BLOCKED_HOST = 'That host is not allowed.';
 
-/** True for an IPv4 address in a loopback / private / link-local / reserved range. */
+/**
+ * True for an IPv4 address in a loopback / private / link-local / reserved range.
+ * @param ip - Dotted-decimal IPv4 address to check.
+ * @returns Whether the address falls in a private/reserved range (malformed input is treated as unsafe and returns true).
+ */
 function isPrivateV4(ip: string): boolean {
 	const parts = ip.split('.').map(Number);
 	if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true; // malformed → unsafe
@@ -44,7 +48,11 @@ function isPrivateV4(ip: string): boolean {
 	);
 }
 
-/** True for any loopback / private / link-local / unique-local / mapped address. */
+/**
+ * True for any loopback / private / link-local / unique-local / mapped address.
+ * @param ip - IPv4 or IPv6 address to check (a zone id suffix or surrounding brackets are stripped before checking).
+ * @returns Whether the address (or, for an IPv4-mapped IPv6 address, its embedded IPv4 address) is loopback/private/link-local/unique-local.
+ */
 export function isPrivateIp(ip: string): boolean {
 	const addr = ip.toLowerCase().replace(/%.*$/, '').replace(/^\[|\]$/g, ''); // strip zone id + brackets
 	const mapped = addr.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); // IPv4-mapped IPv6
@@ -63,6 +71,8 @@ export function isPrivateIp(ip: string): boolean {
  * to this URL, so this is a first-line SSRF filter: HTTPS only; reject obvious
  * internal names and literal private/loopback IPs. Domain names are resolved and
  * re-checked at connect time (see {@link openClient}).
+ * @param raw - The candidate MCP server URL, as entered by the user.
+ * @returns A human-readable validation error message, or `null` if the URL passes this format-level check.
  */
 export function validateMcpUrl(raw: string): string | null {
 	let u: URL;
@@ -78,7 +88,11 @@ export function validateMcpUrl(raw: string): string | null {
 	return null;
 }
 
-/** Resolves the host and returns true if ANY resolved address is unsafe (SSRF/DNS-rebinding guard). */
+/**
+ * Resolves the host and returns true if ANY resolved address is unsafe (SSRF/DNS-rebinding guard).
+ * @param host - Hostname to resolve.
+ * @returns Whether any resolved address is private/unsafe, or the lookup failed or returned no addresses (both treated as unsafe).
+ */
 async function resolvesToPrivate(host: string): Promise<boolean> {
 	try {
 		const results = await lookup(host, { all: true, verbatim: true });
@@ -88,6 +102,15 @@ async function resolvesToPrivate(host: string): Promise<boolean> {
 	}
 }
 
+/**
+ * Builds the MCP SDK client transport for a target URL, attaching a bearer
+ * auth header when a token is supplied and rejecting redirects so a public
+ * URL can't redirect the request into an internal host.
+ * @param url - Server URL to connect to.
+ * @param transport - Which wire transport to use.
+ * @param authToken - Optional bearer token to send as the Authorization header.
+ * @returns A configured SSE or streamable-HTTP client transport.
+ */
 function makeTransport(url: URL, transport: McpTransport, authToken?: string | null) {
 	const headers: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 	// `redirect: 'error'` prevents a public URL from redirecting into an internal host.
@@ -105,6 +128,9 @@ function makeTransport(url: URL, transport: McpTransport, authToken?: string | n
  * Opens a connected MCP client to a user-supplied target — the single guarded
  * entry point. Enforces the SSRF checks (format + DNS resolution) before
  * connecting, with a bounded timeout. The caller must `close()` the client.
+ * @param target - The MCP server URL, transport, and optional auth token to connect to.
+ * @returns A connected MCP client.
+ * @throws {Error} If the URL fails format validation, resolves to a private/internal address, the connection attempt fails, or it doesn't complete within {@link CONNECT_TIMEOUT_MS}.
  */
 async function openClient(target: McpTarget): Promise<Client> {
 	const urlError = validateMcpUrl(target.url);
@@ -130,6 +156,8 @@ async function openClient(target: McpTarget): Promise<Client> {
 /**
  * Connects to an external MCP server and lists its tools — the "test connection"
  * primitive and the source for live tool discovery. Never throws.
+ * @param target - The MCP server URL, transport, and optional auth token to probe.
+ * @returns On success, the server's advertised tools; on failure, an error message describing why the connection or listing failed.
  */
 export async function probeMcpServer(target: McpTarget): Promise<ProbeResult> {
 	let client: Client | undefined;
@@ -151,7 +179,11 @@ export async function probeMcpServer(target: McpTarget): Promise<ProbeResult> {
 	}
 }
 
-/** Flattens an MCP tool result's content into a single capped text string. */
+/**
+ * Flattens an MCP tool result's content into a single capped text string.
+ * @param content - The tool result's `content` field: an array of content blocks, or any other value to stringify directly.
+ * @returns The joined text of all text-bearing blocks (blank entries dropped), or `String(content)` if it isn't an array; truncated to {@link MAX_RESULT_CHARS} with a trailing marker if longer.
+ */
 export function mcpResultToText(content: unknown): string {
 	if (!Array.isArray(content)) return String(content ?? '').slice(0, MAX_RESULT_CHARS);
 	const text = content
@@ -161,7 +193,14 @@ export function mcpResultToText(content: unknown): string {
 	return text.length <= MAX_RESULT_CHARS ? text : text.slice(0, MAX_RESULT_CHARS) + '\n[truncated]';
 }
 
-/** Calls a single tool on an external MCP server and returns its text output. */
+/**
+ * Calls a single tool on an external MCP server and returns its text output.
+ * @param target - The MCP server URL, transport, and optional auth token to connect to.
+ * @param name - Name of the tool to call.
+ * @param args - Arguments to pass to the tool call.
+ * @returns The tool result's content, flattened to text (see {@link mcpResultToText}).
+ * @throws {Error} If the connection can't be established (see {@link openClient}) or the tool call itself fails.
+ */
 export async function callMcpTool(target: McpTarget, name: string, args: Record<string, unknown>): Promise<string> {
 	let client: Client | undefined;
 	try {

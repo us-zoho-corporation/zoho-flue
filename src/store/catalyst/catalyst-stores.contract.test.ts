@@ -24,21 +24,40 @@ const opts = {
 let tables: Map<string, Map<string, Row>>;
 let rowIdSeq: number;
 
+/**
+ * Resets the fake Data Store to empty and evicts the cached OAuth token, so each
+ * test starts from a clean slate.
+ */
 function reset() {
 	tables = new Map();
 	rowIdSeq = 0;
 	evictZohoToken(oauth);
 }
 
+/**
+ * Gets (creating if necessary) the fake in-memory table for a given name.
+ * @param name - Table name.
+ * @returns The table's ROWID -> row map, creating an empty one if it didn't exist.
+ */
 function table(name: string): Map<string, Row> {
 	let t = tables.get(name);
 	if (!t) { t = new Map(); tables.set(name, t); }
 	return t;
 }
 
+/**
+ * Builds a fake successful `fetch` `Response`-like object wrapping Catalyst's `{ data }` envelope.
+ * @param data - The payload to return as `data`.
+ * @returns An object shaped like the subset of `Response` the client reads (`ok`, `status`, `json`).
+ */
 const json = (data: unknown) => ({ ok: true, status: 200, json: async () => ({ data }) });
 
-/** Tiny ZCQL evaluator for the query shapes the repos emit (WHERE …[AND …][ORDER BY …] LIMIT n). */
+/**
+ * Tiny ZCQL evaluator for the query shapes the repos emit (WHERE …[AND …][ORDER BY …] LIMIT n).
+ * @param query - The ZCQL query string to evaluate against the in-memory fake tables.
+ * @returns The rows matching the query, wrapped per-table like a real ZCQL response.
+ * @throws {Error} If `query` or one of its WHERE conditions doesn't match the supported shape.
+ */
 function runZcql(query: string): unknown[] {
 	const m = query.match(/^SELECT (ROWID|\*) FROM (\w+) WHERE (.+?)(?: ORDER BY (\w+))? LIMIT (\d+)$/s);
 	if (!m) throw new Error(`fake ZCQL cannot parse: ${query}`);
@@ -58,6 +77,15 @@ function runZcql(query: string): unknown[] {
 		({ [tableName]: projection === 'ROWID' ? { ROWID: rowId } : { ROWID: rowId, ...row } }));
 }
 
+/**
+ * Fake implementation of the Catalyst Data Store REST surface used by the client
+ * under test: routes ZCQL queries to {@link runZcql} and row POST/PUT/DELETE
+ * requests to the corresponding in-memory table.
+ * @param url - The requested URL (its pathname determines the operation).
+ * @param init - The `fetch` request init, including method and JSON body.
+ * @returns A fake `Response`-like object (see {@link json}).
+ * @throws {Error} If the request doesn't match a handled ZCQL or row operation shape.
+ */
 function handleCatalyst(url: string, init: RequestInit) {
 	const { pathname } = new URL(url);
 	const body = init.body ? JSON.parse(init.body as string) : undefined;

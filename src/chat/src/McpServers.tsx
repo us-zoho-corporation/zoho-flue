@@ -23,6 +23,14 @@ interface McpServersProps {
   onSignIn: () => void;
 }
 
+/**
+ * Top-level "MCP servers" settings page: lists the current user's configured MCP server
+ * connections and lets them add, edit, enable/disable, test, and delete non-built-in
+ * servers. Renders a sign-in prompt instead of the list when there's no active session.
+ * @param onBack - Called when the user clicks "Back" to leave this page.
+ * @param onSignIn - Called when the user clicks "Sign in with Zoho" from the auth-required state.
+ * @returns The rendered MCP servers management page.
+ */
 export function McpServers({ onBack, onSignIn }: McpServersProps) {
   const [servers, setServers] = useState<McpServerView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +41,11 @@ export function McpServers({ onBack, onSignIn }: McpServersProps) {
   const [tests, setTests] = useState<Record<string, TestState>>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
+  /**
+   * Loads the current user's MCP server list from the API and stores it in state.
+   * Sets `needsAuth` when the request comes back unauthorized, so the caller can render
+   * the sign-in prompt instead of the server list.
+   */
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -46,6 +59,12 @@ export function McpServers({ onBack, onSignIn }: McpServersProps) {
 
   useEffect(() => { void load(); }, [load]);
 
+  /**
+   * Creates or updates the MCP server currently being edited in `form`, choosing POST vs.
+   * PUT based on whether `form.id` is set. The auth token is only sent when the user typed
+   * a new one (a blank value keeps the existing token on edit). On success, closes the form
+   * and reloads the server list; on failure, sets `formError` with the server's message.
+   */
   const save = useCallback(async () => {
     if (!form) return;
     setFormError('');
@@ -68,12 +87,22 @@ export function McpServers({ onBack, onSignIn }: McpServersProps) {
     await load();
   }, [form, load]);
 
+  /**
+   * Deletes the MCP server with the given id, clears any pending delete confirmation, and
+   * reloads the server list.
+   * @param id - The id of the MCP server to delete.
+   */
   const remove = useCallback(async (id: string) => {
     await fetch(`/api/mcp-servers/${id}`, { method: 'DELETE', credentials: 'include' });
     setConfirmDelete(null);
     await load();
   }, [load]);
 
+  /**
+   * Flips the enabled/disabled state of the given MCP server via the API, then reloads the
+   * server list to reflect the change.
+   * @param s - The MCP server whose `enabled` flag should be toggled.
+   */
   const toggle = useCallback(async (s: McpServerView) => {
     await fetch(`/api/mcp-servers/${s.id}`, {
       method: 'PUT', headers: { 'content-type': 'application/json' }, credentials: 'include',
@@ -82,6 +111,11 @@ export function McpServers({ onBack, onSignIn }: McpServersProps) {
     await load();
   }, [load]);
 
+  /**
+   * Tests connectivity to an existing MCP server by id, updating `tests[id]` with the
+   * in-progress, success (tool count), or error result.
+   * @param id - The id of the MCP server to test.
+   */
   const test = useCallback(async (id: string) => {
     setTests((t) => ({ ...t, [id]: { status: 'testing' } }));
     try {
@@ -91,6 +125,11 @@ export function McpServers({ onBack, onSignIn }: McpServersProps) {
     } catch { setTests((t) => ({ ...t, [id]: { status: 'error', error: 'Request failed' } })); }
   }, []);
 
+  /**
+   * Tests connectivity to the server described by the in-progress `form` (used before
+   * saving), updating `formTest` with the in-progress, success (tool count), or error
+   * result.
+   */
   const testForm = useCallback(async () => {
     if (!form) return;
     setFormTest({ status: 'testing' });
@@ -195,6 +234,18 @@ export function McpServers({ onBack, onSignIn }: McpServersProps) {
   );
 }
 
+/**
+ * Renders the add/edit form card for an MCP server: name, URL, transport, and optional
+ * auth token, plus test-connection feedback and save/cancel/test actions.
+ * @param form - The current form field values being edited.
+ * @param setForm - Replaces the form state; used to apply field edits.
+ * @param onSave - Called when the user clicks Save/Add server.
+ * @param onCancel - Called when the user clicks Cancel.
+ * @param onTest - Called when the user clicks "Test connection".
+ * @param test - The current test-connection status/result to display.
+ * @param error - A save error message to display, if any.
+ * @returns The rendered MCP server form card.
+ */
 function McpForm({ form, setForm, onSave, onCancel, onTest, test, error }: {
   form: FormState;
   setForm: (f: FormState) => void;
@@ -204,6 +255,10 @@ function McpForm({ form, setForm, onSave, onCancel, onTest, test, error }: {
   test: TestState;
   error: string;
 }) {
+  /**
+   * Merges the given partial changes into the current form state.
+   * @param patch - The form fields to update.
+   */
   const set = (patch: Partial<FormState>) => setForm({ ...form, ...patch });
   return (
     <div className="mcp-card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

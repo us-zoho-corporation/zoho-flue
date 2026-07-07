@@ -20,8 +20,25 @@ export interface A2uiToolPart {
  */
 class A2uiBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
 	state = { failed: false };
+
+	/**
+	 * React error-boundary hook: flips the boundary into its failed state
+	 * whenever a descendant throws during render.
+	 * @returns The partial state update marking the boundary as failed.
+	 */
 	static getDerivedStateFromError() { return { failed: true }; }
+
+	/**
+	 * Logs a render failure caught by the boundary for diagnostics.
+	 * @param error - The error thrown by a descendant renderer.
+	 */
 	componentDidCatch(error: unknown) { console.error('[a2ui] visualization render failed:', error); }
+
+	/**
+	 * Renders the wrapped children, or a small framed error notice once a
+	 * descendant has thrown.
+	 * @returns The children, or a fallback error notice element.
+	 */
 	render() {
 		if (this.state.failed) {
 			return (
@@ -42,6 +59,9 @@ class A2uiBoundary extends Component<{ children: ReactNode }, { failed: boolean 
  * the real surface swaps in once enough data has arrived. An errored tool call
  * still renders whatever spec streamed before the error. Wrapped in a boundary
  * so a bad spec degrades gracefully instead of crashing the chat.
+ * @param props - Component props.
+ * @param props.part - The a2ui tool-call part to render.
+ * @returns The boundary-wrapped visualization (or pending placeholder) for `part`.
  */
 export function A2uiPart({ part }: { part: A2uiToolPart }) {
 	return (
@@ -51,6 +71,14 @@ export function A2uiPart({ part }: { part: A2uiToolPart }) {
 	);
 }
 
+/**
+ * Parses `part.input` against the spec matching `part.toolName` and renders
+ * either the ready visualization (chart, comparison table, or stat cards) or
+ * a pending placeholder while the spec is still streaming in.
+ * @param props - Component props.
+ * @param props.part - The a2ui tool-call part to render.
+ * @returns The rendered visualization, a pending placeholder, or `null` for an unrecognized tool name.
+ */
 function A2uiPartInner({ part }: { part: A2uiToolPart }) {
 	const name = part.toolName as A2uiToolName;
 

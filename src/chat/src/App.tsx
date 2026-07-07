@@ -52,22 +52,47 @@ const MODEL_KEY = 'flue:model:v1';
 // Used before /api/models resolves, and if it fails. Matches config.defaultChatModelKey.
 const FALLBACK_MODEL: ModelOption = { key: 'claude', label: 'Claude Sonnet 5', requiresAuth: false };
 
+/**
+ * Reads the persisted chat sessions list from localStorage.
+ * @returns The stored sessions, or an empty array if none are stored or parsing fails.
+ */
 function loadSessions(): Session[] {
   try { return JSON.parse(localStorage.getItem(STORE_KEY) ?? '[]'); } catch { return []; }
 }
 
+/**
+ * Persists the given sessions list to localStorage.
+ * @param sessions - The sessions to persist.
+ */
 function saveSessions(sessions: Session[]) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(sessions)); } catch {}
 }
 
+/**
+ * Reads the user's previously chosen default model key from localStorage.
+ * @returns The persisted model key, or `null` if none is stored.
+ */
 function loadPreferredModel(): string | null {
   try { return localStorage.getItem(MODEL_KEY); } catch { return null; }
 }
 
+/**
+ * Builds a new chat session seeded with a fresh id and the given model.
+ * @param model - The model the new conversation should start on.
+ * @returns The newly created session.
+ */
 function makeSession(model: ModelOption): Session {
   return { id: crypto.randomUUID(), modelKey: model.key, modelLabel: model.label, title: 'New conversation', createdAt: Date.now() };
 }
 
+/**
+ * Top-level chat application component. Owns session/model state (persisted to
+ * localStorage), tracks auth status and profile, drives theme, and routes between
+ * the chat thread and the settings/workflows/skills/agents/runs/mcp admin views.
+ * @returns A loading screen while the auth check is pending; the Welcome sign-in
+ * screen if the user isn't authenticated; otherwise the sidebar plus the active
+ * view (chat thread or one of the admin panels).
+ */
 export function App() {
   const initRef = useRef<{ sessions: Session[]; activeId: string } | null>(null);
   if (!initRef.current) {
@@ -98,6 +123,7 @@ export function App() {
   const store = useConversationsStore();
 
   useEffect(() => { applyTheme(theme); saveTheme(theme); }, [theme]);
+  /** Flips the app theme between `'light'` and `'dark'`. */
   const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
 
   useEffect(() => { saveSessions(sessions); }, [sessions]);
@@ -126,14 +152,27 @@ export function App() {
 
   const defaultModel = models.find((m) => m.key === defaultKey) ?? models[0] ?? FALLBACK_MODEL;
   const activeSession = sessions.find((s) => s.id === activeId) ?? sessions[sessions.length - 1];
+  /**
+   * Looks up a model option by key.
+   * @param key - The model key to resolve.
+   * @returns The matching model option, or the default model if no model has that key.
+   */
   const modelOf = (key: string): ModelOption => models.find((m) => m.key === key) ?? defaultModel;
 
+  /** Creates a new session on the preferred model and makes it the active session. */
   const handleNewSession = useCallback(() => {
     const s = makeSession(modelOf(preferredModelKey));
     setSessions((prev) => [...prev, s]);
     setActiveId(s.id);
   }, [preferredModelKey, defaultModel, models]);
 
+  /**
+   * Removes a session from the list. If it was the last remaining session, a
+   * fresh one on the default model is created and persisted immediately so the
+   * app never ends up with zero sessions. If the deleted session was active,
+   * the new last session becomes active.
+   * @param id - The id of the session to delete.
+   */
   const handleDeleteSession = useCallback(
     (id: string) => {
       setSessions((prev) => {
@@ -151,25 +190,38 @@ export function App() {
     [activeId, defaultModel],
   );
 
-  // Chosen in Settings: the model new conversations start on. A thread stays on the
-  // model it was created with, so history never mixes voices — changing this only
-  // affects the next "New conversation".
+  /**
+   * Updates the preferred model new conversations start on, and persists it to
+   * localStorage. A thread stays on the model it was created with, so history
+   * never mixes voices — this only affects the next "New conversation".
+   * @param key - The model key selected in Settings.
+   */
   const handleModelChange = useCallback((key: string) => {
     storedPrefRef.current = key;
     setPreferredModelKey(key);
     try { localStorage.setItem(MODEL_KEY, key); } catch {}
   }, []);
 
+  /**
+   * Sets the active session's title from the conversation's first message,
+   * truncated to 40 characters with an ellipsis if longer.
+   * @param text - The text of the first message sent in the conversation.
+   */
   const handleFirstMessage = useCallback((text: string) => {
     const title = text.trim().slice(0, 40) + (text.trim().length > 40 ? '…' : '');
     setSessions((prev) => prev.map((s) => s.id === activeId ? { ...s, title } : s));
   }, [activeId]);
 
-  // Redirect to the server-side Zoho OAuth flow; it returns here after consent.
+  /** Navigates to the server-side Zoho OAuth login flow, which returns here after consent. */
   const handleSignIn = useCallback(() => {
     window.location.assign('/api/auth/login?returnTo=/');
   }, []);
 
+  /**
+   * Signs the user out: calls the logout endpoint, clears the persisted session
+   * list and resets the conversations store so nothing carries over to the next
+   * signed-in user on a shared device, then seeds a fresh session.
+   */
   const handleSignOut = useCallback(async () => {
     try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
     // Don't leave conversations behind on a shared device: drop the local chat

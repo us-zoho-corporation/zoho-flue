@@ -11,6 +11,16 @@ interface SettingsProps {
   onBack: () => void;
 }
 
+/**
+ * Renders the settings panel showing the signed-in account and the default model picker.
+ * @param profile - The signed-in user's profile, or `null` if not signed in (shows a "Not signed in" message).
+ * @param models - The list of selectable model options shown in the default model dropdown.
+ * @param modelsLoading - When `true`, shows a loading spinner in place of the model selector.
+ * @param modelKey - The key of the currently selected default model.
+ * @param onModelChange - Called with the new model key when the user picks a different default model.
+ * @param onBack - Called when the user clicks the "Back" button to leave the settings panel.
+ * @returns The rendered settings panel.
+ */
 export function Settings({ profile, models, modelsLoading, modelKey, onModelChange, onBack }: SettingsProps) {
   return (
     <div className="flex-1 min-w-0 flex flex-col overflow-hidden">

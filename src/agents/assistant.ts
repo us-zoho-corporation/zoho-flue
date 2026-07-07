@@ -49,6 +49,8 @@ const zohoAssistant = defineAgentProfile({
  * fall back to the configured default (`anthropic/claude-sonnet-5`). This makes
  * the provider-model a per-conversation selectable option on one assistant,
  * rather than a dedicated agent per model.
+ * @param id - The conversation/instance id, optionally prefixed with `<key>__`.
+ * @returns The Flue model specifier (`<provider>/<model>`) to use for this conversation.
  */
 export function modelForConversation(id: string): string {
 	const key = id.includes('__') ? id.slice(0, id.indexOf('__')) : '';
@@ -58,12 +60,19 @@ export function modelForConversation(id: string): string {
 	return chosen.spec;
 }
 
-// Before running a turn, populate the request context for the logged-in user:
-//  - GLM conversations get the user's Zoho token (carries QuickML.deployment.READ)
-//    so the provider calls the endpoint as the user;
-//  - any conversation gets the user's connected MCP servers' tools, injected into
-//    the agent below.
-// Guests get neither (service token / no MCP tools).
+/**
+ * Before running a turn, populates the request context for the logged-in user:
+ *  - GLM conversations get the user's Zoho token (carries QuickML.deployment.READ)
+ *    so the provider calls the endpoint as the user;
+ *  - any conversation gets the user's connected MCP servers' tools, injected into
+ *    the agent below.
+ * Guests get neither (service token / no MCP tools); the handler falls through
+ * to `next()` unchanged in that case.
+ * @param c - The Flue agent route context, used to resolve the current user and conversation id.
+ * @param next - The downstream handler to invoke, wrapped with the resolved request context.
+ * @returns The result of calling `next()`, either directly (no user) or inside
+ * `runWithRequestContext` (logged-in user).
+ */
 export const route: AgentRouteHandler = async (c, next) => {
 	const auth = getAuth();
 	const userId = await auth.resolveUserId(c).catch(() => null);
@@ -78,6 +87,14 @@ export const route: AgentRouteHandler = async (c, next) => {
 	return runWithRequestContext({ userToken, mcpTools }, () => next());
 };
 
+/**
+ * Builds this conversation's agent definition: the shared `zohoAssistant` profile
+ * (Zoho API tool, a2ui visualization tools, and optional KB tools/instructions),
+ * augmented with any MCP tools the logged-in user has connected (set on the request
+ * context by `route`), and resolved to the model chosen for this conversation id.
+ * @param id - The conversation/instance id, passed through to `modelForConversation`.
+ * @returns The agent's `{ profile, model }` for this conversation.
+ */
 export default defineAgent(({ id }) => {
 	// Per-conversation profile: the fixed assistant plus the logged-in user's
 	// connected MCP tools (from the request context set in `route`, if any).

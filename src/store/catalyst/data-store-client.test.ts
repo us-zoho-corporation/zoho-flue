@@ -12,7 +12,11 @@ const opts = {
 	oauth,
 };
 
-/** Routes accounts.zoho.com token fetches to a stub; delegates Catalyst calls to `onCatalyst`. */
+/**
+ * Routes accounts.zoho.com token fetches to a stub; delegates Catalyst calls to `onCatalyst`.
+ * @param onCatalyst - Handler invoked for any non-token-refresh request, returning the fake response.
+ * @returns A `vi.fn` mock suitable for `vi.stubGlobal('fetch', ...)`.
+ */
 function mockFetch(onCatalyst: (url: string, init: RequestInit) => unknown) {
 	return vi.fn(async (url: string, init: RequestInit) => {
 		if (String(url).includes('accounts.zoho.com')) {
@@ -22,6 +26,11 @@ function mockFetch(onCatalyst: (url: string, init: RequestInit) => unknown) {
 	});
 }
 
+/**
+ * Builds a fake successful `fetch` `Response`-like object wrapping Catalyst's `{ data }` envelope.
+ * @param data - The payload to return as `data`.
+ * @returns An object shaped like the subset of `Response` the client reads (`ok`, `status`, `json`).
+ */
 const ok = (data: unknown) => ({ ok: true, status: 200, json: async () => ({ data }) });
 
 beforeEach(() => evictZohoToken(oauth));

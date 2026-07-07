@@ -7,6 +7,14 @@ interface AgentsProps {
   onBack: () => void;
 }
 
+/**
+ * Renders the full-page "Agents" view listing agents registered in the Flue runtime
+ * manifest, fetched from `/api/agents` on mount.
+ * @param onBack - Called when the user clicks the back button to leave this view.
+ * @returns The rendered agents page: a loading message while the fetch is in flight,
+ * a "No agents found." message when the manifest is empty, or a list of agent cards
+ * showing each agent's name, description, HTTP transport badge, and defined/undefined status.
+ */
 export function Agents({ onBack }: AgentsProps) {
   const [agents, setAgents] = useState<AgentEntry[]>([]);
   const [loading, setLoading] = useState(true);

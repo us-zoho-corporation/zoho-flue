@@ -11,6 +11,13 @@ const ALLOWED_MCP_TOOLS = new Set(['search_docs', 'get_page', 'list_products']);
 
 let _client: Client | null = null;
 
+/**
+ * Returns the cached MCP client connection to the Zoho docs server, creating
+ * and connecting a new one over Streamable HTTP (authenticated with the
+ * configured bearer token) if none exists yet.
+ * @returns A connected MCP `Client` for the Zoho docs server.
+ * @throws {Error} If the connection to the MCP server fails.
+ */
 async function getClient(): Promise<Client> {
     if (_client) return _client;
     const client = new Client({ name: 'zoho-flue', version: '1.0.0' });
@@ -23,6 +30,11 @@ async function getClient(): Promise<Client> {
     return client;
 }
 
+/**
+ * Closes and discards the cached MCP client connection so the next call to
+ * `getClient` establishes a fresh one. Any error while closing the stale
+ * connection is swallowed, since the connection is being discarded anyway.
+ */
 async function resetClient(): Promise<void> {
     try { await _client?.close(); } catch { /* ignore */ }
     _client = null;
@@ -32,7 +44,15 @@ async function resetClient(): Promise<void> {
 // but one unbounded blob still wastes the model's context, so cap it once.
 const MAX_RESULT_CHARS = 12_000;
 
-/** Extracts a readable plain-text view of MCP result content. */
+/**
+ * Extracts a readable plain-text view of MCP result content. Each content
+ * block's `text` is parsed as a search-result JSON object (`title`/`url`/
+ * `content`/`excerpt`) and reformatted as readable lines; text that isn't
+ * JSON is passed through unchanged. Multiple blocks are joined with a
+ * separator, and the combined output is capped at `MAX_RESULT_CHARS`.
+ * @param content - The MCP tool result's `content` field (expected to be an array of content blocks, but handled defensively otherwise).
+ * @returns The formatted, length-capped plain-text representation of `content`.
+ */
 export function extractText(content: unknown): string {
     if (!Array.isArray(content)) return String(content).slice(0, MAX_RESULT_CHARS);
     const parts: string[] = [];
@@ -57,6 +77,15 @@ export function extractText(content: unknown): string {
     return joined.length <= MAX_RESULT_CHARS ? joined : joined.slice(0, MAX_RESULT_CHARS) + '\n[truncated]';
 }
 
+/**
+ * Invokes an allowlisted MCP tool on the Zoho docs server, transparently
+ * resetting the client connection and retrying once if the first attempt
+ * fails (e.g. due to a stale connection).
+ * @param name - The MCP tool name to call; must be in `ALLOWED_MCP_TOOLS`.
+ * @param args - The arguments to pass to the tool.
+ * @returns A single-element text content array with the formatted tool output.
+ * @throws {Error} If `name` is not in `ALLOWED_MCP_TOOLS`, or if the retried call to the MCP server also fails.
+ */
 async function call(name: string, args: Record<string, unknown>): Promise<unknown> {
     if (!ALLOWED_MCP_TOOLS.has(name)) {
         throw new Error(`MCP tool call blocked: '${name}' is not an allowed tool.`);

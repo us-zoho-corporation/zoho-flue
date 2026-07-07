@@ -25,11 +25,22 @@ const cache: Map<string, CacheEntry> = (
   return m;
 })();
 
+/**
+ * Derives the token-cache key for a set of credentials, without storing the raw refresh token.
+ * @param opts - Credentials to derive the cache key from.
+ * @returns A cache key combining the client id and a truncated hash of the refresh token.
+ */
 function cacheKey(opts: OAuthCredentials): string {
 	const tokenHash = createHash('sha256').update(opts.refreshToken).digest('hex').slice(0, 16);
 	return `${opts.clientId}:${tokenHash}`;
 }
 
+/**
+ * Calls Zoho's OAuth token endpoint to refresh an access token.
+ * @param opts - Credentials (client id/secret, refresh token) to exchange.
+ * @returns The new access token and its absolute expiry (ms since epoch).
+ * @throws {Error} If the HTTP response is not ok, or the response body has no `access_token`.
+ */
 async function fetchToken(opts: OAuthCredentials): Promise<{ token: string; expiresAt: number }> {
 	const res = await fetch('https://accounts.zoho.com/oauth/v2/token', {
 		method: 'POST',
@@ -54,6 +65,9 @@ async function fetchToken(opts: OAuthCredentials): Promise<{ token: string; expi
 /**
  * Returns a valid Zoho access token, refreshing only when the cached one is
  * within SKEW_MS of expiry. Concurrent callers share a single in-flight request.
+ * @param opts - Credentials (client id/secret, refresh token) identifying the token to fetch.
+ * @returns A valid Zoho access token.
+ * @throws {Error} If the underlying refresh request fails (propagated from {@link fetchToken}).
  */
 export async function getZohoAccessToken(opts: OAuthCredentials): Promise<string> {
 	const key = cacheKey(opts);
@@ -84,7 +98,10 @@ export async function getZohoAccessToken(opts: OAuthCredentials): Promise<string
 	return placeholder.inflight;
 }
 
-/** Evicts the cached token for the given credentials (e.g. after a definitive 401). */
+/**
+ * Evicts the cached token for the given credentials (e.g. after a definitive 401).
+ * @param opts - Credentials identifying the cache entry to evict.
+ */
 export function evictZohoToken(opts: OAuthCredentials): void {
 	cache.delete(cacheKey(opts));
 }

@@ -28,7 +28,11 @@ interface LoginState {
 	returnTo: string;
 }
 
-/** Builds the `/api/auth` sub-app (login, callback, logout, me). */
+/**
+ * Builds the `/api/auth` sub-app (login, callback, logout, me).
+ * @param deps - Auth dependencies (stores, keyring, session/oauth config).
+ * @returns A Hono sub-app mountable at `/api/auth`.
+ */
 export function createAuthRoutes(deps: AuthDeps): Hono {
 	const app = new Hono();
 	const cookieOpts = { httpOnly: true, secure: deps.secureCookies, sameSite: 'Lax' as const, path: '/' };
@@ -173,7 +177,11 @@ export interface Auth {
 	resolveUserToken(c: Context): Promise<string | null>;
 }
 
-/** Bundles the auth sub-app + middleware + per-user token helpers for app.ts and the agent route. */
+/**
+ * Bundles the auth sub-app + middleware + per-user token helpers for app.ts and the agent route.
+ * @param deps - Auth dependencies (stores, keyring, session/oauth config).
+ * @returns The `Auth` bundle exposing routes, middleware, and per-user token resolution.
+ */
 export function createAuth(deps: AuthDeps): Auth {
 	return {
 		routes: createAuthRoutes(deps),

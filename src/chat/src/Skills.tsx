@@ -13,6 +13,13 @@ interface SkillsProps {
   onBack: () => void;
 }
 
+/**
+ * Displays the list of reusable skills discovered under `.agents/skills/`,
+ * fetched from `/api/skills`, including each skill's description, allowed
+ * tools, and compatibility tag.
+ * @param onBack - Called when the "Back" button is clicked.
+ * @returns The skills page, showing a loading state, an empty state, or the list of skill cards.
+ */
 export function Skills({ onBack }: SkillsProps) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);

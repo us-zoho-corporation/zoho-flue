@@ -19,6 +19,14 @@ const ack = v.object({
 	note: v.pipe(v.string(), v.description('Confirmation that the visualization was rendered to the user.')),
 });
 
+/**
+ * Builds the acknowledgement result returned by an a2ui tool after its spec has
+ * been handed off to the frontend for rendering.
+ * @param what - Human-readable description of the surface that was rendered (e.g. "a chart"),
+ * interpolated into the acknowledgement note.
+ * @returns An `{ ok: true, note }` acknowledgement instructing the model to follow up with a
+ * short written takeaway instead of stopping on the tool call.
+ */
 const rendered = (what: string) => ({
 	ok: true,
 	note:
@@ -64,6 +72,10 @@ export const renderChart = defineTool({
 		yAxisLabel: v.optional(v.string()),
 	}),
 	output: ack,
+	/**
+	 * Acknowledges that the model's chart spec (carried in the tool input) was rendered.
+	 * @returns An acknowledgement instructing the model to add a written takeaway.
+	 */
 	run: async () => rendered('a chart'),
 });
 
@@ -92,6 +104,10 @@ export const renderComparisonTable = defineTool({
 		caption: v.optional(v.pipe(v.string(), v.description('One-line note shown under the table.'))),
 	}),
 	output: ack,
+	/**
+	 * Acknowledges that the model's comparison-table spec (carried in the tool input) was rendered.
+	 * @returns An acknowledgement instructing the model to add a written takeaway.
+	 */
 	run: async () => rendered('a comparison table'),
 });
 
@@ -118,6 +134,10 @@ export const renderStatCards = defineTool({
 		cards: v.pipe(v.array(statCard), v.description('The metric cards, shown left to right.')),
 	}),
 	output: ack,
+	/**
+	 * Acknowledges that the model's stat-card spec (carried in the tool input) was rendered.
+	 * @returns An acknowledgement instructing the model to add a written takeaway.
+	 */
 	run: async () => rendered('metric cards'),
 });
 

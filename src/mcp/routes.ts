@@ -12,7 +12,11 @@ export interface McpRoutesDeps {
 	builtins: BuiltinMcpServer[];
 }
 
-/** Client-safe view of a server — never exposes the encrypted token. */
+/**
+ * Client-safe view of a server — never exposes the encrypted token.
+ * @param s - The stored MCP server record.
+ * @returns A projection of `s` with `authTokenEnc` replaced by a boolean `hasAuth` flag.
+ */
 function sanitize(s: McpServer) {
 	return {
 		id: s.id,
@@ -27,7 +31,11 @@ function sanitize(s: McpServer) {
 	};
 }
 
-/** Client-safe view of a built-in server (read-only, always enabled). */
+/**
+ * Client-safe view of a built-in server (read-only, always enabled).
+ * @param b - The built-in server definition.
+ * @returns A projection of `b` in the same shape as {@link sanitize}, with `builtin: true`, `enabled: true`, and zeroed timestamps.
+ */
 function sanitizeBuiltin(b: BuiltinMcpServer) {
 	return {
 		id: b.id,
@@ -42,6 +50,11 @@ function sanitizeBuiltin(b: BuiltinMcpServer) {
 	};
 }
 
+/**
+ * Normalizes an arbitrary request-body value into a supported MCP transport.
+ * @param v - The raw `transport` value from a request body.
+ * @returns `'sse'` if `v` is exactly `'sse'`, otherwise `'http'`.
+ */
 function parseTransport(v: unknown): McpTransport {
 	return v === 'sse' ? 'sse' : 'http';
 }
@@ -50,9 +63,16 @@ function parseTransport(v: unknown): McpTransport {
  * Per-user CRUD for external MCP server connections. Mounted at
  * `/api/mcp-servers` behind `requireUser`, so `c.get('userId')` is always set.
  * Auth tokens are encrypted at rest and never returned to the client.
+ * @param deps - Store, keyring, and built-in server dependencies for the routes.
+ * @returns A Hono app exposing list/create/update/delete/test endpoints for MCP server connections.
  */
 export function createMcpRoutes(deps: McpRoutesDeps): Hono {
 	const app = new Hono();
+	/**
+	 * Reads the authenticated user's id set on the request context by `requireUser`.
+	 * @param c - Minimal request context exposing `get('userId')`.
+	 * @returns The current request's user id.
+	 */
 	const uid = (c: { get: (k: 'userId') => string | undefined }) => c.get('userId') as string;
 
 	app.get('/', async (c) => {

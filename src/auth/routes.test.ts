@@ -7,6 +7,11 @@ import type { AuthDeps } from './session';
 
 const KEY = 'k1:' + Buffer.alloc(32, 7).toString('base64');
 
+/**
+ * Builds a baseline `AuthDeps` fixture (in-memory stores, fixed test keyring/secret,
+ * insecure cookies, dev auth disabled) for exercising the auth routes in tests.
+ * @returns A fresh `AuthDeps` fixture.
+ */
 function makeDeps(): AuthDeps {
 	return {
 		stores: createMemoryStores(),
@@ -24,6 +29,12 @@ function makeDeps(): AuthDeps {
 	};
 }
 
+/**
+ * Wires a test Hono app with the auth middleware, a couple of protected probe
+ * routes, and the auth sub-app mounted at the root.
+ * @param deps - Auth dependencies to build the auth bundle from.
+ * @returns The configured Hono app.
+ */
 function makeApp(deps: AuthDeps) {
 	const app = new Hono();
 	const auth = createAuth(deps);
@@ -34,7 +45,11 @@ function makeApp(deps: AuthDeps) {
 	return app;
 }
 
-/** Reads Set-Cookie headers into a name->value jar. */
+/**
+ * Reads Set-Cookie headers into a name->value jar.
+ * @param res - The response to read `Set-Cookie` headers from.
+ * @returns A map of cookie name to cookie value.
+ */
 function jarFrom(res: Response): Record<string, string> {
 	const list = typeof res.headers.getSetCookie === 'function'
 		? res.headers.getSetCookie()
@@ -47,9 +62,17 @@ function jarFrom(res: Response): Record<string, string> {
 	}
 	return jar;
 }
+/**
+ * Serializes a cookie jar into a `Cookie` request header value.
+ * @param jar - Map of cookie name to cookie value, e.g. from {@link jarFrom}.
+ * @returns The `key=value; key2=value2` header string.
+ */
 const cookieHeader = (jar: Record<string, string>) => Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ');
 
-/** Mocks the Zoho token + userinfo endpoints. */
+/**
+ * Mocks the Zoho token + userinfo endpoints.
+ * @param refreshToken - Refresh token to include in the mocked token response, or `undefined` to omit it (simulating no-refresh-token-on-reconsent).
+ */
 function mockZoho(refreshToken: string | undefined = 'user-refresh') {
 	vi.stubGlobal('fetch', vi.fn(async (url: string) => {
 		if (String(url).includes('/oauth/v2/token')) {
