@@ -11,6 +11,7 @@ import {
   Info,
   Moon,
   Sparkle,
+  Square,
   Sun,
   WarningCircle,
 } from '@phosphor-icons/react';
@@ -36,7 +37,7 @@ function textOf(message: FlueConversationMessage): string {
 }
 
 export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, theme, onToggleTheme }: ThreadProps) {
-  const { messages, isRunning, historyReady, error, sendMessage } = useFlueChat();
+  const { messages, isRunning, historyReady, error, sendMessage, stop } = useFlueChat();
   // This conversation's model runs as the logged-in user, but nobody is signed in.
   const authGate = requiresAuth && !isSignedIn;
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -108,7 +109,7 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, theme, 
               <button className="composer-signin-btn" onClick={onSignIn}>Sign in</button>
             </div>
           ) : (
-            <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} />
+            <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} onStop={stop} />
           )}
         </div>
         <p className="composer-disclaimer">Responses can contain mistakes — verify anything important.</p>
@@ -333,9 +334,10 @@ interface ComposerProps {
   modelLabel: string;
   isRunning: boolean;
   onSend: (text: string) => Promise<void>;
+  onStop: () => void;
 }
 
-function Composer({ modelLabel, isRunning, onSend }: ComposerProps) {
+function Composer({ modelLabel, isRunning, onSend, onStop }: ComposerProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -372,9 +374,15 @@ function Composer({ modelLabel, isRunning, onSend }: ComposerProps) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
         />
-        <button className="composer-send" aria-label="Send" onClick={handleSend} disabled={!value.trim() || isRunning}>
-          <ArrowUp size={17} weight="bold" />
-        </button>
+        {isRunning ? (
+          <button className="composer-send" aria-label="Stop" title="Stop" onClick={onStop}>
+            <Square size={15} weight="fill" />
+          </button>
+        ) : (
+          <button className="composer-send" aria-label="Send" onClick={handleSend} disabled={!value.trim()}>
+            <ArrowUp size={17} weight="bold" />
+          </button>
+        )}
       </div>
       <span className="composer-model" title="Change the model for new conversations in Settings">{modelLabel}</span>
     </div>

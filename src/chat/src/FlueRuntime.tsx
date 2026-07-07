@@ -17,6 +17,7 @@ export interface FlueChat {
   historyReady: boolean;
   error: Error | undefined;
   sendMessage: (text: string) => Promise<void>;
+  stop: () => Promise<void>;
 }
 
 export const FlueChatContext = createContext<FlueChat>({
@@ -25,6 +26,7 @@ export const FlueChatContext = createContext<FlueChat>({
   historyReady: false,
   error: undefined,
   sendMessage: async () => {},
+  stop: async () => {},
 });
 
 export const useFlueChat = () => useContext(FlueChatContext);
