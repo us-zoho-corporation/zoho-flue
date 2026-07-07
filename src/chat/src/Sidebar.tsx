@@ -1,5 +1,6 @@
 import {
   CaretDown,
+  ChatText,
   ClockCounterClockwise,
   GearSix,
   Lightning,
@@ -13,7 +14,8 @@ import {
   User,
 } from '@phosphor-icons/react';
 import { useSidebar } from '@cloudflare/kumo';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Session, UserProfile } from './App.tsx';
 import { useRunningIds } from './conversations.tsx';
 import { ZohoLogo } from './ZohoLogo.tsx';
@@ -72,7 +74,72 @@ export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSe
   const q = search.trim().toLowerCase();
   const recents = [...sessions].reverse().filter((s) => !q || s.title.toLowerCase().includes(q));
 
+  // Chat deletion: right-click a chat for a context menu, or two-finger swipe it
+  // left past a threshold. Either way the row slides out before it's removed.
+  const recentsRef = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<{ id: string; x: number; live: boolean } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [ctx, setCtx] = useState<{ id: string; x: number; y: number } | null>(null);
+  const dragRef = useRef<{ id: string; x: number } | null>(null);
+  const deletingRef = useRef<string | null>(null);
+  const dragMoved = useRef(false);
+  const wheelTimer = useRef<number | undefined>(undefined);
+  const onDeleteRef = useRef(onDelete);
+  onDeleteRef.current = onDelete;
+
+  // Play the slide-out, then actually remove the session.
+  const animateDelete = useCallback((id: string) => {
+    if (deletingRef.current) return;
+    deletingRef.current = id;
+    setDeletingId(id);
+    window.setTimeout(() => {
+      onDeleteRef.current(id);
+      deletingRef.current = null;
+      setDeletingId(null);
+    }, 260);
+  }, []);
+
+  // Two-finger trackpad swipe. Wheel listeners are passive by default (so
+  // preventDefault is a no-op), hence a manual non-passive listener here.
+  useEffect(() => {
+    const el = recentsRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return; // vertical scroll — leave it
+      if (deletingRef.current) return;
+      const row = (e.target as HTMLElement).closest('[data-conv-id]');
+      const id = row?.getAttribute('data-conv-id');
+      if (!id) return;
+      e.preventDefault();
+      setCtx(null);
+      const base = dragRef.current?.id === id ? dragRef.current.x : 0;
+      const x = Math.min(0, base - e.deltaX);
+      dragRef.current = { id, x };
+      dragMoved.current = true;
+      setDrag({ id, x, live: true });
+      if (wheelTimer.current) window.clearTimeout(wheelTimer.current);
+      wheelTimer.current = window.setTimeout(() => {
+        const d = dragRef.current;
+        dragMoved.current = false;
+        dragRef.current = null;
+        setDrag(null);
+        if (d && d.id === id && d.x < -72) animateDelete(id);
+      }, 140);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [animateDelete]);
+
+  // Dismiss the context menu on Escape.
+  useEffect(() => {
+    if (!ctx) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCtx(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [ctx]);
+
   return (
+    <>
     <aside className="sb-aside" style={{ width: open ? 308 : 0 }}>
       <div className="sb-body">
         <div className="sb-header" style={{ padding: '2px 6px 14px' }}>
@@ -93,33 +160,38 @@ export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSe
 
         <div className="sb-label">Recent</div>
 
-        <div className="sidebar-recents" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {recents.map((session) => (
-            <div
-              key={session.id}
-              className="sb-item group"
-              data-active={session.id === activeId}
-              onClick={() => onSelect(session.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span className="sb-item-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {running.has(`${session.modelKey}__${session.id}`) && <span className="sb-running-dot" title="Responding…" />}
-                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</span>
-                </span>
-                <span className="sb-item-sub" style={{ display: 'block' }}>{session.modelLabel} · {timeAgo(session.createdAt)}</span>
-              </span>
-              <button
-                className="sb-del"
-                onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
-                title="Delete conversation"
-                aria-label="Delete conversation"
-                style={{ border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', padding: 2 }}
-              >
-                <Trash size={13} />
-              </button>
-            </div>
-          ))}
+        <div ref={recentsRef} className="sidebar-recents" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {recents.map((session) => {
+            const isDeleting = deletingId === session.id;
+            const isDragging = drag?.id === session.id;
+            const slideX = isDeleting ? '-100%' : isDragging ? `${Math.min(0, drag.x)}px` : '0px';
+            const revealW = isDeleting ? '100%' : isDragging ? `${Math.max(0, -drag.x)}px` : '0px';
+            return (
+              <div key={session.id} className="sb-recent" style={{ opacity: isDeleting ? 0 : 1 }}>
+                <div className="sb-recent-reveal" style={{ width: revealW }}><span>Delete</span></div>
+                <div
+                  className="sb-item"
+                  data-conv-id={session.id}
+                  data-active={session.id === activeId}
+                  onClick={() => { if (dragMoved.current) { dragMoved.current = false; return; } onSelect(session.id); }}
+                  onContextMenu={(e) => { e.preventDefault(); setCtx({ id: session.id, x: e.clientX, y: e.clientY }); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    transform: `translateX(${slideX})`,
+                    transition: `background 140ms var(--ease-out), transform ${isDragging && drag.live ? '0ms' : '240ms var(--ease-out)'}`,
+                  }}
+                >
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className="sb-item-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {running.has(`${session.modelKey}__${session.id}`) && <span className="sb-running-dot" title="Responding…" />}
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.title}</span>
+                    </span>
+                    <span className="sb-item-sub" style={{ display: 'block' }}>{session.modelLabel} · {timeAgo(session.createdAt)}</span>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
           {recents.length === 0 && (
             <div className="sb-item-sub" style={{ padding: '8px 10px' }}>{q ? 'No matching chats' : 'No chats yet'}</div>
           )}
@@ -167,5 +239,24 @@ export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSe
         )}
       </div>
     </aside>
+
+    {ctx && createPortal(
+      <>
+        <div className="sb-ctx-overlay" onClick={() => setCtx(null)} onContextMenu={(e) => { e.preventDefault(); setCtx(null); }} />
+        <div className="sb-ctx" style={{ left: ctx.x, top: ctx.y }}>
+          <button className="sb-ctx-item" onClick={() => { onSelect(ctx.id); setCtx(null); }}>
+            <ChatText size={14} />
+            Open chat
+          </button>
+          <div className="sb-ctx-sep" />
+          <button className="sb-ctx-item sb-ctx-danger" onClick={() => { const id = ctx.id; setCtx(null); animateDelete(id); }}>
+            <Trash size={14} />
+            Delete chat
+          </button>
+        </div>
+      </>,
+      document.body,
+    )}
+    </>
   );
 }
