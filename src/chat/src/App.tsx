@@ -1,7 +1,7 @@
 import { SidebarProvider } from '@cloudflare/kumo';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Agents } from './Agents.tsx';
-import { FlueAssistantBridge } from './FlueRuntime.tsx';
+import { ActiveConversation, useConversationsStore } from './conversations.tsx';
 import { Runs } from './Runs.tsx';
 import { Settings } from './Settings.tsx';
 import { McpServers } from './McpServers.tsx';
@@ -45,9 +45,9 @@ const STORE_KEY = 'flue:sessions:v3';
 // The model new conversations start on — chosen in Settings, persisted here.
 const MODEL_KEY = 'flue:model:v1';
 
-// The single assistant agent. Its behavior is fixed; only the model varies, chosen
-// per conversation and carried in the instance id (`<modelKey>__<id>`).
-const ASSISTANT_AGENT = 'assistant';
+// The assistant agent name is provided to ConversationsProvider in main.tsx. Its
+// behavior is fixed; only the model varies, carried in the instance id
+// (`<modelKey>__<uuid>`) that the ConversationsStore observes.
 
 // Used before /api/models resolves, and if it fails. Matches config.defaultChatModelKey.
 const FALLBACK_MODEL: ModelOption = { key: 'claude', label: 'Claude Sonnet 5', requiresAuth: false };
@@ -93,6 +93,9 @@ export function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [view, setView] = useState<'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs' | 'mcp'>('chat');
   const [theme, setTheme] = useState<Theme>(loadTheme);
+  // App-level conversation store: durable observations live here, decoupled from
+  // the view, so a response keeps streaming in its own thread across view switches.
+  const store = useConversationsStore();
 
   useEffect(() => { applyTheme(theme); saveTheme(theme); }, [theme]);
   const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
@@ -172,7 +175,14 @@ export function App() {
     setProfile(null);
   }, []);
 
-  const active = activeSession ?? makeSession(defaultModel);
+  // The conversation instance id the assistant addresses (`<modelKey>__<uuid>`).
+  const activeConvId = activeSession ? `${activeSession.modelKey}__${activeSession.id}` : '';
+
+  // Tell the store which conversation is active; it keeps that one (and any
+  // still-running ones) observed, releasing idle connections on its own.
+  useEffect(() => {
+    if (activeConvId) store.setActive(activeConvId);
+  }, [activeConvId, store]);
 
   // Login is required: hold until the auth check resolves, then show the Welcome
   // login screen (wired to the Zoho OAuth flow) unless the user is signed in.
@@ -197,57 +207,59 @@ export function App() {
     <>
       <div className="ambient" />
     <SidebarProvider collapsible="offcanvas" defaultOpen className="h-screen overflow-hidden">
-      <FlueAssistantBridge
-        key={active.id}
-        agentName={ASSISTANT_AGENT}
-        conversationId={`${active.modelKey}__${active.id}`}
-        onFirstMessage={handleFirstMessage}
-      >
-        <Sidebar
-          sessions={sessions}
-          activeId={activeId}
-          profile={profile}
-          onSignIn={handleSignIn}
-          onSignOut={handleSignOut}
-          onSelect={(id) => { setView('chat'); setActiveId(id); }}
-          onNew={() => { setView('chat'); handleNewSession(); }}
-          onDelete={handleDeleteSession}
-          onSettings={() => setView('settings')}
-          onWorkflows={() => setView('workflows')}
-          onSkills={() => setView('skills')}
-          onAgents={() => setView('agents')}
-          onRuns={() => setView('runs')}
-          onMcp={() => setView('mcp')}
-        />
-        {view === 'settings'
-          ? <Settings
-              profile={profile}
-              models={models}
-              modelsLoading={modelsLoading}
-              modelKey={preferredModelKey}
-              onModelChange={handleModelChange}
-              onBack={() => setView('chat')}
-            />
-          : view === 'workflows'
-          ? <Workflows onBack={() => setView('chat')} />
-          : view === 'skills'
-          ? <Skills onBack={() => setView('chat')} />
-          : view === 'agents'
-          ? <Agents onBack={() => setView('chat')} />
-          : view === 'runs'
-          ? <Runs onBack={() => setView('chat')} />
-          : view === 'mcp'
-          ? <McpServers onBack={() => setView('chat')} onSignIn={handleSignIn} />
-          : <Thread
-              modelLabel={active.modelLabel}
-              requiresAuth={models.find((m) => m.key === active.modelKey)?.requiresAuth ?? false}
-              isSignedIn={!!profile}
-              onSignIn={handleSignIn}
-              theme={theme}
-              onToggleTheme={toggleTheme}
-            />
-        }
-      </FlueAssistantBridge>
+      <Sidebar
+        sessions={sessions}
+        activeId={activeId}
+        profile={profile}
+        onSignIn={handleSignIn}
+        onSignOut={handleSignOut}
+        onSelect={(id) => { setView('chat'); setActiveId(id); }}
+        onNew={() => { setView('chat'); handleNewSession(); }}
+        onDelete={handleDeleteSession}
+        onSettings={() => setView('settings')}
+        onWorkflows={() => setView('workflows')}
+        onSkills={() => setView('skills')}
+        onAgents={() => setView('agents')}
+        onRuns={() => setView('runs')}
+        onMcp={() => setView('mcp')}
+      />
+
+      {view === 'settings'
+        ? <Settings
+            profile={profile}
+            models={models}
+            modelsLoading={modelsLoading}
+            modelKey={preferredModelKey}
+            onModelChange={handleModelChange}
+            onBack={() => setView('chat')}
+          />
+        : view === 'workflows'
+        ? <Workflows onBack={() => setView('chat')} />
+        : view === 'skills'
+        ? <Skills onBack={() => setView('chat')} />
+        : view === 'agents'
+        ? <Agents onBack={() => setView('chat')} />
+        : view === 'runs'
+        ? <Runs onBack={() => setView('chat')} />
+        : view === 'mcp'
+        ? <McpServers onBack={() => setView('chat')} onSignIn={handleSignIn} />
+        : null}
+
+      {/* The store keeps the active + any running conversations observed; the
+          active conversation's live view is fed to Thread here. Switching views
+          or chats never tears down a running conversation. */}
+      {view === 'chat' && activeSession && (
+        <ActiveConversation convId={activeConvId} onFirstMessage={handleFirstMessage}>
+          <Thread
+            modelLabel={activeSession.modelLabel}
+            requiresAuth={models.find((m) => m.key === activeSession.modelKey)?.requiresAuth ?? false}
+            isSignedIn={!!profile}
+            onSignIn={handleSignIn}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+        </ActiveConversation>
+      )}
     </SidebarProvider>
     </>
   );
