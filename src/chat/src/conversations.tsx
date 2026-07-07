@@ -76,6 +76,17 @@ export class ConversationsStore {
     try { await this.client.agents.abort(this.agentName, convId); } catch { /* ignore */ }
   }
 
+  /** Closes every observation and clears all state (e.g. on logout). */
+  reset() {
+    for (const convId of [...this.entries.keys()]) this.close(convId);
+    this.activeId = undefined;
+    this.views.clear();
+    this.senders.clear();
+    this.stoppers.clear();
+    this.running = new Set();
+    this.emit();
+  }
+
   private ensureOpen(convId: string): Entry {
     const existing = this.entries.get(convId);
     if (existing) return existing;

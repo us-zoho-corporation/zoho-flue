@@ -35,6 +35,10 @@ const corsOptions = { origin: config.corsOrigins, credentials: true };
 app.use('/agents/*', cors(corsOptions));
 app.use('/api/*', cors(corsOptions));
 
+// Agent conversations are per-user data: require a valid session to read or
+// drive them, so transcripts aren't reachable by conversation id when logged out.
+app.use('/agents/*', auth.requireUser);
+
 // Attach the logged-in user (if any) to every /api/* request.
 app.use('/api/*', auth.optionalUser);
 

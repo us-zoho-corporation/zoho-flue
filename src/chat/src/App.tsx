@@ -172,8 +172,15 @@ export function App() {
 
   const handleSignOut = useCallback(async () => {
     try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+    // Don't leave conversations behind on a shared device: drop the local chat
+    // list, close the store's observations, and start from a clean slate.
+    try { localStorage.removeItem(STORE_KEY); } catch {}
+    store.reset();
+    const fresh = makeSession(FALLBACK_MODEL);
+    setSessions([fresh]);
+    setActiveId(fresh.id);
     setProfile(null);
-  }, []);
+  }, [store]);
 
   // The conversation instance id the assistant addresses (`<modelKey>__<uuid>`).
   const activeConvId = activeSession ? `${activeSession.modelKey}__${activeSession.id}` : '';
