@@ -132,9 +132,31 @@ body { background: var(--page-bg); color: var(--txt1); }
 .sb-item-sub { font: 400 12px/1.4 var(--font-sans); color: var(--txt3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 .sb-running-dot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse-dot 1.4s ease-in-out infinite; }
 @keyframes pulse-dot { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
-.sb-item .sb-del { opacity: 0; transition: opacity 140ms; color: var(--txt3); }
-.sb-item:hover .sb-del { opacity: 0.7; }
-.sb-item .sb-del:hover { opacity: 1; color: var(--danger); }
+/* Chat deletion: swipe-left reveals a red "Delete" behind the row; right-click opens a menu. */
+.sb-recent { position: relative; flex-shrink: 0; border-radius: 10px; overflow: hidden; transition: opacity 240ms var(--ease-out); }
+.sb-recent .sb-item { position: relative; }
+.sb-recent-reveal {
+  position: absolute; top: 0; right: 0; bottom: 0; overflow: hidden; border-radius: 10px;
+  background: var(--danger); display: flex; align-items: center; justify-content: flex-end; box-sizing: border-box;
+}
+.sb-recent-reveal span { font: 600 12px var(--font-sans); color: #fff; letter-spacing: 0.02em; margin-right: 14px; }
+
+.sb-ctx-overlay { position: fixed; inset: 0; z-index: 1000; }
+.sb-ctx {
+  position: fixed; z-index: 1001; min-width: 180px; box-sizing: border-box; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px; border-radius: 12px;
+  background: var(--glass); backdrop-filter: blur(var(--blur)) saturate(1.5); -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
+  border: 1px solid var(--gb); box-shadow: 0 12px 32px rgba(17, 20, 24, 0.18);
+}
+.sb-ctx-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 8px 10px;
+  border: none; border-radius: 8px; background: transparent; color: var(--txt1);
+  font: 500 13px var(--font-sans); cursor: pointer; text-align: left;
+}
+.sb-ctx-item:hover { background: var(--hover); }
+.sb-ctx-danger { color: var(--danger); }
+.sb-ctx-danger:hover { background: rgba(228, 37, 39, 0.10); }
+.sb-ctx-sep { height: 1px; background: var(--gb2); margin: 2px 6px; }
 .sb-ws-toggle {
   display: flex; align-items: center; gap: 6px; padding: 12px 8px 6px;
   border-top: 1px solid var(--gb2); margin-top: 8px; cursor: pointer; user-select: none;

@@ -84,7 +84,26 @@ try {
     .catch(() => false);
   check('response persisted after switching away and back', persisted);
 
-  // 5) Stop button aborts a running turn (composer returns from Stop → Send).
+  // 5) Delete a chat via the right-click context menu (slide-out, then removed).
+  const beforeCount = await page.locator('.sb-recent').count();
+  const targetRow = page.locator(`.sb-recent .sb-item:has-text("${firstTitle}")`).first();
+  await targetRow.click({ button: 'right' });
+  const menuShown = await page.waitForSelector('.sb-ctx', { timeout: 5_000 }).then(() => true).catch(() => false);
+  check('right-click opens the chat context menu', menuShown);
+  await page.locator('.sb-ctx-danger').click();
+  // Wait for the slide-out to finish and the row to leave the DOM.
+  const removed = await page
+    .waitForFunction(
+      (t) => ![...document.querySelectorAll('.sb-recent .sb-item')].some((el) => el.textContent.includes(t)),
+      firstTitle,
+      { timeout: 5_000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  const afterCount = await page.locator('.sb-recent').count();
+  check('deleting from the menu removes the chat', removed && afterCount < beforeCount, `${beforeCount} → ${afterCount}`);
+
+  // 6) Stop button aborts a running turn (composer returns from Stop → Send).
   await page.locator('.sb-newchat').click();
   await page.waitForSelector('.welcome h1', { timeout: 10_000 }).catch(() => {});
   await composer.click();
@@ -104,7 +123,7 @@ try {
     check('stop aborts the run (composer returns to Send)', backToSend);
   }
 
-  // 6) Sign out → login screen returns and the local chat list is cleared.
+  // 7) Sign out → login screen returns and the local chat list is cleared.
   await page.locator('button[aria-label="Sign out"]').click();
   const loggedOut = await page
     .waitForSelector('text=Welcome to Zoho AI', { timeout: 15_000 })
