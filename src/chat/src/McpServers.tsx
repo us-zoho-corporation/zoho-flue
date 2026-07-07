@@ -9,6 +9,7 @@ interface McpServerView {
   transport: 'http' | 'sse';
   enabled: boolean;
   hasAuth: boolean;
+  builtin: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -155,6 +156,7 @@ export function McpServers({ onBack, onSignIn }: McpServersProps) {
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ font: '600 14px var(--font-sans)', color: 'var(--txt1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
+                          {s.builtin && <span className="mcp-badge">Built-in</span>}
                           <span className="mcp-badge">{s.transport === 'sse' ? 'SSE' : 'HTTP'}</span>
                           {s.hasAuth && <span className="mcp-badge">auth</span>}
                         </div>
@@ -162,21 +164,25 @@ export function McpServers({ onBack, onSignIn }: McpServersProps) {
                         {t.status === 'ok' && <div className="mcp-test-ok"><CheckCircle size={12} weight="fill" /> {t.tools} tool{t.tools === 1 ? '' : 's'}</div>}
                         {t.status === 'error' && <div className="mcp-test-err"><WarningCircle size={12} weight="fill" /> {t.error}</div>}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                        <button className="icon-btn" style={{ width: 'auto', padding: '0 10px', fontSize: 12, fontWeight: 600 }} onClick={() => test(s.id)} disabled={t.status === 'testing'}>
-                          {t.status === 'testing' ? 'Testing…' : 'Test'}
-                        </button>
-                        <button className="mcp-toggle" data-on={s.enabled} onClick={() => toggle(s)} title={s.enabled ? 'Enabled' : 'Disabled'} aria-label="Toggle enabled"><span /></button>
-                        <button className="icon-btn" onClick={() => { setForm({ id: s.id, name: s.name, url: s.url, transport: s.transport, authToken: '', enabled: s.enabled }); setFormError(''); setFormTest({ status: 'idle' }); }} title="Edit" aria-label="Edit"><PencilSimple size={15} /></button>
-                        {confirmDelete === s.id ? (
-                          <>
-                            <button className="icon-btn" style={{ width: 'auto', padding: '0 8px', color: 'var(--danger)', fontSize: 12, fontWeight: 600 }} onClick={() => remove(s.id)}>Delete</button>
-                            <button className="icon-btn" style={{ width: 'auto', padding: '0 8px', fontSize: 12 }} onClick={() => setConfirmDelete(null)}>Cancel</button>
-                          </>
-                        ) : (
-                          <button className="icon-btn mcp-del" onClick={() => setConfirmDelete(s.id)} title="Delete" aria-label="Delete"><Trash size={15} /></button>
-                        )}
-                      </div>
+                      {s.builtin ? (
+                        <span style={{ font: '500 12px var(--font-sans)', color: 'var(--txt3)', flexShrink: 0 }}>Read-only</span>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                          <button className="icon-btn" style={{ width: 'auto', padding: '0 10px', fontSize: 12, fontWeight: 600 }} onClick={() => test(s.id)} disabled={t.status === 'testing'}>
+                            {t.status === 'testing' ? 'Testing…' : 'Test'}
+                          </button>
+                          <button className="mcp-toggle" data-on={s.enabled} onClick={() => toggle(s)} title={s.enabled ? 'Enabled' : 'Disabled'} aria-label="Toggle enabled"><span /></button>
+                          <button className="icon-btn" onClick={() => { setForm({ id: s.id, name: s.name, url: s.url, transport: s.transport, authToken: '', enabled: s.enabled }); setFormError(''); setFormTest({ status: 'idle' }); }} title="Edit" aria-label="Edit"><PencilSimple size={15} /></button>
+                          {confirmDelete === s.id ? (
+                            <>
+                              <button className="icon-btn" style={{ width: 'auto', padding: '0 8px', color: 'var(--danger)', fontSize: 12, fontWeight: 600 }} onClick={() => remove(s.id)}>Delete</button>
+                              <button className="icon-btn" style={{ width: 'auto', padding: '0 8px', fontSize: 12 }} onClick={() => setConfirmDelete(null)}>Cancel</button>
+                            </>
+                          ) : (
+                            <button className="icon-btn mcp-del" onClick={() => setConfirmDelete(s.id)} title="Delete" aria-label="Delete"><Trash size={15} /></button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -215,6 +221,11 @@ function McpForm({ form, setForm, onSave, onCancel, onTest, test, error }: {
           <input type="password" value={form.authToken} onChange={(e) => set({ authToken: e.target.value })} placeholder="Bearer token (optional)" />
         </label>
       </div>
+      <p className="mcp-hint">
+        {form.transport === 'sse'
+          ? 'SSE — the older transport (an event stream plus a POST-back channel). Choose this only if your server doesn’t support Streamable HTTP.'
+          : 'Streamable HTTP — the current MCP transport (a single endpoint). Recommended for most servers.'}
+      </p>
       {error && <div className="mcp-test-err"><WarningCircle size={12} weight="fill" /> {error}</div>}
       {test.status === 'ok' && <div className="mcp-test-ok"><CheckCircle size={12} weight="fill" /> Connected — {test.tools} tool{test.tools === 1 ? '' : 's'}</div>}
       {test.status === 'error' && <div className="mcp-test-err"><WarningCircle size={12} weight="fill" /> {test.error}</div>}

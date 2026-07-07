@@ -10,16 +10,17 @@ vi.mock('./connect', async (orig) => {
 });
 const { createMcpRoutes } = await import('./routes');
 const { probeMcpServer } = await import('./connect');
+import type { BuiltinMcpServer } from './builtins';
 
 const KEY = 'k1:' + Buffer.alloc(32, 7).toString('base64');
 
-function makeApp() {
+function makeApp(builtins: BuiltinMcpServer[] = []) {
 	const stores = createMemoryStores();
 	const keyring = parseKeyring(KEY);
 	const app = new Hono();
 	// Simulate requireUser: userId from a test header (default 'u1').
 	app.use('*', async (c, next) => { c.set('userId', c.req.header('x-test-user') || 'u1'); await next(); });
-	app.route('/', createMcpRoutes({ stores, keyring }));
+	app.route('/', createMcpRoutes({ stores, keyring, builtins }));
 	return { app, stores, keyring };
 }
 
@@ -56,6 +57,15 @@ describe('MCP server CRUD', () => {
 		await post(app, '/', { name: 'Theirs', url: 'https://b.example.com/mcp' }, 'u2');
 		const mine = await (await app.request('/', { headers: { 'x-test-user': 'u1' } })).json();
 		expect(mine.servers.map((s: { name: string }) => s.name)).toEqual(['Mine']);
+	});
+
+	it('lists built-in servers first, flagged read-only', async () => {
+		const { app } = makeApp([{ id: 'builtin:zoho-kb', name: 'Zoho Knowledge Base', url: 'https://help-docs.zoho-forge.com/mcp', transport: 'http', hasAuth: true }]);
+		await post(app, '/', { name: 'Mine', url: 'https://a.example.com/mcp' });
+		const { servers } = await (await app.request('/')).json() as { servers: { id: string; builtin: boolean }[] };
+		expect(servers.map((s) => s.builtin)).toEqual([true, false]);
+		expect(servers[0]).toMatchObject({ id: 'builtin:zoho-kb', builtin: true, enabled: true, hasAuth: true });
+		expect(servers[0]).not.toHaveProperty('authTokenEnc');
 	});
 
 	it('updates fields, keeps the token when omitted, and clears it when null', async () => {

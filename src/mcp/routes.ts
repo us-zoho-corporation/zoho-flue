@@ -3,10 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { decryptSecret, encryptSecret, type Keyring } from '../auth/crypto';
 import type { McpServer, Stores } from '../store/types';
 import { probeMcpServer, validateMcpUrl, type McpTransport } from './connect';
+import type { BuiltinMcpServer } from './builtins';
 
 export interface McpRoutesDeps {
 	stores: Stores;
 	keyring: Keyring;
+	/** App-owned, read-only servers surfaced alongside the user's connections. */
+	builtins: BuiltinMcpServer[];
 }
 
 /** Client-safe view of a server — never exposes the encrypted token. */
@@ -18,8 +21,24 @@ function sanitize(s: McpServer) {
 		transport: s.transport,
 		enabled: s.enabled,
 		hasAuth: s.authTokenEnc !== null,
+		builtin: false,
 		createdAt: s.createdAt,
 		updatedAt: s.updatedAt,
+	};
+}
+
+/** Client-safe view of a built-in server (read-only, always enabled). */
+function sanitizeBuiltin(b: BuiltinMcpServer) {
+	return {
+		id: b.id,
+		name: b.name,
+		url: b.url,
+		transport: b.transport,
+		enabled: true,
+		hasAuth: b.hasAuth,
+		builtin: true,
+		createdAt: 0,
+		updatedAt: 0,
 	};
 }
 
@@ -38,7 +57,8 @@ export function createMcpRoutes(deps: McpRoutesDeps): Hono {
 
 	app.get('/', async (c) => {
 		const servers = await deps.stores.mcpServers.listForUser(uid(c));
-		return c.json({ servers: servers.map(sanitize) });
+		// Built-in (read-only) servers first, then the user's own connections.
+		return c.json({ servers: [...deps.builtins.map(sanitizeBuiltin), ...servers.map(sanitize)] });
 	});
 
 	app.post('/', async (c) => {
