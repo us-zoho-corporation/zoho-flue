@@ -1,16 +1,15 @@
 import type { User, UserStore } from '../types';
-import type { CatalystDataStoreClient } from './data-store-client';
-import { findRowIdByKey, getOneByKey, num, textOrNull, upsertByKey } from './helpers';
-import type { Row } from './zcql';
+import type { CatalystNoSqlClient, Item } from './nosql-client';
+import { numOf, strOf, strOrNull } from './nosql-helpers';
 
 const TABLE = 'Users';
 
 /**
- * Maps a domain `User` to its `Users` table row representation.
+ * Maps a domain `User` to its `Users` NoSQL item (partition key = `UserId`).
  * @param user - The user record to serialize.
- * @returns The row payload ready for `insertRows`/`updateRows`.
+ * @returns The item payload; a null `photoId` is omitted (absent decodes back to null).
  */
-function toRow(user: User): Row {
+function toItem(user: User): Item {
 	return {
 		UserId: user.userId,
 		Email: user.email,
@@ -24,38 +23,38 @@ function toRow(user: User): Row {
 }
 
 /**
- * Maps a raw `Users` table row to the domain `User` shape.
- * @param row - The raw Data Store row.
+ * Maps a raw `Users` NoSQL item to the domain `User` shape.
+ * @param item - The decoded NoSQL item.
  * @returns The parsed user record.
  */
-function fromRow(row: Row): User {
+function fromItem(item: Item): User {
 	return {
-		userId: String(row.UserId),
-		email: String(row.Email ?? ''),
-		displayName: String(row.DisplayName ?? ''),
-		firstName: String(row.FirstName ?? ''),
-		lastName: String(row.LastName ?? ''),
-		photoId: textOrNull(row.PhotoId),
-		createdAt: num(row.CreatedAt),
-		lastLoginAt: num(row.LastLoginAt),
+		userId: strOf(item.UserId),
+		email: strOf(item.Email),
+		displayName: strOf(item.DisplayName),
+		firstName: strOf(item.FirstName),
+		lastName: strOf(item.LastName),
+		photoId: strOrNull(item.PhotoId),
+		createdAt: numOf(item.CreatedAt),
+		lastLoginAt: numOf(item.LastLoginAt),
 	};
 }
 
 export class CatalystUserStore implements UserStore {
 	/**
-	 * Creates a store backed by the `Users` Data Store table.
-	 * @param client - Data Store REST client to read/write through.
+	 * Creates a store backed by the `Users` NoSQL table.
+	 * @param client - NoSQL REST client to read/write through.
 	 */
-	constructor(private readonly client: CatalystDataStoreClient) {}
+	constructor(private readonly client: CatalystNoSqlClient) {}
 
 	/**
-	 * Inserts or replaces a user row keyed by `user.userId`.
+	 * Inserts or replaces a user, keyed by `user.userId` (put/overwrite).
 	 * @param user - The user record to store.
 	 * @returns The same `user` record passed in.
-	 * @throws {Error} If the lookup query or the insert/update request fails.
+	 * @throws {Error} If the insert request fails.
 	 */
 	async upsert(user: User): Promise<User> {
-		await upsertByKey(this.client, TABLE, 'UserId', user.userId, toRow(user));
+		await this.client.insertItem(TABLE, toItem(user));
 		return user;
 	}
 
@@ -63,21 +62,20 @@ export class CatalystUserStore implements UserStore {
 	 * Fetches a user by their Zoho user id (ZUID).
 	 * @param userId - User id (ZUID) to look up.
 	 * @returns The user record, or `null` if none exists.
-	 * @throws {Error} If the underlying ZCQL query fails.
+	 * @throws {Error} If the underlying query fails.
 	 */
 	async getById(userId: string): Promise<User | null> {
-		const row = await getOneByKey(this.client, TABLE, 'UserId', userId);
-		return row ? fromRow(row) : null;
+		const item = await this.client.getItem(TABLE, { partition: userId });
+		return item ? fromItem(item) : null;
 	}
 
 	/**
 	 * Updates a user's last-login timestamp. A no-op if the user doesn't exist.
 	 * @param userId - User id (ZUID) to update.
 	 * @param at - New last-login timestamp (epoch ms).
-	 * @throws {Error} If the lookup query or the update request fails.
+	 * @throws {Error} If the update request fails.
 	 */
 	async touchLogin(userId: string, at: number): Promise<void> {
-		const rowId = await findRowIdByKey(this.client, TABLE, 'UserId', userId);
-		if (rowId) await this.client.updateRows(TABLE, [{ ROWID: rowId, LastLoginAt: at }]);
+		await this.client.updateItem(TABLE, { partition: userId }, { LastLoginAt: at });
 	}
 }

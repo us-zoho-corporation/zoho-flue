@@ -1,75 +1,72 @@
 import type { StoredToken, TokenStore } from '../types';
-import type { CatalystDataStoreClient } from './data-store-client';
-import { findRowIdByKey, getOneByKey, num, upsertByKey } from './helpers';
-import type { Row } from './zcql';
+import type { CatalystNoSqlClient, Item } from './nosql-client';
+import { numOf, strOf } from './nosql-helpers';
 
 const TABLE = 'UserTokens';
 
 /**
- * Maps a domain `StoredToken` to its `UserTokens` table row representation.
+ * Maps a domain `StoredToken` to its `UserTokens` NoSQL item (partition = `UserId`).
  * @param token - The token record to serialize.
- * @returns The row payload ready for `insertRows`/`updateRows`; `scopes` is space-joined.
+ * @returns The item payload; `scopes` is stored as a native list.
  */
-function toRow(token: StoredToken): Row {
+function toItem(token: StoredToken): Item {
 	return {
 		UserId: token.userId,
 		RefreshTokenEnc: token.refreshTokenEnc,
-		Scopes: token.scopes.join(' '),
+		Scopes: token.scopes,
 		AccountsServer: token.accountsServer,
 		UpdatedAt: token.updatedAt,
 	};
 }
 
 /**
- * Maps a raw `UserTokens` table row to the domain `StoredToken` shape.
- * @param row - The raw Data Store row.
- * @returns The parsed token record; `scopes` is split on whitespace, or `[]` if empty.
+ * Maps a raw `UserTokens` NoSQL item to the domain `StoredToken` shape.
+ * @param item - The decoded NoSQL item.
+ * @returns The parsed token record; `scopes` falls back to `[]` when absent.
  */
-function fromRow(row: Row): StoredToken {
-	const scopes = String(row.Scopes ?? '').trim();
+function fromItem(item: Item): StoredToken {
 	return {
-		userId: String(row.UserId),
-		refreshTokenEnc: String(row.RefreshTokenEnc ?? ''),
-		scopes: scopes ? scopes.split(/\s+/) : [],
-		accountsServer: String(row.AccountsServer ?? ''),
-		updatedAt: num(row.UpdatedAt),
+		userId: strOf(item.UserId),
+		refreshTokenEnc: strOf(item.RefreshTokenEnc),
+		scopes: Array.isArray(item.Scopes) ? item.Scopes.map(String) : [],
+		accountsServer: strOf(item.AccountsServer),
+		updatedAt: numOf(item.UpdatedAt),
 	};
 }
 
 export class CatalystTokenStore implements TokenStore {
 	/**
-	 * Creates a store backed by the `UserTokens` Data Store table.
-	 * @param client - Data Store REST client to read/write through.
+	 * Creates a store backed by the `UserTokens` NoSQL table.
+	 * @param client - NoSQL REST client to read/write through.
 	 */
-	constructor(private readonly client: CatalystDataStoreClient) {}
+	constructor(private readonly client: CatalystNoSqlClient) {}
 
 	/**
-	 * Inserts or replaces a user's stored OAuth token.
+	 * Inserts or replaces a user's stored OAuth token (put/overwrite).
 	 * @param token - The token record to store, keyed by `token.userId`.
-	 * @throws {Error} If the lookup query or the insert/update request fails.
+	 * @throws {Error} If the insert request fails.
 	 */
 	async put(token: StoredToken): Promise<void> {
-		await upsertByKey(this.client, TABLE, 'UserId', token.userId, toRow(token));
+		await this.client.insertItem(TABLE, toItem(token));
 	}
 
 	/**
 	 * Fetches a user's stored OAuth token.
 	 * @param userId - User id (ZUID) to look up.
 	 * @returns The token record, or `null` if none is stored.
-	 * @throws {Error} If the underlying ZCQL query fails.
+	 * @throws {Error} If the underlying query fails.
 	 */
 	async get(userId: string): Promise<StoredToken | null> {
-		const row = await getOneByKey(this.client, TABLE, 'UserId', userId);
-		return row ? fromRow(row) : null;
+		const item = await this.client.getItem(TABLE, { partition: userId });
+		return item ? fromItem(item) : null;
 	}
 
 	/**
 	 * Deletes a user's stored OAuth token. A no-op if none exists.
 	 * @param userId - User id (ZUID) whose token should be removed.
-	 * @throws {Error} If the lookup query or the delete request fails.
+	 * @throws {Error} If the delete request fails.
 	 */
 	async delete(userId: string): Promise<void> {
-		const rowId = await findRowIdByKey(this.client, TABLE, 'UserId', userId);
-		if (rowId) await this.client.deleteRow(TABLE, rowId);
+		await this.client.deleteItem(TABLE, { partition: userId });
 	}
 }

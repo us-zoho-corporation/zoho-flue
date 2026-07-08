@@ -190,5 +190,29 @@ export function runStoresContract(name: string, makeStores: () => Stores): void 
 				expect((await stores.mcpServers.listForUser('zuid-1')).map((s) => s.id)).toEqual(['b', 'c', 'a']);
 			});
 		});
+
+		describe('secrets', () => {
+			it('returns null before any create', async () => {
+				expect(await stores.secrets.get('SESSION_SECRET')).toBeNull();
+			});
+
+			it('creates and reads back', async () => {
+				await stores.secrets.createIfAbsent('SESSION_SECRET', 'abc');
+				expect(await stores.secrets.get('SESSION_SECRET')).toBe('abc');
+			});
+
+			it('createIfAbsent keeps the first-written value on a repeated call', async () => {
+				expect(await stores.secrets.createIfAbsent('SESSION_SECRET', 'first')).toBe('first');
+				expect(await stores.secrets.createIfAbsent('SESSION_SECRET', 'second')).toBe('first');
+				expect(await stores.secrets.get('SESSION_SECRET')).toBe('first');
+			});
+
+			it('isolates values by key', async () => {
+				await stores.secrets.createIfAbsent('SESSION_SECRET', 'a');
+				await stores.secrets.createIfAbsent('DATA_ENCRYPTION_KEY', 'b');
+				expect(await stores.secrets.get('SESSION_SECRET')).toBe('a');
+				expect(await stores.secrets.get('DATA_ENCRYPTION_KEY')).toBe('b');
+			});
+		});
 	});
 }

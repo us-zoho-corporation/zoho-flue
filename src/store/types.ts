@@ -87,6 +87,22 @@ export interface McpServerStore {
 	delete(userId: string, id: string): Promise<void>;
 }
 
+/**
+ * Durable app-wide secrets (session-cookie signing key, refresh-token
+ * encryption keyring) — deliberately not env vars, so they survive AppSail
+ * redeploys/restarts and are shared across instances. See `src/auth/secrets-bootstrap.ts`.
+ */
+export interface SecretsStore {
+	/** Fetches a previously-created secret value by key, if any. */
+	get(key: string): Promise<string | null>;
+	/**
+	 * Creates `key` with `value` if it doesn't exist yet. If another process
+	 * already created it (a boot-time race), returns that existing value instead
+	 * of `value` — every caller converges on the same winning secret.
+	 */
+	createIfAbsent(key: string, value: string): Promise<string>;
+}
+
 /** Composition of every repository — the single dependency the app wires in. */
 export interface Stores {
 	users: UserStore;
@@ -94,4 +110,5 @@ export interface Stores {
 	sessions: SessionStore;
 	preferences: PreferenceStore;
 	mcpServers: McpServerStore;
+	secrets: SecretsStore;
 }

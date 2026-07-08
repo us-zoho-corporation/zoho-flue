@@ -23,6 +23,7 @@ export function getStores(): Stores {
 				projectId: config.catalystProjectId,
 				orgId: config.catalystOrgId,
 				environment: config.catalystEnvironment,
+				cacheSegmentId: config.catalystCacheSegment,
 				oauth: {
 					clientId: config.zohoClientId,
 					clientSecret: config.zohoClientSecret,
