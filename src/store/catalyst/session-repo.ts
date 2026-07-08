@@ -1,97 +1,148 @@
 import type { Session, SessionStore } from '../types';
-import type { CatalystDataStoreClient } from './data-store-client';
-import { findRowIdByKey, findRowIdsByKey, getOneByKey, num } from './helpers';
-import type { Row } from './zcql';
+import { CatalystCacheClient, msToExpiryHours } from './cache-client';
 
-const TABLE = 'Sessions';
+// Cache keys (max 50 chars): a session body per id, plus a per-user index set.
+// `sess:` + a 43-char base64url session id = 48 chars, within the limit.
 
 /**
- * Maps a domain `Session` to its `Sessions` table row representation.
- * @param session - The session to serialize.
- * @returns The row payload ready for `insertRows`.
+ * Builds the cache key for a session body.
+ * @param sessionId - Opaque session id.
+ * @returns The `sess:{sessionId}` cache key.
  */
-function toRow(session: Session): Row {
-	return {
-		SessionId: session.sessionId,
-		UserId: session.userId,
-		CreatedAt: session.createdAt,
-		ExpiresAt: session.expiresAt,
-		LastSeenAt: session.lastSeenAt,
-	};
+const sessionKey = (sessionId: string): string => `sess:${sessionId}`;
+
+/**
+ * Builds the cache key for a user's session-id index set.
+ * @param userId - Owning user's id (ZUID).
+ * @returns The `usess:{userId}` cache key.
+ */
+const userIndexKey = (userId: string): string => `usess:${userId}`;
+// The per-user index is pinned to Cache's 48h max so it always outlives the
+// user's (<= 2h) sessions — otherwise a logout-everywhere could miss a live one.
+const INDEX_EXPIRY_HOURS = 48;
+
+/**
+ * Serializes a session to its cache value.
+ * @param session - The session to serialize.
+ * @returns The JSON string stored under `sess:{id}`.
+ */
+function toValue(session: Session): string {
+	return JSON.stringify(session);
 }
 
 /**
- * Maps a raw `Sessions` table row to the domain `Session` shape.
- * @param row - The raw Data Store row.
- * @returns The parsed session.
+ * Parses a cached session value back to a `Session`.
+ * @param raw - The stored JSON string, or `null`.
+ * @returns The parsed session, or `null` if absent/unparseable.
  */
-function fromRow(row: Row): Session {
-	return {
-		sessionId: String(row.SessionId),
-		userId: String(row.UserId),
-		createdAt: num(row.CreatedAt),
-		expiresAt: num(row.ExpiresAt),
-		lastSeenAt: num(row.LastSeenAt),
-	};
+function fromValue(raw: string | null): Session | null {
+	if (!raw) return null;
+	try { return JSON.parse(raw) as Session; } catch { return null; }
+}
+
+/**
+ * Computes the Cache `expiry_in_hours` for a session from its absolute expiry.
+ * @param expiresAt - Session expiry (epoch ms).
+ * @returns Whole-hours TTL (1–48).
+ */
+function sessionExpiryHours(expiresAt: number): number {
+	return msToExpiryHours(expiresAt - Date.now());
 }
 
 export class CatalystSessionStore implements SessionStore {
 	/**
-	 * Creates a store backed by the `Sessions` Data Store table.
-	 * @param client - Data Store REST client to read/write through.
+	 * Creates a store backed by a Catalyst Cache segment.
+	 * @param cache - Cache REST client to read/write through.
 	 */
-	constructor(private readonly client: CatalystDataStoreClient) {}
+	constructor(private readonly cache: CatalystCacheClient) {}
 
 	/**
-	 * Inserts a new session row.
+	 * Inserts a new session and records it in the owner's index set.
 	 * @param session - The session to create.
-	 * @throws {Error} If the insert request fails.
+	 * @throws {Error} If a cache write fails.
 	 */
 	async create(session: Session): Promise<void> {
-		await this.client.insertRows(TABLE, [toRow(session)]);
+		await this.cache.put(sessionKey(session.sessionId), toValue(session), sessionExpiryHours(session.expiresAt));
+		await this.addToIndex(session.userId, session.sessionId);
 	}
 
 	/**
 	 * Fetches a session by its id.
 	 * @param sessionId - Opaque session id (the signed-cookie value).
-	 * @returns The session, or `null` if it doesn't exist.
-	 * @throws {Error} If the underlying ZCQL query fails.
+	 * @returns The session, or `null` if absent/expired.
+	 * @throws {Error} If the cache read fails.
 	 */
 	async get(sessionId: string): Promise<Session | null> {
-		const row = await getOneByKey(this.client, TABLE, 'SessionId', sessionId);
-		return row ? fromRow(row) : null;
+		return fromValue(await this.cache.get(sessionKey(sessionId)));
 	}
 
 	/**
-	 * Updates a session's last-seen and expiry timestamps. A no-op if the session
-	 * doesn't exist.
+	 * Updates a session's last-seen and expiry timestamps (re-extending its TTL).
+	 * A no-op if the session doesn't exist.
 	 * @param sessionId - Opaque session id (the signed-cookie value).
 	 * @param lastSeenAt - New last-seen timestamp (epoch ms).
 	 * @param expiresAt - New expiry timestamp (epoch ms).
-	 * @throws {Error} If the lookup query or the update request fails.
+	 * @throws {Error} If the cache read/write fails.
 	 */
 	async touch(sessionId: string, lastSeenAt: number, expiresAt: number): Promise<void> {
-		const rowId = await findRowIdByKey(this.client, TABLE, 'SessionId', sessionId);
-		if (rowId) await this.client.updateRows(TABLE, [{ ROWID: rowId, LastSeenAt: lastSeenAt, ExpiresAt: expiresAt }]);
+		const session = await this.get(sessionId);
+		if (!session) return;
+		const updated: Session = { ...session, lastSeenAt, expiresAt };
+		await this.cache.update(sessionKey(sessionId), toValue(updated), sessionExpiryHours(expiresAt));
 	}
 
 	/**
-	 * Deletes a session by its id. A no-op if it doesn't exist.
+	 * Deletes a session by its id. A no-op if it doesn't exist. The owner's index
+	 * entry is left to lapse (deleting an already-gone session is a no-op).
 	 * @param sessionId - Opaque session id (the signed-cookie value).
-	 * @throws {Error} If the lookup query or the delete request fails.
+	 * @throws {Error} If the cache delete fails.
 	 */
 	async delete(sessionId: string): Promise<void> {
-		const rowId = await findRowIdByKey(this.client, TABLE, 'SessionId', sessionId);
-		if (rowId) await this.client.deleteRow(TABLE, rowId);
+		await this.cache.delete(sessionKey(sessionId));
 	}
 
 	/**
-	 * Deletes every session belonging to a user (e.g. on logout-everywhere), in parallel.
+	 * Deletes every session belonging to a user (logout-everywhere) via the index
+	 * set, then clears the index.
 	 * @param userId - User id (ZUID) whose sessions should be removed.
-	 * @throws {Error} If the lookup query or any delete request fails.
+	 * @throws {Error} If a cache read/delete fails.
 	 */
 	async deleteAllForUser(userId: string): Promise<void> {
-		const rowIds = await findRowIdsByKey(this.client, TABLE, 'UserId', userId);
-		await Promise.all(rowIds.map((id) => this.client.deleteRow(TABLE, id)));
+		const ids = await this.readIndex(userId);
+		await Promise.all(ids.map((id) => this.cache.delete(sessionKey(id))));
+		await this.cache.delete(userIndexKey(userId));
+	}
+
+	/**
+	 * Reads a user's session-id index set.
+	 * @param userId - User id (ZUID).
+	 * @returns The session ids currently indexed for the user (may include lapsed ids).
+	 * @throws {Error} If the cache read fails.
+	 */
+	private async readIndex(userId: string): Promise<string[]> {
+		const raw = await this.cache.get(userIndexKey(userId));
+		if (!raw) return [];
+		try {
+			const parsed: unknown = JSON.parse(raw);
+			return Array.isArray(parsed) ? parsed.map(String) : [];
+		} catch {
+			return [];
+		}
+	}
+
+	/**
+	 * Adds a session id to a user's index set (read-modify-write). Under Flue's
+	 * single-owner deployment concurrent writes for one user are not expected;
+	 * a lost update would only drop an id from logout-everywhere, not corrupt state.
+	 * @param userId - Owning user's id (ZUID).
+	 * @param sessionId - Session id to index.
+	 * @throws {Error} If the cache read/write fails.
+	 */
+	private async addToIndex(userId: string, sessionId: string): Promise<void> {
+		const existing = await this.readIndex(userId);
+		if (existing.includes(sessionId)) return;
+		const next = JSON.stringify([...existing, sessionId]);
+		if (existing.length === 0) await this.cache.put(userIndexKey(userId), next, INDEX_EXPIRY_HOURS);
+		else await this.cache.update(userIndexKey(userId), next, INDEX_EXPIRY_HOURS);
 	}
 }

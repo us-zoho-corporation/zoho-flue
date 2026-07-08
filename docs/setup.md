@@ -65,3 +65,7 @@ These task workflows are owned by skills — activate the relevant one rather th
 - **New agent** → `add-agent` skill. (Providers live in `src/providers/`, never in the agent module.)
 - **New provider** → `add-provider` skill. (Wire it into `registerProviders()` in `src/providers/index.ts`; set `contextWindow` for compaction.)
 - **New skill** → `add-skill` skill. (agentskills.io spec + four-tier context conventions.)
+
+## Deploying
+
+See [Deploying to Zoho Catalyst](deploy-catalyst.md) for the AppSail setup, required Console steps, and NoSQL/Data Store/Stratus creation.

@@ -2,15 +2,21 @@ import { listAgents, listRuns } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { readdir, readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { config } from './config';
 import { registerProviders } from './providers';
 import { getAuth } from './auth';
 import { parseKeyring } from './auth/crypto';
+import { initPersistedSecrets } from './auth/secrets-bootstrap';
 import { builtinMcpServers } from './mcp/builtins';
 import { createMcpRoutes } from './mcp/routes';
 import { getStores } from './store';
+
+// Requests under these prefixes are owned by API/agent routing, never the
+// static chat UI — checked by the static-file fallback below.
+const APP_ROUTE_PREFIXES = ['/api/', '/agents/', '/workflows/', '/runs/', '/health'];
+const CHAT_DIST_DIR = resolve('src/chat/dist');
 
 if (config._devWarnings.noApiSecret) {
 	console.warn('[security] FLUE_API_SECRET is not set — all /api/* routes are unauthenticated. Set this in production.');
@@ -30,6 +36,15 @@ const app = new Hono();
 // User login + Catalyst-backed persistence. `stores` and `auth` are the only
 // wiring the app needs; both depend on interfaces, not on Catalyst directly.
 const stores = getStores();
+
+// Session-cookie secret + refresh-token encryption keyring: loaded from the
+// durable secrets store (generated once on first boot — see secrets-bootstrap.ts)
+// so they survive AppSail redeploys/restarts. Must resolve before getAuth() or
+// anything else reads config.sessionSecret / config.dataEncryptionKey.
+const { sessionSecret, dataEncryptionKey } = await initPersistedSecrets(stores);
+config.sessionSecret = sessionSecret;
+config.dataEncryptionKey = dataEncryptionKey;
+
 const auth = getAuth();
 
 app.get('/health', (c) => c.json({ ok: true }));
@@ -183,6 +198,56 @@ app.get('/api/photo', auth.requireUser, async (c) => {
 			'cache-control': 'private, max-age=3600',
 		},
 	});
+});
+
+const STATIC_MIME_TYPES: Record<string, string> = {
+	'.html': 'text/html; charset=utf-8',
+	'.js': 'text/javascript; charset=utf-8',
+	'.mjs': 'text/javascript; charset=utf-8',
+	'.css': 'text/css; charset=utf-8',
+	'.json': 'application/json; charset=utf-8',
+	'.svg': 'image/svg+xml',
+	'.png': 'image/png',
+	'.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg',
+	'.gif': 'image/gif',
+	'.webp': 'image/webp',
+	'.ico': 'image/x-icon',
+	'.woff': 'font/woff',
+	'.woff2': 'font/woff2',
+	'.ttf': 'font/ttf',
+	'.map': 'application/json; charset=utf-8',
+	'.txt': 'text/plain; charset=utf-8',
+};
+
+// Serves the built chat UI (static assets + SPA fallback) same-origin, so the
+// browser never needs cross-origin calls to the API — sidesteps the
+// documented Slate<->AppSail CORS/auth-layer issue. Registered as middleware
+// (not a terminal route) so it falls through via `next()` to the `flue()`
+// mount below for anything it doesn't own — GET /agents/:name/:id (event
+// streaming), /runs/:runId, etc. — instead of shadowing them.
+app.use('*', async (c, next) => {
+	if (c.req.method !== 'GET' && c.req.method !== 'HEAD') return next();
+
+	const reqPath = c.req.path;
+	if (APP_ROUTE_PREFIXES.some((prefix) => reqPath === prefix || reqPath.startsWith(prefix))) return next();
+
+	const relPath = reqPath === '/' ? 'index.html' : reqPath.slice(1);
+	const resolved = resolve(CHAT_DIST_DIR, relPath);
+	const rel = relative(CHAT_DIST_DIR, resolved);
+	// Reject anything that escapes CHAT_DIST_DIR (defeats `..`-style path traversal).
+	if (rel.startsWith('..') || isAbsolute(rel)) return next();
+
+	const isFile = (await stat(resolved).catch(() => null))?.isFile() ?? false;
+	const filePath = isFile ? resolved : join(CHAT_DIST_DIR, 'index.html');
+	try {
+		const body = await readFile(filePath);
+		const contentType = STATIC_MIME_TYPES[extname(filePath).toLowerCase()] ?? 'application/octet-stream';
+		return new Response(body, { headers: { 'content-type': contentType } });
+	} catch {
+		// Chat UI not built (e.g. local `flue dev` without `pnpm chat:build`) — fall through.
+		return next();
+	}
 });
 
 app.route('/', flue());

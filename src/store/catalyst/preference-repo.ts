@@ -1,70 +1,63 @@
 import type { Preferences, PreferenceStore } from '../types';
-import type { CatalystDataStoreClient } from './data-store-client';
-import { getOneByKey, num, upsertByKey } from './helpers';
-import type { Row } from './zcql';
+import type { CatalystNoSqlClient, Item } from './nosql-client';
+import { numOf, strOf } from './nosql-helpers';
 
 const TABLE = 'Preferences';
 
 /**
- * Maps a domain `Preferences` object to its `Preferences` table row representation.
+ * Maps a domain `Preferences` object to its `Preferences` NoSQL item (partition = `UserId`).
  * @param prefs - The preferences to serialize.
- * @returns The row payload ready for `insertRows`/`updateRows`; `data` is JSON-stringified.
+ * @returns The item payload; `data` is stored as a native nested map.
  */
-function toRow(prefs: Preferences): Row {
+function toItem(prefs: Preferences): Item {
 	return {
 		UserId: prefs.userId,
 		PreferredModelKey: prefs.preferredModelKey,
-		Data: JSON.stringify(prefs.data ?? {}),
+		Data: prefs.data ?? {},
 		UpdatedAt: prefs.updatedAt,
 	};
 }
 
 /**
- * Maps a raw `Preferences` table row to the domain `Preferences` shape.
- * @param row - The raw Data Store row.
- * @returns The parsed preferences; `data` falls back to `{}` if the stored JSON is
- * missing, corrupt, or not a plain object, rather than throwing.
+ * Maps a raw `Preferences` NoSQL item to the domain `Preferences` shape.
+ * @param item - The decoded NoSQL item.
+ * @returns The parsed preferences; `data` falls back to `{}` when absent or not a plain object.
  */
-function fromRow(row: Row): Preferences {
-	let data: Record<string, unknown> = {};
-	try {
-		const parsed: unknown = JSON.parse(String(row.Data ?? '{}'));
-		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) data = parsed as Record<string, unknown>;
-	} catch {
-		// Corrupt/legacy blob — fall back to empty prefs rather than throwing.
-	}
+function fromItem(item: Item): Preferences {
+	const raw = item.Data;
+	const data = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
 	return {
-		userId: String(row.UserId),
-		preferredModelKey: String(row.PreferredModelKey ?? ''),
+		userId: strOf(item.UserId),
+		preferredModelKey: strOf(item.PreferredModelKey),
 		data,
-		updatedAt: num(row.UpdatedAt),
+		updatedAt: numOf(item.UpdatedAt),
 	};
 }
 
 export class CatalystPreferenceStore implements PreferenceStore {
 	/**
-	 * Creates a store backed by the `Preferences` Data Store table.
-	 * @param client - Data Store REST client to read/write through.
+	 * Creates a store backed by the `Preferences` NoSQL table.
+	 * @param client - NoSQL REST client to read/write through.
 	 */
-	constructor(private readonly client: CatalystDataStoreClient) {}
+	constructor(private readonly client: CatalystNoSqlClient) {}
 
 	/**
 	 * Fetches a user's stored preferences.
 	 * @param userId - User id (ZUID) to look up.
 	 * @returns The preferences, or `null` if none have been stored yet.
-	 * @throws {Error} If the underlying ZCQL query fails.
+	 * @throws {Error} If the underlying query fails.
 	 */
 	async get(userId: string): Promise<Preferences | null> {
-		const row = await getOneByKey(this.client, TABLE, 'UserId', userId);
-		return row ? fromRow(row) : null;
+		const item = await this.client.getItem(TABLE, { partition: userId });
+		return item ? fromItem(item) : null;
 	}
 
 	/**
-	 * Inserts or replaces a user's preferences row.
+	 * Inserts or replaces a user's preferences (put/overwrite).
 	 * @param prefs - The preferences to store, keyed by `prefs.userId`.
-	 * @throws {Error} If the lookup query or the insert/update request fails.
+	 * @throws {Error} If the insert request fails.
 	 */
 	async put(prefs: Preferences): Promise<void> {
-		await upsertByKey(this.client, TABLE, 'UserId', prefs.userId, toRow(prefs));
+		await this.client.insertItem(TABLE, toItem(prefs));
 	}
 }

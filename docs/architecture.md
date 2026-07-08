@@ -12,7 +12,7 @@ Built on [Flue](https://flueframework.com/), a Node.js agent framework. Source l
 | `src/tools/` | Application-controlled tool definitions | below |
 | `src/providers/` | Model/LLM provider registrations only | [providers.md](providers.md) |
 | `src/auth/` | OAuth / credential helpers (Zoho service-account token, per-user login, sessions, crypto) | below |
-| `src/store/` | Persistence — Catalyst-agnostic repository interfaces + Catalyst Data Store / in-memory implementations | [auth.md](auth.md) |
+| `src/store/` | Persistence — Catalyst-agnostic repository interfaces + Catalyst NoSQL/Cache/Data Store / in-memory implementations, plus Flue's `PersistenceAdapter` | [auth.md](auth.md), [flue-persistence.md](flue-persistence.md) |
 | `src/mcp/` | Programmatic MCP server clients | [mcp-clients.md](mcp-clients.md) |
 | `src/chat/` | Browser chat UI | below |
 | **a2ui** | Generative UI streaming | [a2ui.md](a2ui.md) |
@@ -66,21 +66,29 @@ Tools hold credentials in closures — the model only sees parameter names and d
 
 Credential/OAuth helpers — distinct from `src/providers/` (which is only Flue model providers).
 
-- `zoho-auth.ts` — the **service-account** token cache: exchanges a refresh token for a live Zoho access token (cached, refreshed 5 min before expiry, concurrent-refresh dedup). Consumed by the Catalyst GLM provider, the Catalyst Data Store client, and — keyed per user — by `getUserToken`.
+- `zoho-auth.ts` — the **service-account** token cache: exchanges a refresh token for a live Zoho access token (cached, refreshed 5 min before expiry, concurrent-refresh dedup). Consumed by the Catalyst GLM provider, the Catalyst NoSQL/Data Store/Stratus clients, and — keyed per user — by `getUserToken`.
 - `zoho-oauth.ts` — the **per-user** authorization-code flow (PKCE + `state`): build the authorize URL, exchange the code for tokens, refresh a user's token.
 - `routes.ts` — Hono sub-app for `GET /api/auth/login`, `GET /api/auth/callback`, `POST /api/auth/logout`, `GET /api/auth/me`.
 - `session.ts` — `optionalUser` / `requireUser` middleware (signed cookie → session → user), `getUserToken(userId)`, and scope helpers.
 - `crypto.ts` — AES-256-GCM encrypt/decrypt for refresh tokens at rest (keyId-tagged envelope, multi-key for rotation).
 
-See [auth.md](auth.md) for the login flow, session model, scope management, and Data Store schema.
+See [auth.md](auth.md) for the login flow, session model, scope management, and storage schema.
 
 ## Store (`src/store/`)
 
-Persistence behind Catalyst-agnostic **repository interfaces** (`types.ts`): `UserStore`, `TokenStore`, `SessionStore`, `PreferenceStore`, composed as `Stores`. Two implementations — `store/catalyst/` (Catalyst Data Store over REST, using the service-account admin token, same pattern as the GLM provider) and `store/memory/` (in-memory, for unit tests and local dev before tables exist). `getStores()` selects the backend by `config.storeBackend`. The app depends only on the interfaces, so the backend is swappable.
+Persistence behind Catalyst-agnostic **repository interfaces** (`types.ts`): `UserStore`, `TokenStore`, `SessionStore`, `PreferenceStore`, `McpServerStore`, `SecretsStore`, composed as `Stores`. Two implementations — `store/catalyst/` and `store/memory/` (in-memory, for unit tests and local dev before tables exist). `getStores()` selects the backend by `config.storeBackend`. The app depends only on the interfaces, so the backend is swappable.
+
+The Catalyst backend right-sizes each store to the service that fits its access pattern: the four durable key-value / partition-based stores run on **NoSQL** (via a `nosql-client.ts` REST client mirroring the GLM provider's token pattern), `sessions` run on **Cache** (short-lived, per-request, auto-expiring, ≤2h), and `secrets` runs on **Data Store** for atomic first-writer-wins. All share one service-account admin token. Full schema and rationale: [auth.md](auth.md).
+
+Separately, `src/store/catalyst/flue/` implements Flue's own `PersistenceAdapter` (conversation/run/event/submission streams on NoSQL, attachments on Stratus), default-exported from `src/db.ts` so Flue wires durable engine state into the Node server — see [flue-persistence.md](flue-persistence.md).
+
+`SecretsStore` backs `src/auth/secrets-bootstrap.ts`'s `initPersistedSecrets()`, which `app.ts` awaits at startup (before `getAuth()`) to resolve `config.sessionSecret` / `config.dataEncryptionKey`. These are generated once on first boot and reused thereafter — durable with the Catalyst backend, ephemeral-per-process with the memory backend (same as local dev today).
 
 ## Chat UI (`src/chat/`)
 
 A Vite + React app (Kumo components) that renders live agent conversations through `@flue/react`'s `useFlueAgent`. `FlueRuntime.tsx` adapts Flue's durable event stream into view state; `Thread.tsx` renders messages, tool activity, and a2ui surfaces. Served in dev with `pnpm chat` (proxies `/api` and `/agents` to the agent server on `:3583`).
+
+In production, `pnpm chat:build` outputs static assets to `src/chat/dist`, and `app.ts` serves them same-origin (static files + SPA fallback to `index.html`) ahead of the `flue()` mount — see [Deploying to Catalyst](deploy-catalyst.md).
 
 ## Code Conventions
 

@@ -3,6 +3,7 @@ import type {
 	McpServerStore,
 	Preferences,
 	PreferenceStore,
+	SecretsStore,
 	Session,
 	SessionStore,
 	StoredToken,
@@ -208,6 +209,31 @@ class MemoryMcpServerStore implements McpServerStore {
 	}
 }
 
+class MemorySecretsStore implements SecretsStore {
+	private readonly rows = new Map<string, string>();
+
+	/**
+	 * Fetches a previously-created secret value by key.
+	 * @param key - Secret key to look up.
+	 * @returns The stored value, or `null` if `key` has never been created.
+	 */
+	async get(key: string): Promise<string | null> {
+		return this.rows.get(key) ?? null;
+	}
+	/**
+	 * Creates `key` with `value` if it doesn't already have one.
+	 * @param key - Secret key to create.
+	 * @param value - Value to store if `key` doesn't exist yet.
+	 * @returns The stored value for `key` — `value`, or the pre-existing one.
+	 */
+	async createIfAbsent(key: string, value: string): Promise<string> {
+		const existing = this.rows.get(key);
+		if (existing !== undefined) return existing;
+		this.rows.set(key, value);
+		return value;
+	}
+}
+
 /**
  * Builds a fresh in-memory `Stores` instance.
  * @returns A new `Stores` with independent, empty in-memory backing maps.
@@ -219,5 +245,6 @@ export function createMemoryStores(): Stores {
 		sessions: new MemorySessionStore(),
 		preferences: new MemoryPreferenceStore(),
 		mcpServers: new MemoryMcpServerStore(),
+		secrets: new MemorySecretsStore(),
 	};
 }

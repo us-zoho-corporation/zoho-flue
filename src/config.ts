@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-
 /**
  * Reads an environment variable, throwing at startup if it is absent.
  * @param key - Name of the environment variable to read.
@@ -11,12 +9,6 @@ function required(key: string): string {
 	if (!val) throw new Error(`Missing required environment variable: ${key}`);
 	return val;
 }
-
-// Cookie/token secrets are generated in-memory at startup, never configured.
-// They're opaque values that mean nothing as configuration — see config.sessionSecret /
-// config.dataEncryptionKey below for the (process-scoped) durability implication.
-const _sessionSecret = randomBytes(32).toString('base64');
-const _dataEncryptionKey = `ephemeral:${randomBytes(32).toString('base64')}`;
 
 export const config = {
 	// OAuth + Catalyst — read from environment at startup
@@ -32,23 +24,34 @@ export const config = {
 	// reach the Catalyst GLM (Zoho GLM 4.7 Flash) endpoint.
 	zohoOAuthRedirectUri: required('ZOHO_OAUTH_REDIRECT_URI'),
 	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ,QuickML.deployment.READ',
-	// HMAC secret for signed session/login cookies — generated in-memory at startup
-	// (not configurable). Process-scoped: sessions don't survive a restart or span
-	// instances, which is fine for this single-process app.
-	sessionSecret: _sessionSecret,
-	// Session lifetime; default 30 days.
-	sessionTtlSeconds: Number(process.env['SESSION_TTL_SECONDS'] ?? 60 * 60 * 24 * 30),
-	// AES-256-GCM keyring for encrypting refresh tokens at rest — generated in-memory
-	// at startup (not configurable). Process-scoped: tokens encrypted at rest (Catalyst
-	// store) can't be decrypted after a restart, so users re-auth — an acceptable
-	// tradeoff for not carrying an opaque key as configuration. Parsed by src/auth/crypto.ts.
-	dataEncryptionKey: _dataEncryptionKey,
+	// HMAC secret for signed session/login cookies. Not an env var — loaded (and,
+	// on first boot, generated) from the durable secrets store by
+	// `initPersistedSecrets()`, which app.ts awaits before anything reads this.
+	// Placeholder until then; never used un-resolved.
+	sessionSecret: '',
+	// Session lifetime; default 2 hours. Sliding (idle) timeout — each throttled
+	// touch re-extends it — so it doubles as the Cache entry TTL for the
+	// Cache-backed session store (well within Cache's 48h cap).
+	sessionTtlSeconds: Number(process.env['SESSION_TTL_SECONDS'] ?? 60 * 60 * 2),
+	// AES-256-GCM keyring for encrypting refresh tokens at rest. Not an env var —
+	// loaded/generated the same way as sessionSecret above. Parsed by src/auth/crypto.ts.
+	dataEncryptionKey: '',
 
 	// Catalyst Data Store (REST persistence for users/tokens/sessions/preferences).
 	// Reached with the service-account admin token (same creds as the GLM provider).
 	catalystProjectId: required('CATALYST_PROJECT_ID'),
 	catalystEnvironment: process.env['CATALYST_ENVIRONMENT'] ?? 'Development',
 	catalystApiBaseUrl: process.env['CATALYST_API_BASE_URL'] ?? 'https://api.catalyst.zoho.com/baas/v1',
+	// Numeric Cache segment id backing the session store (console-created, or the
+	// project's default segment). Sessions are short-lived (see sessionTtlSeconds),
+	// so Cache — not NoSQL — is their home.
+	catalystCacheSegment: process.env['CATALYST_CACHE_SEGMENT'] ?? '',
+	// Stratus bucket (globally-unique name) for Flue attachment bytes, and the
+	// bucket's object host — copy the exact URL from the Catalyst console (the
+	// Development env appends `-development`). Both required only when the Flue
+	// persistence adapter runs (STORE_BACKEND=catalyst); empty is fine for dev.
+	catalystStratusBucket: process.env['CATALYST_STRATUS_BUCKET'] ?? '',
+	catalystStratusObjectBaseUrl: process.env['CATALYST_STRATUS_OBJECT_URL'] ?? '',
 	// Which store implementation to use: 'catalyst' (Data Store) or 'memory' (dev/tests).
 	storeBackend: (process.env['STORE_BACKEND'] ?? 'catalyst') as 'catalyst' | 'memory',
 	// Deployment environment. Only 'local' and 'CI' enable the dev-login bypass below.

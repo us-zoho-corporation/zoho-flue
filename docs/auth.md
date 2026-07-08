@@ -8,9 +8,12 @@ admin token.
 ## Layers
 
 - **`src/store/`** — Catalyst-agnostic repository interfaces (`types.ts`): `UserStore`,
-  `TokenStore`, `SessionStore`, `PreferenceStore`, composed as `Stores`. Two backends:
-  `store/catalyst/` (Data Store over REST, admin service token) and `store/memory/`
-  (in-memory, for tests/local dev). `getStores()` picks one via `STORE_BACKEND`.
+  `TokenStore`, `SessionStore`, `PreferenceStore`, `McpServerStore`, `SecretsStore`, composed
+  as `Stores`. Two backends: `store/catalyst/` (the four durable user stores on **NoSQL**,
+  `sessions` on **Cache**, `secrets` on **Data Store**, all over REST with the admin service
+  token) and `store/memory/` (in-memory, for tests/local dev). `getStores()` picks one via
+  `STORE_BACKEND`. Each store runs on the service best fit to its access pattern — see the
+  schema below.
 - **`src/auth/zoho-oauth.ts`** — the authorization-code flow (PKCE + `state`): build
   the consent URL, exchange the code, fetch the user profile.
 - **`src/auth/session.ts`** — signed-cookie sessions, `optionalUser`/`requireUser`
@@ -35,9 +38,11 @@ admin token.
 
 ## Sessions
 
-Opaque 256-bit id in a signed `flue_sid` cookie; the `Sessions` row is authoritative
-(logout/expiry are server-enforced). Sliding expiry re-issues at most every 5 minutes.
-`SESSION_TTL_SECONDS` sets lifetime (default 30 days). When `FLUE_API_SECRET` is set, the
+Opaque 256-bit id in a signed `flue_sid` cookie; the server-side session is authoritative
+(logout/expiry are server-enforced). Sliding expiry re-issues at most every 5 minutes, so
+`SESSION_TTL_SECONDS` (default **2 hours**) is an idle timeout — each touch re-extends it.
+The short, per-request, auto-expiring nature is why sessions live in **Cache** rather than a
+durable store. When `FLUE_API_SECRET` is set, the
 `/api/*` gate accepts **either** a valid session **or** the secret; `/api/auth/*` is always
 public so users can log in.
 
@@ -60,31 +65,48 @@ has no stored token, callers get `reauth_required` (401).
 ## Token encryption
 
 Refresh tokens are AES-256-GCM encrypted; the envelope is `v1:<keyId>:<iv>:<tag>:<ct>`.
-The keyring (`keyId -> 32-byte key`, parsed by `src/auth/crypto.ts`) is generated
-in-memory at startup rather than configured — the active key encrypts new writes and any
-key in the ring can decrypt. Because it's process-scoped, a restart mints a fresh key:
-ciphertext written under the old key can no longer be decrypted, so those users simply
-re-authenticate on their next request. This keeps encryption-at-rest without carrying an
-opaque key as configuration.
+The keyring (`keyId -> 32-byte key`, parsed by `src/auth/crypto.ts`) is loaded via
+`src/auth/secrets-bootstrap.ts` from the `AppSecrets` table — generated once on first
+boot, reused by every later boot. The active key encrypts new writes and any key in the
+ring can decrypt. It survives AppSail redeploys and restarts, so previously-encrypted
+refresh tokens stay decryptable.
 
-## Data Store schema (case-sensitive)
+## Storage schema (case-sensitive)
 
-Create these four tables in the Catalyst console (or via MCP) before setting
-`STORE_BACKEND=catalyst`. We write our own epoch-ms columns and treat Catalyst's
-`CREATEDTIME` as advisory (avoids the project-timezone offset trap). All access is
-admin-scoped via the service token, so App User table permissions are not required.
+Each store runs on the Catalyst service that fits its access pattern:
 
-- **Users**: `UserId`(unique) · `Email` · `DisplayName` · `FirstName` · `LastName` · `PhotoId` · `CreatedAt`(BigInt) · `LastLoginAt`(BigInt)
-- **UserTokens**: `UserId`(unique) · `RefreshTokenEnc` · `Scopes` · `AccountsServer` · `UpdatedAt`(BigInt)
-- **Sessions**: `SessionId`(unique) · `UserId` · `CreatedAt`(BigInt) · `ExpiresAt`(BigInt) · `LastSeenAt`(BigInt)
-- **Preferences**: `UserId`(unique) · `PreferredModelKey` · `Data`(text/JSON) · `UpdatedAt`(BigInt)
-- **McpServers**: `Id`(unique) · `UserId` · `Name` · `Url` · `Transport` · `AuthTokenEnc` · `Enabled`(boolean) · `CreatedAt`(BigInt) · `UpdatedAt`(BigInt)
+- **NoSQL** for the four durable key-value / partition-based stores.
+- **Cache** for `sessions` — short-lived, read on every request, and auto-expiring.
+- **Data Store** for `secrets` — its read-ordered insert gives `createIfAbsent`
+  clean atomic first-writer-wins.
+
+We write our own epoch-ms attributes; all access is admin-scoped via the service
+token. Create these in the console (NoSQL tables/indexes and Cache segments are
+Console-only) before setting `STORE_BACKEND=catalyst`. Partition/sort keys are
+**String** unless noted.
+
+NoSQL tables:
+
+- **Users** — partition `UserId`. Attributes: `Email`, `DisplayName`, `FirstName`, `LastName`, `PhotoId`, `CreatedAt`, `LastLoginAt`.
+- **UserTokens** — partition `UserId`. Attributes: `RefreshTokenEnc`, `Scopes`(list), `AccountsServer`, `UpdatedAt`.
+- **Preferences** — partition `UserId`. Attributes: `PreferredModelKey`, `Data`(map), `UpdatedAt`.
+- **McpServers** — partition `UserId`, sort `Id`. Attributes: `Name`, `Url`, `Transport`, `AuthTokenEnc`, `Enabled`(boolean), `CreatedAt`, `UpdatedAt`.
+
+Cache segment (sessions):
+
+- One segment (numeric id via `CATALYST_CACHE_SEGMENT`, or the project's default). The store writes a `sess:{sessionId}` value per session (TTL = the session's remaining lifetime) plus a `usess:{userId}` index set (pinned to Cache's 48h max) that `deleteAllForUser` reads to revoke every session for a user. The index is maintained with read-modify-write; under Flue's single-owner deployment a concurrent lost update could at worst drop an id from logout-everywhere, never corrupt a session — an accepted tradeoff for putting the hot-path session read in Cache.
+
+Data Store table:
+
+- **AppSecrets**: `Key`(unique) · `Value` · `UpdatedAt`(BigInt) — durable app secrets (session-cookie signing key, refresh-token encryption keyring), generated once on first boot by `src/auth/secrets-bootstrap.ts`. Never exposed via any API route.
+
+(Flue's own engine state uses a further set of NoSQL tables + a Stratus bucket — see [flue-persistence.md](flue-persistence.md).)
 
 ## Setup checklist
 
 1. Register `ZOHO_OAUTH_REDIRECT_URI` as an Authorized Redirect URI on the Zoho OAuth client.
-2. Ensure the **service-account** refresh token carries `ZohoCatalyst.tables.rows.{CREATE,READ,UPDATE,DELETE}` + `ZohoCatalyst.zcql.CREATE` (for Data Store writes).
-3. Create the four tables above; set `STORE_BACKEND=catalyst`.
-4. Nothing else to configure: the signed-cookie secret and the refresh-token encryption key are generated in-memory at startup (not env vars — see [environment.md](environment.md)). They're process-scoped, so sessions and tokens encrypted at rest don't survive a restart; users re-authenticate.
+2. Ensure the **service-account** refresh token carries `ZohoCatalyst.nosql.item.{CREATE,READ,UPDATE}` (NoSQL stores), `ZohoCatalyst.cache.{CREATE,READ,DELETE}` (Cache sessions), and `ZohoCatalyst.tables.rows.{CREATE,READ,UPDATE,DELETE}` + `ZohoCatalyst.zcql.CREATE` (the `AppSecrets` Data Store table).
+3. Create the NoSQL tables above and the `AppSecrets` Data Store table, and note the Cache segment id (the default segment works). Set `STORE_BACKEND=catalyst` and `CATALYST_CACHE_SEGMENT` to that segment id.
+4. Nothing else to configure: the signed-cookie secret and the refresh-token encryption key are bootstrapped automatically into `AppSecrets` on first boot.
 
 Config keys: [environment.md](environment.md). Smoke test: `tests/smoke/` (live Development).
