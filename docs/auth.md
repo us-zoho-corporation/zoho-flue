@@ -55,6 +55,30 @@ space-separated; sent to Zoho comma-delimited). Gate scope-dependent features wi
 (identity) and `QuickML.deployment.READ` (so the user's token can reach the Zoho GLM 4.7
 Flash endpoint).
 
+## Connecting products (Settings)
+
+`config.zohoProducts` is the catalog of Zoho products (CRM, Desk) the chat's Settings
+panel offers as one-click connections, each with its full scope bundle (kept in sync with
+the `## Scopes` sections of `.agents/skills/zoho-crm-*`/`zoho-desk-*`). `GET
+/api/auth/connections` reports, per product, whether the signed-in user's stored grant
+already covers that bundle. The Settings UI's "Connect" button sends the user through
+`GET /api/auth/login?scopes=<product scopes>&returnTo=/?view=settings` — the existing
+incremental-auth path, with `returnTo` pointed back at the Settings view (the chat's
+`resolveInitialView()` in `App.tsx` reads `?view=` on load and strips it) — so a
+missing-scope failure (like a Desk tool call 401ing because the user never granted
+`Desk.tickets.READ`) can be resolved by connecting that product from Settings instead of
+a full re-login. `POST /api/auth/connections/:key/disconnect` drops a product's scope
+bundle from the stored grant (locally only — it doesn't call Zoho's revoke endpoint, so
+re-connecting doesn't need a fresh consent screen).
+
+Note: the `zoho_api` tool (`src/tools/zoho-api.ts`) used by the `assistant` agent for
+CRM/Desk calls always authenticates with the **service-account** credentials
+(`config.zohoClientId/zohoClientSecret/zohoRefreshToken`, set up via the `zoho-oauth`
+skill), not the signed-in user's per-user token above — so a broken/expired
+`ZOHO_OAUTH_REFRESH_TOKEN` surfaces as an `invalid_code` tool error regardless of what
+any user has connected in Settings. The per-user connections here currently only gate
+the GLM chat model's `QuickML.deployment.READ` scope and any future per-user Zoho API use.
+
 ## Per-user tokens
 
 `getUserToken(userId)` decrypts the stored refresh token and calls the shared

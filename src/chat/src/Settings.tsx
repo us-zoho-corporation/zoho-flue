@@ -1,5 +1,6 @@
-import { ArrowLeft } from '@phosphor-icons/react';
+import { ArrowLeft, Briefcase, CheckCircle, Headset, type Icon } from '@phosphor-icons/react';
 import { Button, LayerCard, Loader, Select } from '@cloudflare/kumo';
+import { useCallback, useEffect, useState } from 'react';
 import type { ModelOption, UserProfile } from './App.tsx';
 
 interface SettingsProps {
@@ -9,6 +10,28 @@ interface SettingsProps {
   modelKey: string;
   onModelChange: (key: string) => void;
   onBack: () => void;
+}
+
+/** A Zoho product's connection status, as reported by `GET /api/auth/connections`. */
+interface Connection {
+  key: string;
+  label: string;
+  description: string;
+  scopes: string[];
+  connected: boolean;
+}
+
+const PRODUCT_ICONS: Record<string, Icon> = { crm: Briefcase, desk: Headset };
+
+/**
+ * Sends the user to the Zoho consent screen requesting a product's full scope
+ * bundle, unioned server-side with whatever scopes they already hold. Zoho
+ * redirects back to `/?view=settings` on success, landing back on this page.
+ * @param scopes - The OAuth scopes to request for the product being connected.
+ */
+function connectProduct(scopes: string[]) {
+  const returnTo = encodeURIComponent('/?view=settings');
+  window.location.assign(`/api/auth/login?scopes=${encodeURIComponent(scopes.join(','))}&returnTo=${returnTo}`);
 }
 
 /**
@@ -22,6 +45,35 @@ interface SettingsProps {
  * @returns The rendered settings panel.
  */
 export function Settings({ profile, models, modelsLoading, modelKey, onModelChange, onBack }: SettingsProps) {
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(true);
+  // The product key with an in-flight disconnect request, so only its button spins.
+  const [disconnectingKey, setDisconnectingKey] = useState<string | null>(null);
+
+  const loadConnections = useCallback(async () => {
+    setConnectionsLoading(true);
+    try {
+      const res = await fetch('/api/auth/connections', { credentials: 'include' });
+      const data = await res.json() as { connections: Connection[] };
+      setConnections(data.connections ?? []);
+    } catch { /* ignore */ } finally { setConnectionsLoading(false); }
+  }, []);
+
+  useEffect(() => { void loadConnections(); }, [loadConnections]);
+
+  /**
+   * Drops a product's granted scopes from the user's stored token, then reloads
+   * the connection list so its row flips back to "Connect".
+   * @param key - The product key to disconnect (matches `Connection.key`).
+   */
+  const disconnectProduct = useCallback(async (key: string) => {
+    setDisconnectingKey(key);
+    try {
+      await fetch(`/api/auth/connections/${key}/disconnect`, { method: 'POST', credentials: 'include' });
+      await loadConnections();
+    } finally { setDisconnectingKey(null); }
+  }, [loadConnections]);
+
   return (
     <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
       <div className="chat-topbar">
@@ -53,6 +105,58 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                 </div>
               ) : (
                 <p className="text-sm text-kumo-subtle">Not signed in</p>
+              )}
+            </LayerCard>
+
+            <LayerCard className="px-5 py-4">
+              <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle mb-3">Connections</h2>
+              <p className="text-xs text-kumo-subtle mb-3">
+                Connect each Zoho product the assistant should be able to use. Connecting grants that product's full set of scopes in one step.
+              </p>
+              {connectionsLoading ? (
+                <Loader size="sm" />
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {connections.map((c) => {
+                    const ProductIcon = PRODUCT_ICONS[c.key] ?? Briefcase;
+                    return (
+                      <div
+                        key={c.key}
+                        className="flex items-center justify-between gap-4 px-3 py-2.5 rounded-lg"
+                        style={{ background: 'var(--glass2)', border: '1px solid var(--gb2)' }}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                            style={{ background: c.connected ? 'var(--ok)' : 'var(--glass)', color: c.connected ? '#fff' : 'var(--txt2)' }}
+                          >
+                            <ProductIcon size={18} weight={c.connected ? 'fill' : 'regular'} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-kumo-default">{c.label}</p>
+                              {c.connected && (
+                                <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--ok)' }}>
+                                  <CheckCircle size={13} weight="fill" /> Connected
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-kumo-subtle mt-0.5">{c.description}</p>
+                          </div>
+                        </div>
+                        <Button
+                          variant={c.connected ? 'secondary-destructive' : 'primary'}
+                          size="sm"
+                          className="shrink-0"
+                          loading={disconnectingKey === c.key}
+                          onClick={() => (c.connected ? disconnectProduct(c.key) : connectProduct(c.scopes))}
+                        >
+                          {c.connected ? 'Disconnect' : 'Connect'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </LayerCard>
 
