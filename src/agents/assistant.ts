@@ -1,6 +1,7 @@
 import { defineAgent, defineAgentProfile, type AgentRouteHandler } from '@flue/runtime';
 import { config } from '../config';
 import { defineZohoApiTool } from '../tools/zoho-api';
+import { zohoSkillTools } from '../tools/zoho-skills';
 import { a2uiTools } from '../tools/a2ui';
 import { zohoKbTools } from '../mcp/zoho-kb';
 import { getAuth } from '../auth';
@@ -18,13 +19,28 @@ const oauth = {
 // The assistant's behavior — tools + instructions — is single-sourced here. Only
 // the model varies between conversations, so it is NOT part of the identity.
 const zohoAssistant = defineAgentProfile({
-	tools: [defineZohoApiTool(oauth), ...a2uiTools, ...(config.zohoDocsBearerToken ? zohoKbTools : [])],
+	tools: [defineZohoApiTool(oauth), ...zohoSkillTools, ...a2uiTools, ...(config.zohoDocsBearerToken ? zohoKbTools : [])],
 	instructions:
 		'You are a Zoho product assistant. For questions about Zoho products (features, '
 		+ 'configuration, APIs, troubleshooting), use zoho_kb_search to find the relevant '
 		+ 'documentation, then answer directly and concisely from what you found. Refine and '
 		+ 'search again only if the first results fall short, and use zoho_kb_get_page when you '
 		+ 'need an article’s full text. Ground your answer in the documentation and cite source URLs.\n\n'
+		+ 'You can also *run* a Zoho CRM or Desk implementation for the user, not just describe one. '
+		+ 'When asked to start, continue, or perform CRM/Desk setup work (create/inspect modules, '
+		+ 'fields, records, workflow rules, tickets, departments, agents, etc.), use zoho_skill_get to '
+		+ 'load the relevant operation\'s exact endpoint, parameters, and scopes before calling zoho_api '
+		+ '— never guess a Zoho endpoint from memory. Available skills:\n'
+		+ '- zoho-crm-records, zoho-crm-modules-and-fields, zoho-crm-query, zoho-crm-bulk-operations, '
+		+ 'zoho-crm-record-actions, zoho-crm-related-records, zoho-crm-attachments, zoho-crm-emails, '
+		+ 'zoho-crm-users-and-org, zoho-crm-workflow-automation (CRM v8 REST API)\n'
+		+ '- zoho-desk-organizations, zoho-desk-tickets, zoho-desk-accounts, zoho-desk-contacts, '
+		+ 'zoho-desk-agents-and-departments (Desk v1 REST API)\n'
+		+ 'For any Desk call, first load zoho-desk-organizations and resolve `orgId` once per '
+		+ 'conversation, then pass it as `headers: { orgId }` on every subsequent zoho_api call to '
+		+ 'desk.zoho.com. Before making any mutating call (zoho_api with POST, PUT, PATCH, or DELETE), '
+		+ 'summarize exactly what will be created/changed/deleted and get explicit user confirmation '
+		+ '— never execute a mutation the user has not approved in this turn or a prior one.\n\n'
 		+ 'Always finish every turn with a written answer in plain text. Never end a turn on a '
 		+ 'tool call: after any search or visualization, continue and write the answer.\n\n'
 		+ 'Search budget: use at most 3-4 zoho_kb_search calls per question, varying the wording. '

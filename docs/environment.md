@@ -6,7 +6,7 @@ Stored in `.env` at the repo root.
 |---|---|
 | `ZOHO_OAUTH_CLIENT_ID` | OAuth client ID (shared by the service account and per-user login) |
 | `ZOHO_OAUTH_CLIENT_SECRET` | OAuth client secret |
-| `ZOHO_OAUTH_REFRESH_TOKEN` | Service-account refresh token exchanged for the app access token at startup (GLM provider, Catalyst NoSQL/Cache/Data Store/Stratus). Must carry `ZohoCatalyst.nosql.item.{CREATE,READ,UPDATE}` (NoSQL stores + Flue engine state), `ZohoCatalyst.cache.{CREATE,READ,DELETE}` (Cache sessions), `ZohoCatalyst.tables.rows.{CREATE,READ,UPDATE,DELETE}` + `ZohoCatalyst.zcql.CREATE` (the `AppSecrets` Data Store table), and `ZohoCatalyst.buckets.objects.{CREATE,READ,DELETE}` (Stratus attachment bytes). |
+| `ZOHO_OAUTH_REFRESH_TOKEN` | Service-account refresh token exchanged for the app access token at startup (GLM provider, Catalyst NoSQL/Cache/Data Store/Stratus, and the `zoho_api` tool). Must carry `ZohoCatalyst.nosql.item.{CREATE,READ,UPDATE}` (NoSQL stores + Flue engine state), `ZohoCatalyst.cache.{CREATE,READ,DELETE}` (Cache sessions), `ZohoCatalyst.tables.rows.{CREATE,READ,UPDATE,DELETE}` + `ZohoCatalyst.zcql.CREATE` (the `AppSecrets` Data Store table), `ZohoCatalyst.buckets.objects.{CREATE,READ,DELETE}` (Stratus attachment bytes), plus the Zoho CRM/Desk scopes for whichever `zoho-crm-*`/`zoho-desk-*` implementation skills are in use (see the `zoho-oauth` skill for the full list). |
 | `CATALYST_ENDPOINT` | QuickML GLM chat endpoint URL |
 | `CATALYST_ORG_ID` | Catalyst org ID — sent as `CATALYST-ORG` request header |
 | `ZOHO_OAUTH_REDIRECT_URI` | Per-user OAuth callback URL, registered on the Zoho OAuth client (e.g. `http://localhost:3583/api/auth/callback`) |

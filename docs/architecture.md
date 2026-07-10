@@ -29,7 +29,7 @@ The Hono app Flue mounts. It runs once at startup and is loaded in every run mod
 
 Each file default-exports a `defineAgent(...)`. The filename is the agent name passed to `flue run`. Export `route` to expose the agent over HTTP at `POST /agents/<name>/:id`.
 
-There is one agent, `assistant` (`src/agents/assistant.ts`). Its behavior — tools (`zoho_api`, the a2ui tools, and the KB tools when `ZOHO_DOCS_BEARER_TOKEN` is set) and instructions — is single-sourced in a `defineAgentProfile`.
+There is one agent, `assistant` (`src/agents/assistant.ts`). Its behavior — tools (`zoho_api`, `zoho_skill_get`, the a2ui tools, and the KB tools when `ZOHO_DOCS_BEARER_TOKEN` is set) and instructions — is single-sourced in a `defineAgentProfile`. Its instructions also teach it to run a Zoho CRM or Desk implementation conversationally: look up the exact endpoint via `zoho_skill_get` before calling `zoho_api`, resolve Desk's `orgId` once per conversation, and get explicit user confirmation before any mutating call.
 
 The **provider-model is a per-conversation choice, not a separate agent per model.** The chat carries the chosen model as a `<key>__<uuid>` prefix on the conversation instance id; the agent initializer maps that key to a model spec from `config.chatModels`, defaulting to `defaultChatModelKey` (`anthropic/claude-sonnet-5`). Switching model starts a fresh conversation, so a thread never mixes models.
 
@@ -59,7 +59,8 @@ When adding a setting: update `src/config.ts`, `.env`, and [`docs/environment.md
 
 Tools hold credentials in closures — the model only sees parameter names and descriptions, never raw tokens.
 
-- `zoho-api.ts` — `defineZohoApiTool(oauth)`: holds OAuth credentials in a closure and refreshes the access token per call. Accepts `{method, url, body}`, validates the URL against the allowed-hostname list, injects `Authorization`, returns `{status, body}`. Follows redirects manually so each hop is re-validated.
+- `zoho-api.ts` — `defineZohoApiTool(oauth)`: holds OAuth credentials in a closure and refreshes the access token per call. Accepts `{method, url, body, headers}`, validates the URL against the allowed-hostname list, injects `Authorization` (and `Content-Type` when `body` is set), merges any caller-supplied `headers` (e.g. Zoho Desk's `orgId`) without letting them override those two, returns `{status, body}`. Follows redirects manually so each hop is re-validated.
+- `zoho-skills.ts` — `zohoSkillTools` / `defineZohoSkillTool()`: the `zoho_skill_get` tool. Serves the vendored Zoho CRM/Desk implementation skill docs (`.agents/skills/zoho-{crm,desk}-*`) to the running agent on demand — a skill's `SKILL.md` body, or one of its `references/*.md` detail files — via an allowlist of skill names, so the operation catalog stays out of the always-loaded system prompt (same on-demand-retrieval shape as the KB tools below).
 - `a2ui.ts` — presentational tools whose input is a visualization spec the model authors. Part of the a2ui feature — see [a2ui.md](a2ui.md).
 
 ## Auth (`src/auth/`)
