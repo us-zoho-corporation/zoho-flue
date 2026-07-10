@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { getZohoAccessToken, type OAuthCredentials } from './zoho-auth';
 import { decryptSecret, type Keyring } from './crypto';
 import type { Session, Stores } from '../store/types';
+import type { ZohoProduct } from '../config';
 
 // Make `userId` a typed context variable across the app.
 declare module 'hono' {
@@ -34,6 +35,8 @@ export interface AuthDeps {
 	/** Dev/CI only: enable /api/auth/dev-login (fake user, no Zoho). Never in prod. */
 	devAuth: boolean;
 	oauth: AuthOAuthConfig;
+	/** Per-product scope bundles the settings "Connections" panel offers. */
+	products: readonly ZohoProduct[];
 }
 
 // Re-issue the sliding cookie/row at most this often to avoid a write per request.

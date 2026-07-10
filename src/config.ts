@@ -10,6 +10,14 @@ function required(key: string): string {
 	return val;
 }
 
+/** A Zoho product the settings UI can request incremental OAuth scopes for. */
+export interface ZohoProduct {
+	key: string;
+	label: string;
+	description: string;
+	scopes: string[];
+}
+
 export const config = {
 	// OAuth + Catalyst — read from environment at startup
 	zohoClientId: required('ZOHO_OAUTH_CLIENT_ID'),
@@ -24,6 +32,40 @@ export const config = {
 	// reach the Catalyst GLM (Zoho GLM 4.7 Flash) endpoint.
 	zohoOAuthRedirectUri: required('ZOHO_OAUTH_REDIRECT_URI'),
 	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ,QuickML.deployment.READ',
+	// Per-product scope bundles the settings "Connections" panel offers, so a user
+	// can grant a product's full scope set in one incremental-authorization round
+	// trip (`GET /api/auth/login?scopes=...`) instead of hitting reauth errors
+	// piecemeal as different tools need different scopes. Kept in sync with the
+	// `## Scopes` sections of .agents/skills/zoho-crm-*/zoho-desk-*.
+	zohoProducts: [
+		{
+			key: 'crm',
+			label: 'Zoho CRM',
+			description: 'Modules, records, search, bulk operations, and org/user lookups.',
+			scopes: [
+				'ZohoCRM.modules.ALL',
+				'ZohoCRM.settings.ALL',
+				'ZohoCRM.bulk.ALL',
+				'ZohoCRM.notifications.ALL',
+				'ZohoCRM.coql.READ',
+				'ZohoCRM.users.READ',
+				'ZohoCRM.org.READ',
+			],
+		},
+		{
+			key: 'desk',
+			label: 'Zoho Desk',
+			description: 'Tickets, contacts, accounts, agents, and departments.',
+			scopes: [
+				'Desk.basic.READ',
+				'Desk.search.READ',
+				'Desk.settings.READ',
+				'Desk.contacts.READ',
+				'Desk.tickets.READ',
+				'Desk.tickets.UPDATE',
+			],
+		},
+	] satisfies ZohoProduct[],
 	// HMAC secret for signed session/login cookies. Not an env var — loaded (and,
 	// on first boot, generated) from the durable secrets store by
 	// `initPersistedSecrets()`, which app.ts awaits before anything reads this.

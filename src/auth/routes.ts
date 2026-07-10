@@ -135,6 +135,40 @@ export function createAuthRoutes(deps: AuthDeps): Hono {
 		return c.json({ authenticated: true, user, scopes: token?.scopes ?? [] });
 	});
 
+	// Per-product connection status for the settings "Connections" panel: whether
+	// the signed-in user's stored grant already covers each product's full scope
+	// bundle. Drives which products show "Connect" vs. "Connected".
+	app.get('/connections', async (c) => {
+		const userId = c.get('userId');
+		const token = userId ? await deps.stores.tokens.get(userId) : null;
+		const granted = new Set(token?.scopes ?? []);
+		const connections = deps.products.map((product) => ({
+			key: product.key,
+			label: product.label,
+			description: product.description,
+			scopes: product.scopes,
+			connected: product.scopes.every((scope) => granted.has(scope)),
+		}));
+		return c.json({ connections });
+	});
+
+	// Disconnects a product: drops its scope bundle from the user's stored grant
+	// (locally — Zoho's own consent record is unaffected, so re-connecting doesn't
+	// need a fresh consent screen). No-op if the user never granted those scopes.
+	app.post('/connections/:key/disconnect', async (c) => {
+		const userId = c.get('userId');
+		if (!userId) return c.json({ error: 'auth_required' }, 401);
+		const product = deps.products.find((p) => p.key === c.req.param('key'));
+		if (!product) return c.json({ error: 'unknown_product' }, 404);
+
+		const token = await deps.stores.tokens.get(userId);
+		if (token) {
+			const drop = new Set(product.scopes);
+			await deps.stores.tokens.put({ ...token, scopes: token.scopes.filter((s) => !drop.has(s)), updatedAt: Date.now() });
+		}
+		return c.json({ ok: true });
+	});
+
 	// Local/CI ONLY: mint a session for a fake user without Zoho — the test seam used
 	// by the e2e-chat harness. 404s unless ENV=local|CI (deps.devAuth). Never in prod.
 	app.get('/dev-login', async (c) => {
