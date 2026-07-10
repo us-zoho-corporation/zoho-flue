@@ -28,7 +28,13 @@ Register at [api-console.zoho.com](https://api-console.zoho.com/) → Self Clien
 
 Grant tokens expire in ~2 minutes — run both steps without delay.
 
-1. Generate a grant token from [api-console.zoho.com](https://api-console.zoho.com/) with the scopes your agent needs (e.g. `ZohoCRM.modules.ALL`).
+1. Generate a grant token from [api-console.zoho.com](https://api-console.zoho.com/) with the scopes your agent needs. To cover every CRM/Desk implementation skill (see `docs/skills.md`), request all of these together (comma-delimited, no spaces):
+
+```
+AaaServer.profile.READ,ZohoCRM.modules.ALL,ZohoCRM.settings.ALL,ZohoCRM.bulk.ALL,ZohoCRM.notifications.ALL,ZohoCRM.coql.READ,ZohoCRM.users.READ,ZohoCRM.org.READ,Desk.basic.READ,Desk.search.READ,Desk.settings.READ,Desk.contacts.READ,Desk.tickets.READ,Desk.tickets.UPDATE
+```
+
+Each `zoho-crm-*` / `zoho-desk-*` skill's `## Scopes` section lists exactly which of these it needs.
 
 2. Exchange it for a refresh token:
 

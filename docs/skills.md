@@ -58,3 +58,27 @@ allowed-tools: <...>  # Optional/experimental. Space-separated pre-approved tool
 | `catalyst-glm` | Debugging GLM responses, history format, EXTRA_KEY_FOUND_IN_JSON |
 | `zoho-kb-mcp` | Working with the KB MCP client in `src/mcp/` |
 | `zoho-oauth` | Setting up or refreshing Zoho OAuth credentials |
+
+### Zoho CRM/Desk implementation skills
+
+Runtime operation catalog for the `assistant` agent's `zoho_skill_get` tool (`src/tools/zoho-skills.ts`) — each is
+also readable as a dev-time reference. Executed via the shared `zoho_api` tool (`src/tools/zoho-api.ts`); Desk
+skills additionally need `orgId` resolved via `zoho-desk-organizations` (see `docs/architecture.md`).
+
+| Skill | When to activate |
+|---|---|
+| `zoho-crm-records` | Listing, searching, getting, creating, updating, or deleting CRM records |
+| `zoho-crm-modules-and-fields` | Inspecting or extending CRM schema (modules, fields) |
+| `zoho-crm-query` | Cross-module COQL queries (joins, GROUP BY) |
+| `zoho-crm-bulk-operations` | Batch create, upsert, or bulk delete of CRM records |
+| `zoho-crm-record-actions` | Cloning a record, reassigning ownership, converting a Lead |
+| `zoho-crm-related-records` | Traversing related-module records or a record's audit timeline |
+| `zoho-crm-attachments` | Listing, uploading, or deleting file attachments on a CRM record |
+| `zoho-crm-emails` | Reading a CRM record's associated email history |
+| `zoho-crm-users-and-org` | Listing CRM users, org info, or the current user's profile |
+| `zoho-crm-workflow-automation` | Creating/inspecting CRM Workflow Rules and their actions |
+| `zoho-desk-organizations` | Resolving the Desk `orgId` — bootstrap for every other Desk call |
+| `zoho-desk-tickets` | Listing, fetching, searching, or updating Desk tickets |
+| `zoho-desk-accounts` | Listing, fetching, or searching Desk customer accounts |
+| `zoho-desk-contacts` | Listing, fetching, or searching Desk contacts |
+| `zoho-desk-agents-and-departments` | Listing Desk support agents and departments |
