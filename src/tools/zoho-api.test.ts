@@ -101,3 +101,38 @@ describe('zoho_api SSRF protection', () => {
             .rejects.toThrow('Too many redirects');
     });
 });
+
+describe('zoho_api extra headers', () => {
+    it('forwards a caller-supplied header, e.g. Desk orgId', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            status: 200,
+            headers: { get: () => null },
+            text: async () => '{}',
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        await tool().run({
+            input: { method: 'GET', url: 'https://desk.zoho.com/api/v1/tickets', headers: { orgId: '123' } },
+        });
+        expect(fetchMock.mock.calls[0][1].headers.orgId).toBe('123');
+    });
+
+    it('does not let caller headers override Authorization or Content-Type', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({
+            status: 200,
+            headers: { get: () => null },
+            text: async () => '{}',
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        await tool().run({
+            input: {
+                method: 'POST',
+                url: 'https://www.zohoapis.com/crm/v8/Leads',
+                body: '{}',
+                headers: { Authorization: 'Bearer evil', 'Content-Type': 'text/plain' },
+            },
+        });
+        const sentHeaders = fetchMock.mock.calls[0][1].headers;
+        expect(sentHeaders.Authorization).toBe(`Bearer ${TOKEN}`);
+        expect(sentHeaders['Content-Type']).toBe('application/json');
+    });
+});

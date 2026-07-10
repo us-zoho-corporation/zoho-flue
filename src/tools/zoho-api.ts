@@ -36,6 +36,10 @@ export function defineZohoApiTool(oauth: OAuthCredentials) {
 			method: v.picklist(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
 			url: v.pipe(v.string(), v.description('Full Zoho API URL')),
 			body: v.optional(v.string()),
+			headers: v.optional(v.pipe(
+				v.record(v.string(), v.string()),
+				v.description('Extra request headers, e.g. { "orgId": "..." } for Zoho Desk calls. Cannot override Authorization or Content-Type.'),
+			)),
 		}),
 		output: v.object({
 			status: v.number(),
@@ -44,7 +48,8 @@ export function defineZohoApiTool(oauth: OAuthCredentials) {
 		/**
 		 * Executes the authenticated Zoho API request, validating the target URL (and any
 		 * redirect hops) against `config.zohoAllowedHostnames` before attaching the bearer token.
-		 * @param input - The requested method, target URL, and optional request body.
+		 * @param input - The requested method, target URL, optional request body, and optional
+		 * extra headers (e.g. Zoho Desk's `orgId`).
 		 * @param signal - Abort signal forwarded to the underlying `fetch` call.
 		 * @returns The final response's HTTP status and body text.
 		 * @throws {Error} If the URL (or a redirect target) is not under an allowed Zoho domain,
@@ -60,6 +65,13 @@ export function defineZohoApiTool(oauth: OAuthCredentials) {
 			const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
 			if (input.body !== undefined) {
 				headers['Content-Type'] = 'application/json';
+			}
+			// Merge caller-supplied headers (e.g. Zoho Desk's `orgId`) last, but never
+			// let them override the bearer token or content type set above.
+			for (const [key, value] of Object.entries(input.headers ?? {})) {
+				const lower = key.toLowerCase();
+				if (lower === 'authorization' || lower === 'content-type') continue;
+				headers[key] = value;
 			}
 
 			// Follow redirects manually so each hop is validated against the
