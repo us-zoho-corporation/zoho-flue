@@ -52,6 +52,29 @@ const MODEL_KEY = 'flue:model:v1';
 // Used before /api/models resolves, and if it fails. Matches config.defaultChatModelKey.
 const FALLBACK_MODEL: ModelOption = { key: 'claude', label: 'Claude Sonnet 5', requiresAuth: false };
 
+type View = 'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs' | 'mcp';
+const VIEWS: readonly View[] = ['chat', 'settings', 'workflows', 'skills', 'agents', 'runs', 'mcp'];
+
+/**
+ * Resolves the view to land on at startup from a `?view=` query param (set by
+ * `returnTo` on OAuth redirects — e.g. `/api/auth/login` — so a full-page round
+ * trip, like connecting a product from Settings, returns to the same admin view
+ * instead of always landing on chat), then strips it from the URL.
+ * @returns The requested view if valid, otherwise `'chat'`.
+ */
+function resolveInitialView(): View {
+  let requested: string | null = null;
+  try {
+    const url = new URL(window.location.href);
+    requested = url.searchParams.get('view');
+    if (requested) {
+      url.searchParams.delete('view');
+      window.history.replaceState(null, '', url.pathname + (url.search || ''));
+    }
+  } catch { /* ignore */ }
+  return (VIEWS as readonly string[]).includes(requested ?? '') ? (requested as View) : 'chat';
+}
+
 /**
  * Reads the persisted chat sessions list from localStorage.
  * @returns The stored sessions, or an empty array if none are stored or parsing fails.
@@ -116,7 +139,7 @@ export function App() {
   // Whether the initial /api/me check has resolved — until then we don't know if
   // the user is signed in, so we hold rendering to avoid flashing the login screen.
   const [authChecked, setAuthChecked] = useState(false);
-  const [view, setView] = useState<'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs' | 'mcp'>('chat');
+  const [view, setView] = useState<View>(resolveInitialView);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   // App-level conversation store: durable observations live here, decoupled from
   // the view, so a response keeps streaming in its own thread across view switches.

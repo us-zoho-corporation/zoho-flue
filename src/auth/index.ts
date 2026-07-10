@@ -28,6 +28,7 @@ export function getAuth(): Auth {
 			redirectUri: config.zohoOAuthRedirectUri,
 			loginScopes: config.zohoLoginScopes,
 		},
+		products: config.zohoProducts,
 	});
 	g.__flueAuth = auth;
 	return auth;

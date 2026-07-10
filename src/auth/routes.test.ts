@@ -26,6 +26,10 @@ function makeDeps(): AuthDeps {
 			redirectUri: 'http://localhost:3583/api/auth/callback',
 			loginScopes: 'AaaServer.profile.READ',
 		},
+		products: [
+			{ key: 'crm', label: 'Zoho CRM', description: 'CRM access.', scopes: ['ZohoCRM.modules.ALL'] },
+			{ key: 'desk', label: 'Zoho Desk', description: 'Desk access.', scopes: ['Desk.basic.READ', 'Desk.tickets.READ'] },
+		],
 	};
 }
 
@@ -194,6 +198,83 @@ describe('resolveUserToken (per-user provider token)', () => {
 		});
 		const session = cookieHeader(jarFrom(cb));
 		expect(await (await app.request('/whoami-token', { headers: { Cookie: session } })).json()).toEqual({ token: 'user-access' });
+	});
+});
+
+describe('GET /connections', () => {
+	it('reports every configured product as disconnected for a guest', async () => {
+		const app = makeApp(makeDeps());
+		const res = await app.request('/connections');
+		expect(await res.json()).toEqual({
+			connections: [
+				{ key: 'crm', label: 'Zoho CRM', description: 'CRM access.', scopes: ['ZohoCRM.modules.ALL'], connected: false },
+				{ key: 'desk', label: 'Zoho Desk', description: 'Desk access.', scopes: ['Desk.basic.READ', 'Desk.tickets.READ'], connected: false },
+			],
+		});
+	});
+
+	it('marks a product connected once the user has granted its full scope bundle', async () => {
+		mockZoho();
+		const deps = makeDeps();
+		const app = makeApp(deps);
+
+		const login = await app.request('/login');
+		const state = new URL(login.headers.get('location')!).searchParams.get('state')!;
+		const cb = await app.request(`/callback?code=abc&state=${encodeURIComponent(state)}`, {
+			headers: { Cookie: cookieHeader(jarFrom(login)) },
+		});
+		// Grant only Desk's scopes directly on the stored token (simulating a prior incremental login).
+		const token = await deps.stores.tokens.get('777');
+		await deps.stores.tokens.put({ ...token!, scopes: [...token!.scopes, 'Desk.basic.READ', 'Desk.tickets.READ'] });
+
+		const session = cookieHeader(jarFrom(cb));
+		const res = await app.request('/connections', { headers: { Cookie: session } });
+		const { connections } = await res.json() as { connections: Array<{ key: string; connected: boolean }> };
+		expect(connections.find((c) => c.key === 'desk')?.connected).toBe(true);
+		expect(connections.find((c) => c.key === 'crm')?.connected).toBe(false);
+	});
+});
+
+describe('POST /connections/:key/disconnect', () => {
+	it('401s for a guest', async () => {
+		const app = makeApp(makeDeps());
+		expect((await app.request('/connections/desk/disconnect', { method: 'POST' })).status).toBe(401);
+	});
+
+	it('404s for an unknown product key', async () => {
+		mockZoho();
+		const deps = makeDeps();
+		const app = makeApp(deps);
+		const login = await app.request('/login');
+		const state = new URL(login.headers.get('location')!).searchParams.get('state')!;
+		const cb = await app.request(`/callback?code=abc&state=${encodeURIComponent(state)}`, {
+			headers: { Cookie: cookieHeader(jarFrom(login)) },
+		});
+		const session = cookieHeader(jarFrom(cb));
+		expect((await app.request('/connections/nope/disconnect', { method: 'POST', headers: { Cookie: session } })).status).toBe(404);
+	});
+
+	it('drops only the disconnected product\'s scopes, leaving the rest intact', async () => {
+		mockZoho();
+		const deps = makeDeps();
+		const app = makeApp(deps);
+
+		const login = await app.request('/login');
+		const state = new URL(login.headers.get('location')!).searchParams.get('state')!;
+		const cb = await app.request(`/callback?code=abc&state=${encodeURIComponent(state)}`, {
+			headers: { Cookie: cookieHeader(jarFrom(login)) },
+		});
+		const token = await deps.stores.tokens.get('777');
+		await deps.stores.tokens.put({ ...token!, scopes: [...token!.scopes, 'ZohoCRM.modules.ALL', 'Desk.basic.READ', 'Desk.tickets.READ'] });
+
+		const session = cookieHeader(jarFrom(cb));
+		const res = await app.request('/connections/desk/disconnect', { method: 'POST', headers: { Cookie: session } });
+		expect(await res.json()).toEqual({ ok: true });
+
+		const after = await deps.stores.tokens.get('777');
+		expect(after?.scopes).toEqual(expect.arrayContaining(['AaaServer.profile.READ', 'ZohoCRM.modules.ALL']));
+		expect(after?.scopes).not.toContain('Desk.basic.READ');
+		expect(after?.scopes).not.toContain('Desk.tickets.READ');
 	});
 });
 
