@@ -3,12 +3,13 @@ import { join, resolve } from 'node:path';
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 
-const SKILLS_DIR = resolve('.agents/skills');
+const SKILLS_DIR = resolve('src/skills');
 
-// Allowlist of Zoho CRM/Desk implementation skills this tool may serve —
-// deliberately excludes this project's own dev-workflow skills (add-agent,
-// run-agent, etc.), which are for engineers working on this repo, not for the
-// deployed chat agent.
+// Allowlist of Zoho CRM/Desk implementation skills this tool may serve, all
+// living under `src/skills/`. This project's own dev-workflow skills
+// (add-agent, run-agent, etc., under `.agents/skills/`) are for engineers
+// working on this repo via Claude Code, not for the deployed chat agent, and
+// are never served by this tool.
 const ALLOWED_SKILLS = [
 	'zoho-crm-records',
 	'zoho-crm-modules-and-fields',
@@ -44,7 +45,7 @@ async function readSkillDoc(path: string): Promise<string> {
 
 /**
  * Returns a tool that serves the vendored Zoho CRM/Desk implementation skill
- * docs (`.agents/skills/zoho-{crm,desk}-*`) to the running agent on demand, so
+ * docs (`src/skills/zoho-{crm,desk}-*`) to the running agent on demand, so
  * the operation catalog stays out of the always-loaded system prompt.
  * @returns A Flue tool named `zoho_skill_get` that reads a skill's `SKILL.md`
  * body, or one of its `references/*.md` detail files.
