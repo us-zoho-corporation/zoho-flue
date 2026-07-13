@@ -55,4 +55,40 @@ describe('extractText', () => {
     it('handles non-array content', () => {
         expect(extractText('raw string')).toBe('raw string');
     });
+
+    it('formats search_docs\' real shape: hits wrapped in a `results` array with a confidence preamble', () => {
+        // The live search_docs response wraps hits in `results` (each with `title`/`url`/
+        // `chunk_text`, not the flat `title`/`url`/`content` the old code assumed) — that
+        // mismatch made every formatted hit an empty string, so the model saw no results
+        // even when the KB had strong matches. This locks in the fix.
+        const content = [{
+            type: 'text',
+            text: JSON.stringify({
+                confidence: 'high',
+                top_score: 0.9998,
+                quality_hint: 'Results are strong. Cite [title](deep_link) for every factual claim.',
+                results: [
+                    {
+                        score: 0.9998,
+                        title: 'Configuring Workflow Rules',
+                        url: 'https://help.zoho.com/portal/en/kb/crm/.../configuring-workflow-rules',
+                        deep_link: 'https://help.zoho.com/portal/en/kb/crm/.../configuring-workflow-rules#configuring-workflow-rules',
+                        chunk_text: 'Workflow Rules in Zoho CRM are a set of actions...',
+                    },
+                ],
+            }),
+        }];
+        const result = extractText(content);
+        expect(result).toContain('Confidence: high');
+        expect(result).toContain('Results are strong');
+        expect(result).toContain('Title: Configuring Workflow Rules');
+        // Prefers the more specific deep_link over the plain url for citation.
+        expect(result).toContain('URL: https://help.zoho.com/portal/en/kb/crm/.../configuring-workflow-rules#configuring-workflow-rules');
+        expect(result).toContain('Workflow Rules in Zoho CRM are a set of actions');
+    });
+
+    it('falls back to raw JSON for a result with no recognized field (e.g. list_products)', () => {
+        const content = [{ type: 'text', text: JSON.stringify({ name: 'crm', article_count: 1234 }) }];
+        expect(extractText(content)).toBe('{"name":"crm","article_count":1234}');
+    });
 });
