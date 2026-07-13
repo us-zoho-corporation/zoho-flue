@@ -1,7 +1,8 @@
 import { ArrowLeft, Briefcase, CheckCircle, Headset, type Icon } from '@phosphor-icons/react';
-import { Button, LayerCard, Loader, Select } from '@cloudflare/kumo';
+import { Button, LayerCard, Loader, Select, Switch } from '@cloudflare/kumo';
 import { useCallback, useEffect, useState } from 'react';
 import type { ModelOption, UserProfile } from './App.tsx';
+import type { Theme } from './theme.ts';
 
 interface SettingsProps {
   profile: UserProfile | null;
@@ -9,6 +10,9 @@ interface SettingsProps {
   modelsLoading: boolean;
   modelKey: string;
   onModelChange: (key: string) => void;
+  theme: Theme;
+  onToggleTheme: () => void;
+  onSignOut: () => void;
   onBack: () => void;
 }
 
@@ -41,10 +45,13 @@ function connectProduct(scopes: string[]) {
  * @param modelsLoading - When `true`, shows a loading spinner in place of the model selector.
  * @param modelKey - The key of the currently selected default model.
  * @param onModelChange - Called with the new model key when the user picks a different default model.
+ * @param theme - The current color theme, reflected by the Appearance section's dark-mode switch.
+ * @param onToggleTheme - Called when the dark-mode switch is toggled.
+ * @param onSignOut - Called when the user clicks "Sign out".
  * @param onBack - Called when the user clicks the "Back" button to leave the settings panel.
  * @returns The rendered settings panel.
  */
-export function Settings({ profile, models, modelsLoading, modelKey, onModelChange, onBack }: SettingsProps) {
+export function Settings({ profile, models, modelsLoading, modelKey, onModelChange, theme, onToggleTheme, onSignOut, onBack }: SettingsProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   // The product key with an in-flight disconnect request, so only its button spins.
@@ -101,11 +108,22 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                       <p className="text-xs text-kumo-subtle">{profile.email}</p>
                     </div>
                   </div>
-                  <Button variant="destructive" size="sm" onClick={() => {}}>Sign out</Button>
+                  <Button variant="destructive" size="sm" onClick={onSignOut}>Sign out</Button>
                 </div>
               ) : (
                 <p className="text-sm text-kumo-subtle">Not signed in</p>
               )}
+            </LayerCard>
+
+            <LayerCard className="px-5 py-4">
+              <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle mb-3">Appearance</h2>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-kumo-default">Dark mode</p>
+                  <p className="text-xs text-kumo-subtle mt-0.5">Switch between light and dark interface themes.</p>
+                </div>
+                <Switch checked={theme === 'dark'} onCheckedChange={onToggleTheme} aria-label="Dark mode" />
+              </div>
             </LayerCard>
 
             <LayerCard className="px-5 py-4">

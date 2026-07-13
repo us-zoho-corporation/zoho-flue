@@ -9,18 +9,17 @@ import {
   EnvelopeSimple,
   Headset,
   Info,
-  Moon,
+  SignOut,
   Sparkle,
   Square,
-  Sun,
   WarningCircle,
 } from '@phosphor-icons/react';
-import { Badge, Banner, Button, Collapsible, Loader, SidebarTrigger } from '@cloudflare/kumo';
+import { Badge, Banner, Button, Collapsible, Loader, Popover, SidebarTrigger } from '@cloudflare/kumo';
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import { type ToolCallInfo, type ChatMessage, isAssistantMessage, useFlueChat } from './FlueRuntime.tsx';
 import { A2uiPart } from './a2ui/index.ts';
-import type { Theme } from './theme.ts';
+import type { UserProfile } from './App.tsx';
 import type { FlueConversationMessage } from '@flue/react';
 
 interface ThreadProps {
@@ -28,8 +27,66 @@ interface ThreadProps {
   requiresAuth: boolean;
   isSignedIn: boolean;
   onSignIn: () => void;
-  theme: Theme;
-  onToggleTheme: () => void;
+  profile: UserProfile;
+  onSignOut: () => void;
+}
+
+/**
+ * Derives the avatar initials shown for the signed-in user's top-bar profile chip.
+ * @param profile - The signed-in user's profile.
+ * @returns The uppercased first-and-last-name initials, falling back to the first character of the display name or `?` if none are available.
+ */
+function initialsOf(profile: UserProfile): string {
+  const fromNames = [profile.firstName[0], profile.lastName[0]].filter(Boolean).join('');
+  return (fromNames || profile.displayName[0] || '?').toUpperCase();
+}
+
+/**
+ * Renders a signed-in user's avatar (photo or initials), reused by both the
+ * top-bar profile button and its popover card header.
+ * @param profile - The signed-in user's profile.
+ * @returns The avatar element.
+ */
+function Avatar({ profile }: { profile: UserProfile }) {
+  return (
+    <div className="sb-avatar">
+      {profile.photoUrl
+        ? <img src={profile.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : <span>{initialsOf(profile)}</span>}
+    </div>
+  );
+}
+
+/**
+ * Renders the top-bar account control: a circular avatar button that opens a
+ * popover card with the signed-in user's full name, email, and a sign-out
+ * button.
+ * @param profile - The signed-in user's profile.
+ * @param onSignOut - Called when the popover's "Sign out" button is clicked.
+ * @returns The avatar button plus its popover.
+ */
+function ProfileMenu({ profile, onSignOut }: { profile: UserProfile; onSignOut: () => void }) {
+  return (
+    <Popover>
+      <Popover.Trigger render={<button className="hdr-profile" aria-label="Account" title="Account" />}>
+        <Avatar profile={profile} />
+      </Popover.Trigger>
+      <Popover.Content align="end" sideOffset={10} className="hdr-profile-card">
+        <div className="hdr-profile-card-header">
+          <Avatar profile={profile} />
+          <div style={{ minWidth: 0 }}>
+            <div className="sb-user-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.displayName}</div>
+            <div className="sb-user-sub" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.email}</div>
+          </div>
+        </div>
+        <div className="hdr-profile-card-sep" />
+        <Popover.Close render={<button className="hdr-profile-signout" onClick={onSignOut} />}>
+          <SignOut size={15} />
+          Sign out
+        </Popover.Close>
+      </Popover.Content>
+    </Popover>
+  );
 }
 
 /**
@@ -49,11 +106,11 @@ function textOf(message: FlueConversationMessage): string {
  * @param requiresAuth - Whether the active model requires the user to be signed in to run.
  * @param isSignedIn - Whether the user is currently signed in.
  * @param onSignIn - Called to start the sign-in flow, from the welcome screen or the sign-in prompt.
- * @param theme - The current color theme, used to pick the sun/moon toggle icon.
- * @param onToggleTheme - Called when the theme toggle button is clicked.
+ * @param profile - The signed-in user's profile, shown behind the top bar's account avatar/popover.
+ * @param onSignOut - Called when the account popover's "Sign out" button is clicked.
  * @returns The chat area, including top bar, message viewport, and composer.
  */
-export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, theme, onToggleTheme }: ThreadProps) {
+export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile, onSignOut }: ThreadProps) {
   const { messages, isRunning, historyReady, error, sendMessage, stop } = useFlueChat();
   // This conversation's model runs as the logged-in user, but nobody is signed in.
   const authGate = requiresAuth && !isSignedIn;
@@ -87,9 +144,7 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, theme, 
           <span className="hdr-title">Zoho AI</span>
           <span className="hdr-sub">Across your Zoho One apps</span>
         </div>
-        <button className="icon-btn" onClick={onToggleTheme} title="Switch theme" aria-label="Switch theme">
-          {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-        </button>
+        <ProfileMenu profile={profile} onSignOut={onSignOut} />
       </div>
 
       <div ref={viewportRef} className="chat-viewport">
@@ -129,7 +184,6 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, theme, 
             <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} onStop={stop} />
           )}
         </div>
-        <p className="composer-disclaimer">Responses can contain mistakes — verify anything important.</p>
       </div>
     </div>
   );
