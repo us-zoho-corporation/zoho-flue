@@ -8,15 +8,13 @@ import {
   Plugs,
   Plus,
   Robot,
-  SignOut,
   Trash,
   TreeStructure,
-  User,
 } from '@phosphor-icons/react';
 import { useSidebar } from '@cloudflare/kumo';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Session, UserProfile } from './App.tsx';
+import type { Session } from './App.tsx';
 import { useRunningIds } from './conversations.tsx';
 import { ZohoLogo } from './ZohoLogo.tsx';
 
@@ -35,22 +33,9 @@ function timeAgo(ts: number): string {
   return d === 1 ? 'Yesterday' : `${d}d ago`;
 }
 
-/**
- * Derives the avatar initials shown for a signed-in user.
- * @param profile - The signed-in user's profile.
- * @returns The uppercased first-and-last-name initials, falling back to the first character of the display name or `?` if none are available.
- */
-function initialsOf(profile: UserProfile): string {
-  const fromNames = [profile.firstName[0], profile.lastName[0]].filter(Boolean).join('');
-  return (fromNames || profile.displayName[0] || '?').toUpperCase();
-}
-
 interface SidebarProps {
   sessions: Session[];
   activeId: string;
-  profile: UserProfile | null;
-  onSignIn: () => void;
-  onSignOut: () => void;
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
@@ -74,13 +59,9 @@ const WORKSPACE: { key: string; label: string; icon: typeof Robot }[] = [
 /**
  * Renders the app sidebar: the Zoho logo header, new-chat button, chat search,
  * the searchable recent-conversations list (with right-click delete menu and
- * two-finger swipe-to-delete), the collapsible Workspace nav, and the
- * signed-in user card or sign-in button.
+ * two-finger swipe-to-delete), and the collapsible Workspace nav.
  * @param sessions - All chat sessions to list under "Recent".
  * @param activeId - The id of the currently selected session, used to highlight its row.
- * @param profile - The signed-in user's profile, or `null` if no one is signed in.
- * @param onSignIn - Called when the guest "Sign in" control is clicked.
- * @param onSignOut - Called when the signed-in user clicks "Sign out".
  * @param onSelect - Called with a session id when its row (or its "Open chat" context-menu entry) is clicked.
  * @param onNew - Called when "New chat" is clicked.
  * @param onDelete - Called with a session id once its delete animation finishes and it should be removed.
@@ -92,7 +73,7 @@ const WORKSPACE: { key: string; label: string; icon: typeof Robot }[] = [
  * @param onMcp - Called when the "MCP servers" workspace item is clicked.
  * @returns The sidebar `<aside>` plus a portal-rendered context menu overlay when one is open.
  */
-export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns, onMcp }: SidebarProps) {
+export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns, onMcp }: SidebarProps) {
   const { open } = useSidebar();
   const [search, setSearch] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
@@ -258,31 +239,6 @@ export function Sidebar({ sessions, activeId, profile, onSignIn, onSignOut, onSe
               </div>
             ))}
           </div>
-        )}
-
-        {profile ? (
-          <div className="sb-user">
-            <div className="sb-avatar">
-              {profile.photoUrl
-                ? <img src={profile.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <span>{initialsOf(profile)}</span>}
-            </div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="sb-user-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.displayName}</div>
-              <div className="sb-user-sub" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.email}</div>
-            </div>
-            <button className="icon-btn sb-signout" onClick={onSignOut} title="Sign out" aria-label="Sign out">
-              <SignOut size={16} />
-            </button>
-          </div>
-        ) : (
-          <button className="sb-user sb-signin" onClick={onSignIn}>
-            <div className="sb-avatar" data-guest="true"><User size={16} weight="regular" /></div>
-            <div style={{ minWidth: 0, textAlign: 'left' }}>
-              <div className="sb-user-name">Sign in</div>
-              <div className="sb-user-sub">Continue with Zoho to sync</div>
-            </div>
-          </button>
         )}
       </div>
     </aside>

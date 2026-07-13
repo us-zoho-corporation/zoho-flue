@@ -292,9 +292,6 @@ export function App() {
       <Sidebar
         sessions={sessions}
         activeId={activeId}
-        profile={profile}
-        onSignIn={handleSignIn}
-        onSignOut={handleSignOut}
         onSelect={(id) => { setView('chat'); setActiveId(id); }}
         onNew={() => { setView('chat'); handleNewSession(); }}
         onDelete={handleDeleteSession}
@@ -313,6 +310,9 @@ export function App() {
             modelsLoading={modelsLoading}
             modelKey={preferredModelKey}
             onModelChange={handleModelChange}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            onSignOut={handleSignOut}
             onBack={() => setView('chat')}
           />
         : view === 'workflows'
@@ -337,8 +337,8 @@ export function App() {
             requiresAuth={models.find((m) => m.key === activeSession.modelKey)?.requiresAuth ?? false}
             isSignedIn={!!profile}
             onSignIn={handleSignIn}
-            theme={theme}
-            onToggleTheme={toggleTheme}
+            profile={profile}
+            onSignOut={handleSignOut}
           />
         </ActiveConversation>
       )}
