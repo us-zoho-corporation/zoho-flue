@@ -45,11 +45,36 @@ async function resetClient(): Promise<void> {
 const MAX_RESULT_CHARS = 12_000;
 
 /**
+ * Formats one parsed result object as readable lines: `Title:`/`URL:` (using
+ * `deep_link` over `url` when present, since the KB's `quality_hint` asks
+ * callers to cite `deep_link`), then the body (`chunk_text`, `content`, or
+ * `excerpt` — whichever is present). Falls back to the raw JSON for shapes
+ * with none of those fields (e.g. `list_products`' per-product objects), so
+ * data is never silently dropped.
+ * @param obj - A single parsed result object.
+ * @returns The formatted lines, or `obj`'s raw JSON if it has no recognized field.
+ */
+function formatResult(obj: Record<string, unknown>): string {
+    const lines: string[] = [];
+    if (obj.title) lines.push(`Title: ${String(obj.title)}`);
+    const link = obj.deep_link ?? obj.url;
+    if (link) lines.push(`URL: ${String(link)}`);
+    const body = typeof obj.chunk_text === 'string' ? obj.chunk_text
+        : typeof obj.content === 'string' ? obj.content
+        : typeof obj.excerpt === 'string' ? obj.excerpt : '';
+    if (body) lines.push(String(body));
+    return lines.length ? lines.join('\n') : JSON.stringify(obj);
+}
+
+/**
  * Extracts a readable plain-text view of MCP result content. Each content
- * block's `text` is parsed as a search-result JSON object (`title`/`url`/
- * `content`/`excerpt`) and reformatted as readable lines; text that isn't
- * JSON is passed through unchanged. Multiple blocks are joined with a
- * separator, and the combined output is capped at `MAX_RESULT_CHARS`.
+ * block's `text` is parsed as JSON: `search_docs` wraps its hits in a
+ * `results` array alongside a top-level `confidence`/`top_score`/
+ * `quality_hint` (each hit formatted via {@link formatResult}, prefixed with
+ * that confidence signal so the model can calibrate); other tools return one
+ * result object per block, formatted directly. Text that isn't JSON is
+ * passed through unchanged. Multiple blocks are joined with a separator, and
+ * the combined output is capped at `MAX_RESULT_CHARS`.
  * @param content - The MCP tool result's `content` field (expected to be an array of content blocks, but handled defensively otherwise).
  * @returns The formatted, length-capped plain-text representation of `content`.
  */
@@ -59,16 +84,19 @@ export function extractText(content: unknown): string {
     for (const block of content) {
         if (typeof block !== 'object' || block === null || !('text' in block)) continue;
         const raw = (block as { text: string }).text;
-        // search_docs returns each result as a JSON string; format it as readable lines.
         try {
             const parsed = JSON.parse(raw) as Record<string, unknown>;
-            const lines: string[] = [];
-            if (parsed.title) lines.push(`Title: ${String(parsed.title)}`);
-            if (parsed.url) lines.push(`URL: ${String(parsed.url)}`);
-            const body = typeof parsed.content === 'string' ? parsed.content
-                : typeof parsed.excerpt === 'string' ? parsed.excerpt : '';
-            if (body) lines.push(String(body));
-            parts.push(lines.join('\n'));
+            if (Array.isArray(parsed.results)) {
+                const confidence = parsed.confidence ? `Confidence: ${String(parsed.confidence)}` : '';
+                const hint = parsed.quality_hint ? String(parsed.quality_hint) : '';
+                const preamble = [confidence, hint].filter(Boolean).join(' — ');
+                if (preamble) parts.push(preamble);
+                for (const hit of parsed.results as unknown[]) {
+                    if (hit && typeof hit === 'object') parts.push(formatResult(hit as Record<string, unknown>));
+                }
+                continue;
+            }
+            parts.push(formatResult(parsed));
         } catch {
             parts.push(raw);
         }
