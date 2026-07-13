@@ -1,8 +1,13 @@
 ---
 name: add-skill
-description: Add a new agent skill to this project following the agentskills.io specification and tiered context loading conventions. Use when creating a new skill directory under .agents/skills/, writing a SKILL.md, or deciding what belongs in Tier 1 (AGENTS.md) vs Tier 3 (skill body) vs Tier 4 (references/).
+description: Add a new dev-workflow skill to this project (under .agents/skills/) following the agentskills.io specification and tiered context loading conventions. Use when creating a new skill directory under .agents/skills/, writing a SKILL.md, or deciding what belongs in Tier 1 (AGENTS.md) vs Tier 3 (skill body) vs Tier 4 (references/). NOT for adding a new Zoho CRM/Desk implementation skill — those live under src/skills/ and are registered in src/tools/zoho-skills.ts's ALLOWED_SKILLS list, not this spec.
 allowed-tools: Read Edit Write
 ---
+
+This skill is only for `.agents/skills/` dev-workflow skills (Claude Code's own skill catalog for working on
+this repo). Zoho CRM/Desk implementation skills served to the deployed agent at runtime live under
+`src/skills/` and don't follow this spec — see `docs/skills.md`'s "Zoho CRM/Desk implementation skills"
+section instead, and add the new skill's directory name to `ALLOWED_SKILLS` in `src/tools/zoho-skills.ts`.
 
 ## agentskills.io spec requirements
 

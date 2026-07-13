@@ -59,7 +59,7 @@ Flash endpoint).
 
 `config.zohoProducts` is the catalog of Zoho products (CRM, Desk) the chat's Settings
 panel offers as one-click connections, each with its full scope bundle (kept in sync with
-the `## Scopes` sections of `.agents/skills/zoho-crm-*`/`zoho-desk-*`). `GET
+the `## Scopes` sections of `src/skills/zoho-crm-*`/`zoho-desk-*`). `GET
 /api/auth/connections` reports, per product, whether the signed-in user's stored grant
 already covers that bundle. The Settings UI's "Connect" button sends the user through
 `GET /api/auth/login?scopes=<product scopes>&returnTo=/?view=settings` — the existing

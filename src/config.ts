@@ -36,7 +36,7 @@ export const config = {
 	// can grant a product's full scope set in one incremental-authorization round
 	// trip (`GET /api/auth/login?scopes=...`) instead of hitting reauth errors
 	// piecemeal as different tools need different scopes. Kept in sync with the
-	// `## Scopes` sections of .agents/skills/zoho-crm-*/zoho-desk-*.
+	// `## Scopes` sections of src/skills/zoho-crm-*/zoho-desk-*.
 	zohoProducts: [
 		{
 			key: 'crm',
