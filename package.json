@@ -18,8 +18,8 @@
   "dependencies": {
     "@assistant-ui/react": "^0.14.26",
     "@assistant-ui/react-markdown": "^0.14.5",
-    "@cloudflare/kumo": "^2.7.0",
-    "@earendil-works/pi-ai": "0.80.3",
+    "@cloudflare/kumo": "^2.8.0",
+    "@earendil-works/pi-ai": "0.80.6",
     "@flue/react": "1.0.0-beta.9",
     "@flue/runtime": "1.0.0-beta.9",
     "@flue/sdk": "1.0.0-beta.9",
@@ -27,7 +27,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.2",
     "echarts": "^6.1.0",
-    "hono": "^4.12.28",
+    "hono": "^4.12.30",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
@@ -42,8 +42,8 @@
     "@vitest/browser-playwright": "4.1.10",
     "oxlint": "^1.73.0",
     "playwright": "^1.61.1",
-    "typescript": "^6.0.3",
-    "vite": "^8.1.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.4",
     "vitest": "^4.1.10",
     "vitest-browser-react": "^2.2.0"
   }
