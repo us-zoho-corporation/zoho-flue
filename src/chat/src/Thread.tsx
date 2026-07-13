@@ -316,16 +316,65 @@ function PendingTurn() {
   );
 }
 
+// Present/past tense verb per known tool name, shown before the detail (e.g.
+// "Fetching GET /api/v1/tickets" while running, "Fetched ..." once done).
+const TOOL_VERBS: Record<string, [string, string]> = {
+  search_docs:             ['Searching', 'Searched'],
+  zoho_kb_search:          ['Searching', 'Searched'],
+  zoho_kb_get_page:        ['Reading',   'Read'],
+  zoho_kb_list_products:   ['Listing',   'Listed'],
+  zoho_skill_get:          ['Loading',   'Loaded'],
+  zoho_api:                ['Fetching',  'Fetched'],
+  render_chart:            ['Building',  'Built'],
+  render_comparison_table: ['Building',  'Built'],
+  render_stat_cards:       ['Building',  'Built'],
+};
+
 /**
- * Extracts a short human-readable detail from a tool call's input, preferring
- * a query/search term and falling back to a URL's path.
- * @param input - The raw tool-call input to summarize.
- * @returns A quoted query string, a URL pathname, or an empty string if nothing usable was found.
+ * Title-cases a snake_case tool name for display, e.g. "list_widgets" →
+ * "List Widgets" — the fallback label for tools with no {@link TOOL_VERBS} entry.
+ * @param name - The raw tool name.
+ * @returns The title-cased name with underscores replaced by spaces.
  */
-function inputSummary(input: unknown): string {
-  if (!input || typeof input !== 'object') return '';
-  const obj = input as Record<string, unknown>;
-  const query = obj['query'] ?? obj['search'] ?? obj['keyword'] ?? obj['q'];
+function titleCaseToolName(name: string): string {
+  return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Humanizes a skill directory name for display, e.g. "zoho-desk-organizations"
+ * → "Desk Organizations".
+ * @param skill - The skill's directory name (hyphen-separated, `zoho-` prefixed).
+ * @returns The humanized skill name.
+ */
+function humanizeSkillName(skill: string): string {
+  return skill.replace(/^zoho-/, '').split('-').map((w) => w[0]?.toUpperCase() + w.slice(1)).join(' ');
+}
+
+/**
+ * Extracts a short human-readable detail from a tool call's input — the
+ * specific endpoint/query/skill it acted on — so steps read as e.g. "Fetching
+ * GET /api/v1/tickets" rather than a bare verb like "Listing".
+ * @param name - The tool's name, used to pick a tool-specific extraction (e.g. `zoho_api`'s method + path).
+ * @param input - The raw tool-call input to summarize.
+ * @returns A short detail string, or an empty string if nothing usable was found.
+ */
+function toolDetail(name: string, input: unknown): string {
+  const obj = (input && typeof input === 'object') ? input as Record<string, unknown> : {};
+
+  if (name === 'zoho_api' && typeof obj['url'] === 'string') {
+    const method = typeof obj['method'] === 'string' ? `${obj['method']} ` : '';
+    try { return `${method}${new URL(obj['url']).pathname}`; } catch { return `${method}${obj['url']}`; }
+  }
+  if (name === 'zoho_skill_get' && typeof obj['skill'] === 'string') {
+    const reference = typeof obj['reference'] === 'string' ? obj['reference'] : '';
+    const skill = humanizeSkillName(obj['skill']);
+    return reference ? `${skill} · ${reference}` : skill;
+  }
+  // No variable input to describe (zoho_kb_list_products takes none) — a fixed
+  // detail beats a bare, uninformative verb like "Listing".
+  if (name === 'zoho_kb_list_products') return 'Zoho documentation products';
+
+  const query = obj['query'] ?? obj['search'] ?? obj['keyword'] ?? obj['q'] ?? obj['title'];
   if (typeof query === 'string' && query.trim()) return `“${query.trim()}”`;
   const url = obj['url'] ?? obj['path'] ?? obj['endpoint'];
   if (typeof url === 'string') {
@@ -335,28 +384,21 @@ function inputSummary(input: unknown): string {
 }
 
 /**
- * Builds the human-readable label for a tool-call row, e.g. "Searching
- * "editions"" while running or "Searched "editions"" once done, falling back
- * to a title-cased version of the tool name for unrecognized tools.
+ * Builds the human-readable label for a tool-call row, e.g. "Fetching GET
+ * /api/v1/tickets" while running or "Fetched GET /api/v1/tickets" once done,
+ * falling back to a title-cased tool name for unrecognized tools (e.g. a
+ * user-connected MCP server's).
  * @param name - The tool's name (e.g. `search_docs`, `zoho_api`).
  * @param state - The tool call's current state, used to pick present vs. past tense.
- * @param input - The tool call's input, used to append a query/path detail.
+ * @param input - The tool call's input, used to derive a detail suffix via {@link toolDetail}.
  * @returns The friendly label to display for the tool call.
  */
 function friendlyLabel(name: string, state: ToolCallInfo['state'], input: unknown): string {
   const running = state === 'input-available';
-  const map: Record<string, [string, string]> = {
-    search_docs:           ['Searching',  'Searched'],
-    zoho_kb_search:        ['Searching',  'Searched'],
-    get_page:              ['Reading',    'Read'],
-    list_products:         ['Listing',    'Listed'],
-    zoho_kb_list_products: ['Listing',    'Listed'],
-    zoho_api:              ['Fetching',   'Fetched'],
-  };
-  const snake = name.replace(/_/g, ' ');
-  const [present, past] = map[name] ?? [snake, snake];
+  const titled = titleCaseToolName(name);
+  const [present, past] = TOOL_VERBS[name] ?? [titled, titled];
   const verb = running ? present : past;
-  const detail = inputSummary(input);
+  const detail = toolDetail(name, input);
   return detail ? `${verb} ${detail}` : verb;
 }
 
@@ -375,13 +417,13 @@ export function ToolCallRow({ toolName, state, input, index }: ToolCallInfo & { 
 
   return (
     <div className="tool-row tool-row-enter" style={{ animationDelay: `${index * 55}ms` }}>
-      <span className="tool-row-icon"><Sparkle size={15} weight="fill" /></span>
+      <span className="tool-row-icon"><Sparkle size={12} weight="fill" /></span>
       <span className={`tool-row-label${running ? ' is-running' : ''}`} style={{ flex: 1, minWidth: 0 }}>
         {friendlyLabel(toolName, state, input)}
       </span>
       {running && <div className="tool-spinner" />}
-      {!running && errored && <WarningCircle size={18} weight="fill" style={{ color: 'var(--danger)', flexShrink: 0 }} />}
-      {!running && !errored && <span className="tool-row-dot"><Check size={12} weight="bold" /></span>}
+      {!running && errored && <WarningCircle size={14} weight="fill" style={{ color: 'var(--danger)', flexShrink: 0 }} />}
+      {!running && !errored && <span className="tool-row-dot"><Check size={9} weight="bold" /></span>}
     </div>
   );
 }
