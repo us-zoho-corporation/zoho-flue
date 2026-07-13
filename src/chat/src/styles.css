@@ -273,19 +273,23 @@ body { background: var(--page-bg); color: var(--txt1); }
 .tool-trace-trigger { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; padding: 0; cursor: pointer; }
 .tool-trace-caret { color: var(--txt3); transition: transform 0.16s ease; }
 .tool-trace-caret.is-open { transform: rotate(90deg); }
-.tool-trace-live, .tool-trace-panel { display: flex; flex-direction: column; gap: 8px; }
-.tool-trace-panel { margin-top: 9px; }
-.assistant-status { display: inline-flex; align-items: center; gap: 9px; color: var(--txt2); font: 400 14px var(--font-sans); }
-.tool-row {
-  display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px;
-  border: 1px solid var(--gb); background: var(--glass2);
-  backdrop-filter: blur(var(--blur)) saturate(1.4); -webkit-backdrop-filter: blur(var(--blur)) saturate(1.4);
-  box-shadow: var(--ghi); max-width: 520px;
+/* A thin left rule ties the compact steps together into one visual track,
+   instead of each step being its own full glass card (too tall × too wide). */
+.tool-trace-live, .tool-trace-panel {
+  display: flex; flex-direction: column; gap: 2px;
+  border-left: 1.5px solid var(--gb2); padding-left: 10px; max-width: 480px;
 }
-.tool-row-icon { display: inline-flex; width: 16px; justify-content: center; align-items: center; flex-shrink: 0; color: var(--accent-fg); }
-.tool-row-dot { width: 22px; height: 22px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); display: flex; align-items: center; justify-content: center; }
-.tool-row-label { font: 500 13.5px/1.3 var(--font-sans); color: var(--txt1); }
-.tool-row-label.is-running { color: var(--txt1); }
+.tool-trace-panel { margin-top: 7px; }
+.assistant-status { display: inline-flex; align-items: center; gap: 9px; color: var(--txt2); font: 400 14px var(--font-sans); }
+.tool-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.tool-row-icon { display: inline-flex; width: 13px; justify-content: center; align-items: center; flex-shrink: 0; color: var(--accent-fg); }
+.tool-row-dot { width: 15px; height: 15px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tool-row-dot svg { width: 9px; height: 9px; }
+.tool-row-label {
+  font: 400 12.5px/1.3 var(--font-sans); color: var(--txt3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tool-row-label.is-running { color: var(--txt1); font-weight: 500; }
 
 /* ─── Composer → floating glass pill ─────────────────────────────────────────── */
 .composer-wrap {
@@ -450,3 +454,4 @@ body { background: var(--page-bg); color: var(--txt1); }
 
 /* Spinner for running tool rows. */
 .tool-spinner { width: 16px; height: 16px; border: 2px solid var(--gb2); border-top-color: var(--accent); border-radius: 50%; animation: spin 800ms linear infinite; flex-shrink: 0; }
+.tool-row .tool-spinner { width: 13px; height: 13px; }
