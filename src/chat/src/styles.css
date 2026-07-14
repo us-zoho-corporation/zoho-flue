@@ -32,6 +32,16 @@ html, body, #root {
   --ok: #049949; --ok-bg: rgba(4, 153, 73, 0.10);
   --danger: #E42527;
 
+  /* Kumo ships its own brand (indigo-blue) and danger colors, plus a
+     Cloudflare-orange "brand text" color, none tied to this app's palette —
+     alias them so every Kumo Button/Switch/Select reads as Zoho blue instead
+     of Kumo's stock defaults. Custom properties resolve `var()` lazily, so
+     these two declarations alone keep the dark-theme override below in sync. */
+  --color-kumo-brand: var(--accent);
+  --text-color-kumo-brand: var(--accent-fg);
+  --color-kumo-danger: var(--danger);
+  --text-color-kumo-danger: var(--danger);
+
   --font-sans: "Zoho Puvi", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --shadow-focus: 0 0 0 3px rgba(35, 109, 180, 0.25);
@@ -96,6 +106,8 @@ body { background: var(--page-bg); color: var(--txt1); }
   backdrop-filter: blur(var(--blur)) saturate(1.5); -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
   border: 1px solid var(--gb); box-shadow: var(--ghi), var(--gsh); border-radius: 16px;
 }
+
+
 
 /* ─── Sidebar content ────────────────────────────────────────────────────────── */
 .sb-header { display: flex; align-items: center; gap: 8px; }
@@ -171,6 +183,17 @@ body { background: var(--page-bg); color: var(--txt1); }
 }
 .sb-user-name { font: 500 13px/1.3 var(--font-sans); color: var(--txt1); }
 .sb-user-sub { font: 400 11.5px/1.3 var(--font-sans); color: var(--txt3); }
+.hdr-profile-org {
+  display: flex; align-items: center; gap: 4px; margin-top: 3px; min-width: 0;
+  font: 500 11px/1.3 var(--font-sans); color: var(--txt3);
+}
+.hdr-profile-org svg { color: var(--accent-fg); }
+.hdr-profile-org-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hdr-profile-env {
+  flex-shrink: 0; text-transform: capitalize; font: 600 10px var(--font-sans);
+  letter-spacing: 0.02em; color: var(--txt3); background: var(--glass2); border: 1px solid var(--gb2);
+  border-radius: 999px; padding: 1px 7px; margin-left: 2px;
+}
 
 /* ─── Chat area ──────────────────────────────────────────────────────────────── */
 .chat-area { display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 1; }
@@ -228,7 +251,25 @@ body { background: var(--page-bg); color: var(--txt1); }
 .icon-btn:hover { background: var(--hover); }
 .icon-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
 
-.chat-viewport { flex: 1; overflow-y: auto; padding: 24px 24px 200px; }
+/* Bottom padding reserves room for the composer AND, when shown, the mutation
+   approval card stacked above it (Thread.tsx keeps this scrolled fully into
+   view via useLayoutEffect) — generous on purpose so the two never collide.
+   The mask fades the last ~64px to transparent, so content scrolling out from
+   under the floating composer/card reads as an intentional soft edge instead
+   of a hard clip. */
+.chat-viewport {
+  flex: 1; overflow-y: auto; padding: 24px 24px 340px;
+  mask-image: linear-gradient(to bottom, black calc(100% - 64px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 64px), transparent 100%);
+}
+/* The welcome screen has no message content to protect from the floating
+   composer, so the 340px reserve + fade above just push its vertically
+   centered content upward off-center — drop both when the thread is empty. */
+.chat-viewport-empty {
+  padding-bottom: 24px;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
 .chat-messages { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
 .history-loading { text-align: center; padding: 40px; font-size: 13px; color: var(--txt3); }
 
@@ -348,6 +389,128 @@ body { background: var(--page-bg); color: var(--txt1); }
 .composer-signin-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
 .composer-signin-btn:disabled { opacity: 0.5; cursor: default; }
 
+/* ─── Settings → ONE liquid glass panel (replaces Kumo LayerCard's opaque white
+   AND a prior version of this file that used a separate glass box per section,
+   which read as a stack of disconnected cards rather than one surface). Each
+   section flows inside the same panel, divided by hairlines like the profile
+   popup's account/sign-out separator, matching the sidebar's single-glass-card
+   shape (.sb-body) rather than Settings being its own, different pattern. ─── */
+.settings-panel {
+  border-radius: 22px; padding: 4px 20px; box-sizing: border-box;
+  /* A flat var(--glass) reads as plain white here — this panel sits over the
+     content area, away from the ambient blobs the sidebar/composer catch, so
+     there's nothing colorful behind it to blur. A faint accent tint baked
+     into the gradient itself gives it a "glass" identity independent of
+     what's actually behind it (mirrors the mutation-card fix). */
+  background: linear-gradient(165deg, color-mix(in srgb, var(--accent) 5%, var(--glass)) 0%, var(--glass2) 100%);
+  backdrop-filter: blur(var(--blur)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.6);
+  border: 1px solid var(--gb); box-shadow: var(--ghi), var(--gsh);
+}
+.settings-section { padding: 20px 0; }
+.settings-sep { height: 1px; background: var(--gb2); }
+.settings-connection-row {
+  border-radius: 12px;
+  background: linear-gradient(165deg, var(--glass2) 0%, transparent 100%);
+  border: 1px solid var(--gb2); box-shadow: var(--ghi);
+}
+
+/* ─── Kumo control overrides ──────────────────────────────────────────────────
+   Kumo's Switch and Select don't read the --color-kumo-* aliases above (their
+   colors are hardcoded Tailwind utility classes, e.g. `bg-blue-500`), and the
+   Select trigger/popup render Kumo's own opaque `bg-kumo-base` white — both
+   read as stock controls dropped onto a glass surface. Re-themed here via
+   Kumo's own `data-kumo-component`/`data-kumo-part` hooks so this survives
+   Tailwind class churn across Kumo versions. */
+[data-kumo-component="Switch"] {
+  /* Kumo's `w-9` doesn't mark the switch shrink-0, so in a `justify-between`
+     row it gets flex-shrunk whenever the sibling label wraps to two lines
+     (e.g. Auto mode's long description) while Dark mode's short one-liner
+     doesn't — the two switches then render at visibly different widths. */
+  flex-shrink: 0 !important;
+  width: 36px !important; height: 18px !important;
+  background: var(--gb2) !important;
+  --tw-ring-color: var(--gb2) !important;
+}
+[data-kumo-component="Switch"][aria-checked="true"] { background: var(--accent) !important; }
+[data-kumo-component="Switch"] > div { background: #fff !important; box-shadow: 0 1px 2px rgba(17, 20, 24, 0.25) !important; }
+
+[data-kumo-component="Select"][data-kumo-part="trigger"] {
+  background: var(--glass2) !important; box-shadow: none !important;
+  --tw-ring-color: var(--gb2) !important; color: var(--txt1) !important;
+}
+/* The options popup portals to <body>, outside .settings-panel, so it's
+   matched structurally (Kumo renders it as the listbox's direct parent)
+   rather than by a stable part name, which this wrapper doesn't expose. */
+div:has(> [role="listbox"]) {
+  background: var(--glass) !important;
+  backdrop-filter: blur(var(--blur)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
+  border: 1px solid var(--gb) !important; box-shadow: var(--ghi), var(--gsh) !important;
+}
+[role="option"][data-highlighted] { background: var(--hover) !important; }
+
+/* ─── Mutation approval — vertical Approve/Deny, slides up above the composer ──
+   A deliberately deeper glass treatment than the sidebar/composer (this is the
+   one surface the user must stop and read before a real mutation happens):
+   a top-to-bottom glass gradient for a sense of thickness, a brighter inset
+   highlight, and a two-layer shadow (contact + ambient) for real elevation. */
+.mutation-card {
+  display: flex; flex-direction: column; gap: 14px; width: 100%; box-sizing: border-box;
+  border-radius: 20px; padding: 18px 20px; margin-bottom: 10px;
+  background: linear-gradient(165deg, var(--glass) 0%, var(--glass2) 100%);
+  backdrop-filter: blur(28px) saturate(1.8);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  border: 1px solid var(--gb);
+  box-shadow: var(--ghi), 0 2px 6px rgba(17, 20, 24, 0.06), 0 20px 44px rgba(17, 20, 24, 0.16);
+  animation: fadeup 260ms var(--ease-out) both;
+}
+.mutation-card-head { display: flex; align-items: center; gap: 8px; }
+.mutation-card-icon {
+  width: 26px; height: 26px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+  background: var(--accent-soft); color: var(--accent-fg); flex-shrink: 0;
+}
+.mutation-card-label {
+  font: 600 11px var(--font-sans); text-transform: uppercase; letter-spacing: 0.08em; color: var(--txt3);
+}
+.mutation-card-summary { font: 600 14px/1.4 var(--font-sans); color: var(--txt1); margin: 0; }
+/* Field values as a label/value list, not a run-on sentence — this is the one
+   place the record's actual field values are shown (the assistant's own
+   reply is instructed to stay to one short line), so it has to be scannable,
+   not just wrapped text. */
+.mutation-card-fields {
+  display: flex; flex-direction: column; gap: 7px; padding: 12px 14px;
+  border-radius: 12px; background: var(--glass2); border: 1px solid var(--gb2);
+}
+.mutation-card-field { display: flex; gap: 12px; align-items: baseline; }
+.mutation-card-field-label {
+  flex: 0 0 auto; min-width: 108px; font: 600 11px var(--font-sans);
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--txt3);
+}
+.mutation-card-field-value {
+  flex: 1; min-width: 0; font: 500 13.5px/1.4 var(--font-sans); color: var(--txt1);
+  word-break: break-word;
+}
+.mutation-card-actions { display: flex; flex-direction: column; gap: 8px; }
+.mutation-card-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; box-sizing: border-box;
+  border-radius: 13px; padding: 12px 16px; cursor: pointer; font: 600 14px var(--font-sans);
+  transition: background 180ms var(--ease-out), border-color 180ms var(--ease-out), opacity 180ms var(--ease-out);
+}
+.mutation-card-btn:disabled { opacity: 0.5; cursor: default; }
+.mutation-card-approve {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, white 12%), var(--accent));
+  color: #fff; border: 1px solid transparent; box-shadow: 0 1px 2px rgba(17, 20, 24, 0.12), 0 6px 16px var(--accent-soft);
+}
+.mutation-card-approve:hover:not(:disabled) { background: var(--accent-fg); }
+/* Deny is a plain ghost/outline button — deliberately quieter than Approve so
+   the two never compete for attention (previously both read as similarly
+   "filled," making Deny look like an unstyled placeholder). */
+.mutation-card-deny {
+  background: transparent; color: var(--txt2); border: 1.5px solid var(--gb2); box-shadow: none;
+}
+.mutation-card-deny:hover:not(:disabled) { background: var(--hover); border-color: var(--txt3); }
+
 /* ─── Login / welcome screen ─────────────────────────────────────────────────── */
 .login-screen {
   height: 100vh; width: 100%; display: flex; align-items: center; justify-content: center;
@@ -464,3 +627,31 @@ body { background: var(--page-bg); color: var(--txt1); }
 /* Spinner for running tool rows. */
 .tool-spinner { width: 16px; height: 16px; border: 2px solid var(--gb2); border-top-color: var(--accent); border-radius: 50%; animation: spin 800ms linear infinite; flex-shrink: 0; }
 .tool-row .tool-spinner { width: 13px; height: 13px; }
+
+/* ─── Responsive ─────────────────────────────────────────────────────────────
+   Below Kumo's own 768px sidebar breakpoint (Sidebar.tsx reads `isMobile` /
+   `openMobile` from useSidebar() at the same width), the sidebar switches
+   from a push-layout column to a fixed overlay drawer, closed by default.
+   Placed last so these overrides win over the unconditional rules above
+   despite equal selector specificity (media queries don't get cascade
+   priority on their own — only source order does). */
+@media (max-width: 767px) {
+  .sb-aside-mobile {
+    position: fixed; inset: 0 auto 0 0; z-index: 30; width: 308px; max-width: 84vw;
+    transform: translateX(-100%); transition: transform 260ms var(--ease-out);
+  }
+  .sb-aside-mobile[data-open="true"] { transform: translateX(0); }
+  .sb-backdrop {
+    position: fixed; inset: 0; z-index: 25; background: rgba(11, 15, 20, 0.4);
+    animation: fadeup 200ms var(--ease-out) both;
+  }
+
+  .chat-topbar { margin: 10px 10px 0; padding: 8px; }
+  .hdr-sub { display: none; }
+  .chat-viewport { padding: 16px 14px 300px; }
+  .composer-wrap { padding: 0 12px 12px; }
+  .msg-user-inner { max-width: 88%; }
+  .welcome-grid { grid-template-columns: 1fr; }
+  .welcome h1 { font-size: 26px; }
+  .settings-scroll { padding: 16px !important; }
+}

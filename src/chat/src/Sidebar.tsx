@@ -74,10 +74,15 @@ const WORKSPACE: { key: string; label: string; icon: typeof Robot }[] = [
  * @returns The sidebar `<aside>` plus a portal-rendered context menu overlay when one is open.
  */
 export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns, onMcp }: SidebarProps) {
-  const { open } = useSidebar();
+  const { open, isMobile, openMobile, setOpenMobile } = useSidebar();
+  const visible = isMobile ? openMobile : open;
   const [search, setSearch] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
 
+  // On narrow viewports the sidebar is an overlay drawer, not a push-layout
+  // column — tapping a destination should close it, same as any mobile app
+  // shell, so the chosen view is actually visible underneath.
+  const closeOnMobile = useCallback(() => { if (isMobile) setOpenMobile(false); }, [isMobile, setOpenMobile]);
   const handlers: Record<string, () => void> = {
     agents: onAgents, skills: onSkills, workflows: onWorkflows, mcp: onMcp, runs: onRuns, settings: onSettings,
   };
@@ -125,7 +130,12 @@ export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSetti
 
   return (
     <>
-    <aside className="sb-aside" style={{ width: open ? 308 : 0 }}>
+    {isMobile && visible && <div className="sb-backdrop" onClick={() => setOpenMobile(false)} />}
+    <aside
+      className={`sb-aside${isMobile ? ' sb-aside-mobile' : ''}`}
+      data-open={visible}
+      style={isMobile ? undefined : { width: open ? 308 : 0 }}
+    >
       <div className="sb-body">
         <div className="sb-header" style={{ padding: '2px 6px 14px' }}>
           <span style={{ color: 'var(--txt1)', display: 'flex' }}><ZohoLogo height={22} /></span>
@@ -133,7 +143,7 @@ export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSetti
           <span className="sb-badge">AI preview</span>
         </div>
 
-        <button className="sb-newchat" onClick={onNew}>
+        <button className="sb-newchat" onClick={() => { onNew(); closeOnMobile(); }}>
           <Plus size={16} weight="bold" />
           New chat
         </button>
@@ -153,7 +163,7 @@ export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSetti
                 <div
                   className="sb-item"
                   data-active={session.id === activeId}
-                  onClick={() => onSelect(session.id)}
+                  onClick={() => { onSelect(session.id); closeOnMobile(); }}
                   onContextMenu={(e) => { e.preventDefault(); setCtx({ id: session.id, x: e.clientX, y: e.clientY }); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                 >
@@ -181,7 +191,7 @@ export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSetti
         {workspaceOpen && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {WORKSPACE.map(({ key, label, icon: Icon }) => (
-              <div key={key} className="sb-nav" onClick={handlers[key]}>
+              <div key={key} className="sb-nav" onClick={() => { handlers[key](); closeOnMobile(); }}>
                 <Icon size={16} />
                 <span style={{ flex: 1 }}>{label}</span>
               </div>
