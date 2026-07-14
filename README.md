@@ -27,6 +27,7 @@ pnpm chat            # chat UI on :5173 (proxies to :3583)
 
 - [Setup](docs/setup.md) — OAuth credentials, `.env`, adding agents and providers
 - [Commands](docs/commands.md) — run, build, type-check, lint, test
+- [Testing](docs/testing.md) — test framework, default vs. flagged suites
 - [Examples](docs/examples.md) — example prompts per agent
 - [Architecture](docs/architecture.md) — project structure, providers, auth pattern
 - [a2ui](docs/a2ui.md) — generative UI streaming (charts, tables, metric cards)
