@@ -23,15 +23,25 @@ export const config = {
 	zohoClientId: required('ZOHO_OAUTH_CLIENT_ID'),
 	zohoClientSecret: required('ZOHO_OAUTH_CLIENT_SECRET'),
 	zohoRefreshToken: required('ZOHO_OAUTH_REFRESH_TOKEN'),
+	// Data-center domain suffix for the shared service account (com | eu | in |
+	// com.au | com.cn | jp — see https://www.zoho.com/crm/developer/docs/api/v8/multi-dc.html).
+	// A refresh token — and every accounts/API/desk/contacts domain derived from
+	// it below — only works against the SAME data center it was issued from;
+	// using the wrong one fails with "invalid_code" no matter how valid the
+	// token otherwise is. Per-user connections instead carry their own DC,
+	// captured at consent time (see StoredToken.accountsServer).
+	zohoAccountsBase: `https://accounts.zoho.${process.env['ZOHO_DOMAIN_SUFFIX'] ?? 'com'}`,
 	catalystEndpoint: required('CATALYST_ENDPOINT'),
 	catalystOrgId: required('CATALYST_ORG_ID'),
 
 	// Per-user Zoho OAuth login (authorization-code flow). Scopes may be comma- or
 	// space-separated; granted scopes are stored per user and can be expanded.
-	// Profile for identity, plus QuickML.deployment.READ so the user's token can
-	// reach the Catalyst GLM (Zoho GLM 4.7 Flash) endpoint.
+	// Profile for identity, QuickML.deployment.READ so the user's token can reach
+	// the Catalyst GLM (Zoho GLM 4.7 Flash) endpoint, and ZohoCRM.org.READ so the
+	// top-bar profile popup can show the user's Zoho CRM organization name right
+	// after login, without requiring a separate "Connect CRM" step first.
 	zohoOAuthRedirectUri: required('ZOHO_OAUTH_REDIRECT_URI'),
-	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ,QuickML.deployment.READ',
+	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ,QuickML.deployment.READ,ZohoCRM.org.READ',
 	// Per-product scope bundles the settings "Connections" panel offers, so a user
 	// can grant a product's full scope set in one incremental-authorization round
 	// trip (`GET /api/auth/login?scopes=...`) instead of hitting reauth errors
@@ -141,8 +151,13 @@ export const config = {
 	// which surfaces as the reply cutting off mid-stream. 8192 leaves headroom.
 	catalystMaxTokens: 8_192,
 
-	// Zoho API tool — domains the zoho_api tool is permitted to reach
-	zohoAllowedHostnames: ['zoho.com', 'zohoapis.com'],
+	// Zoho API tool — domains the zoho_api tool is permitted to reach. Derived
+	// from the same data-center suffix as zohoAccountsBase, since zoho_api always
+	// calls out as the shared service account, never a per-user connection.
+	zohoAllowedHostnames: [
+		`zoho.${process.env['ZOHO_DOMAIN_SUFFIX'] ?? 'com'}`,
+		`zohoapis.${process.env['ZOHO_DOMAIN_SUFFIX'] ?? 'com'}`,
+	],
 	// Maximum number of redirects the zoho_api tool will follow
 	zohoApiMaxRedirects: 5,
 

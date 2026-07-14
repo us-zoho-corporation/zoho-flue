@@ -3,6 +3,7 @@ import type { Stores } from '../types';
 import { CatalystCacheClient } from './cache-client';
 import { CatalystDataStoreClient } from './data-store-client';
 import { CatalystNoSqlClient } from './nosql-client';
+import { CatalystConversationOwnerStore } from './conversation-owner-repo';
 import { CatalystMcpServerStore } from './mcp-server-repo';
 import { CatalystPreferenceStore } from './preference-repo';
 import { CatalystSecretsStore } from './secrets-repo';
@@ -28,9 +29,10 @@ export interface CatalystStoresOptions {
  * Assembles the Catalyst-backed repositories, choosing the right service per
  * access pattern: `users`, `tokens`, `preferences`, and `mcpServers` (durable
  * key-value / partition access) run on **NoSQL**; `sessions` (short-lived,
- * per-request, auto-expiring) run on **Cache**; and `secrets` stays on **Data
- * Store**, whose read-ordered `createIfAbsent` gives proven atomic
- * first-writer-wins. All clients share one service-account token.
+ * per-request, auto-expiring) run on **Cache**; and `secrets` and
+ * `conversationOwners` stay on **Data Store**, whose read-ordered
+ * `createIfAbsent`/`claimOrGetOwner` gives proven atomic first-writer-wins.
+ * All clients share one service-account token.
  * @param opts - Connection settings and the service-account OAuth credentials.
  * @returns A `Stores` instance backed by Catalyst NoSQL + Cache + Data Store.
  */
@@ -45,5 +47,6 @@ export function createCatalystStores(opts: CatalystStoresOptions): Stores {
 		preferences: new CatalystPreferenceStore(nosql),
 		mcpServers: new CatalystMcpServerStore(nosql),
 		secrets: new CatalystSecretsStore(datastore),
+		conversationOwners: new CatalystConversationOwnerStore(datastore),
 	};
 }

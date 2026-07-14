@@ -27,6 +27,7 @@ Flue discovers `agents/`, `workflows/`, and `channels/` by filename, plus `app.t
 - Never read `process.env` outside `src/config.ts`. Use `config.*` everywhere else.
 - No `!` non-null assertions on env variables — `required()` throws at startup if absent.
 - Unit tests colocated as `*.test.ts`; smoke tests in `tests/smoke/` (live credentials); optional browser component tests as `*.browser.test.tsx` (`pnpm test:browser`).
+- Never colocate a `*.test.ts` directly in `src/agents/`, `src/workflows/`, or `src/channels/` — Flue's filename discovery there globs every `.ts` file non-recursively and will try to load it as an agent/workflow/channel, crashing `flue dev` (`Vitest mocker was not initialized in this environment`). Put tests for those directories in a `__tests__/` subdirectory instead.
 - Use Zod for schema validation; Valibot only where `defineTool` requires it.
 - Tools hold credentials in closures — the model only sees parameter names, never raw tokens.
 - Every named function — function declarations, arrow/function expressions assigned to a `const`, and class/object methods — needs a TSDoc block (`/** ... */`) directly above it: a one-line description, `@param` per parameter, `@returns` (omit for `void`), and `@throws` for any error conditions it can raise (omit if it can't throw). Anonymous inline callbacks (e.g. `.map(x => ...)`) are exempt.

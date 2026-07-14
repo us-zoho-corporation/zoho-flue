@@ -103,6 +103,23 @@ export interface SecretsStore {
 	createIfAbsent(key: string, value: string): Promise<string>;
 }
 
+/**
+ * Records which user "owns" a conversation id, so the agent route can reject
+ * any other user trying to read/drive it. Flue's own conversation id/persistence
+ * has no user concept at all (the id is client-generated, global, and Flue's
+ * store keys purely on it) — without this, any authenticated user who obtains
+ * another user's conversation id can read their full message history. See
+ * `src/agents/assistant.ts`'s `route` handler.
+ */
+export interface ConversationOwnerStore {
+	/**
+	 * Claims `conversationId` for `userId` if unclaimed yet (first turn ever sent
+	 * to it). If another user already claimed it, returns their id instead of
+	 * `userId` — first-writer-wins, same pattern as `SecretsStore.createIfAbsent`.
+	 */
+	claimOrGetOwner(conversationId: string, userId: string): Promise<string>;
+}
+
 /** Composition of every repository — the single dependency the app wires in. */
 export interface Stores {
 	users: UserStore;
@@ -111,4 +128,5 @@ export interface Stores {
 	preferences: PreferenceStore;
 	mcpServers: McpServerStore;
 	secrets: SecretsStore;
+	conversationOwners: ConversationOwnerStore;
 }
