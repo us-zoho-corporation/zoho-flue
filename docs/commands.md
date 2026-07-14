@@ -36,3 +36,4 @@ pnpm exec oxlint src/
 The three suites are Vitest `projects` in one `vitest.config.ts`, selected via `--project`:
 `unit` (node, the default `pnpm test`), `browser` (`*.browser.test.tsx` in headless Chromium),
 and `smoke` (live credentials). One-time for browser: `pnpm exec playwright install chromium`.
+See [Testing](testing.md) for what runs by default vs. what's opt-in and why.
