@@ -10,6 +10,21 @@ import { createHash, randomBytes } from 'node:crypto';
 /** Default Zoho accounts host (US DC). Other DCs use accounts.zoho.eu/.in/etc. */
 export const DEFAULT_ACCOUNTS_BASE = 'https://accounts.zoho.com';
 
+/**
+ * Derives a Zoho product domain from an accounts-server origin, preserving its
+ * data-center suffix — e.g. `zohoDomainFor('https://accounts.zoho.eu', 'www.zohoapis')`
+ * returns `https://www.zohoapis.eu`. Zoho's domains share one suffix per data
+ * center (accounts.zoho.<x>, www.zohoapis.<x>, desk.zoho.<x>, contacts.zoho.<x>),
+ * so a single stored accounts host is enough to reach any of them correctly.
+ * @param accountsBase - The data center's accounts-server origin.
+ * @param productSubdomain - The product's subdomain prefix (e.g. `www.zohoapis`, `contacts.zoho`).
+ * @returns The matching product domain for the same data center.
+ */
+export function zohoDomainFor(accountsBase: string, productSubdomain: string): string {
+	const suffix = accountsBase.replace(/^https?:\/\/accounts\.zoho\./, '');
+	return `https://${productSubdomain}.${suffix}`;
+}
+
 export interface PkcePair {
 	verifier: string;
 	challenge: string; // base64url(sha256(verifier))

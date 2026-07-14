@@ -7,6 +7,7 @@ const oauth = {
 	clientId: config.zohoClientId,
 	clientSecret: config.zohoClientSecret,
 	refreshToken: config.zohoRefreshToken,
+	accountsBase: config.zohoAccountsBase,
 };
 
 /**

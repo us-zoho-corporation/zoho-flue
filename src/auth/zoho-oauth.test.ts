@@ -6,6 +6,7 @@ import {
 	createState,
 	exchangeCodeForTokens,
 	fetchUserInfo,
+	zohoDomainFor,
 } from './zoho-oauth';
 
 afterEach(() => vi.restoreAllMocks());
@@ -115,5 +116,17 @@ describe('fetchUserInfo', () => {
 			json: async () => ({ ZUID: '1', Email: 'a@x.com', Photo_ID: 'javascript:alert(1)' }),
 		}));
 		expect((await fetchUserInfo('tok')).photoId).toBeNull();
+	});
+});
+
+describe('zohoDomainFor', () => {
+	it('preserves the US DC suffix for another product domain', () => {
+		expect(zohoDomainFor('https://accounts.zoho.com', 'www.zohoapis')).toBe('https://www.zohoapis.com');
+	});
+
+	it('preserves a non-US DC suffix, including multi-part TLDs', () => {
+		expect(zohoDomainFor('https://accounts.zoho.eu', 'www.zohoapis')).toBe('https://www.zohoapis.eu');
+		expect(zohoDomainFor('https://accounts.zoho.com.au', 'desk.zoho')).toBe('https://desk.zoho.com.au');
+		expect(zohoDomainFor('https://accounts.zoho.in', 'contacts.zoho')).toBe('https://contacts.zoho.in');
 	});
 });

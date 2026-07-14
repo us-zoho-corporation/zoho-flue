@@ -1,4 +1,5 @@
 import type {
+	ConversationOwnerStore,
 	McpServer,
 	McpServerStore,
 	Preferences,
@@ -234,6 +235,24 @@ class MemorySecretsStore implements SecretsStore {
 	}
 }
 
+class MemoryConversationOwnerStore implements ConversationOwnerStore {
+	private readonly rows = new Map<string, string>();
+
+	/**
+	 * Claims a conversation id for a user if unclaimed, or returns the existing
+	 * owner if another user already claimed it.
+	 * @param conversationId - Conversation id to claim.
+	 * @param userId - The user id claiming it, if it's not already claimed.
+	 * @returns The winning owner's user id — `userId`, or the pre-existing one.
+	 */
+	async claimOrGetOwner(conversationId: string, userId: string): Promise<string> {
+		const existing = this.rows.get(conversationId);
+		if (existing !== undefined) return existing;
+		this.rows.set(conversationId, userId);
+		return userId;
+	}
+}
+
 /**
  * Builds a fresh in-memory `Stores` instance.
  * @returns A new `Stores` with independent, empty in-memory backing maps.
@@ -246,5 +265,6 @@ export function createMemoryStores(): Stores {
 		preferences: new MemoryPreferenceStore(),
 		mcpServers: new MemoryMcpServerStore(),
 		secrets: new MemorySecretsStore(),
+		conversationOwners: new MemoryConversationOwnerStore(),
 	};
 }

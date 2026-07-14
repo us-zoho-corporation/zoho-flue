@@ -8,6 +8,7 @@ import { config } from './config';
 import { registerProviders } from './providers';
 import { getAuth } from './auth';
 import { parseKeyring } from './auth/crypto';
+import { zohoDomainFor } from './auth/zoho-oauth';
 import { initPersistedSecrets } from './auth/secrets-bootstrap';
 import { builtinMcpServers } from './mcp/builtins';
 import { createMcpRoutes } from './mcp/routes';
@@ -172,18 +173,54 @@ app.get('/api/me', auth.requireUser, async (c) => {
 	});
 });
 
+// The signed-in user's Zoho CRM organization name + environment, for the
+// profile popup. ZohoCRM.org.READ is one of the default login scopes
+// (config.zohoLoginScopes), so this works right after a normal sign-in — no
+// separate "Connect CRM" step needed. Best-effort: resolves to
+// { orgName: null, environment: null } (never an error) if the grant predates
+// that scope being added, was explicitly dropped via Disconnect, or the live
+// call fails — this is a nice-to-have detail, not something the rest of the
+// UI depends on.
+app.get('/api/org', auth.requireUser, async (c) => {
+	const empty = { orgName: null, environment: null };
+	const userId = c.get('userId') as string;
+	const token = await stores.tokens.get(userId);
+	if (!token?.scopes.includes('ZohoCRM.org.READ')) return c.json(empty);
+	try {
+		const accessToken = await auth.getUserToken(userId);
+		// Same data center this user's grant was issued from, not a hardcoded US
+		// domain — org lookups for a non-US-DC org would otherwise 404/fail.
+		const apiDomain = zohoDomainFor(token.accountsServer, 'www.zohoapis');
+		const res = await fetch(`${apiDomain}/crm/v8/org`, {
+			headers: { Authorization: `Bearer ${accessToken}` },
+		});
+		if (!res.ok) return c.json(empty);
+		// `type` is Zoho's own field name for this — "production" | "sandbox" |
+		// "bigin" | "developer" (https://www.zoho.com/crm/developer/docs/api/v8/get-org-data.html).
+		const data = await res.json() as { org?: Array<{ company_name?: string; type?: string }> };
+		const org = data.org?.[0];
+		return c.json({ orgName: org?.company_name ?? null, environment: org?.type ?? null });
+	} catch {
+		return c.json(empty);
+	}
+});
+
 app.get('/api/photo', auth.requireUser, async (c) => {
 	const id = c.req.query('id') ?? '';
 	if (!/^\d+$/.test(id)) return c.json({ error: 'Invalid photo ID' }, 400);
-	let token: string;
+	const userId = c.get('userId') as string;
+	let accessToken: string;
 	try {
 		// Fetches the logged-in user's own photo; needs a contacts scope on their grant.
-		token = await auth.getUserToken(c.get('userId') as string);
+		accessToken = await auth.getUserToken(userId);
 	} catch {
 		return c.json({ error: 'reauth_required' }, 401);
 	}
-	const res = await fetch(`https://contacts.zoho.com/file?ID=${id}&fs=thumb`, {
-		headers: { Authorization: `Zoho-oauthtoken ${token}` },
+	// Same data center this user's grant was issued from, not a hardcoded US domain.
+	const stored = await stores.tokens.get(userId);
+	const contactsDomain = zohoDomainFor(stored?.accountsServer ?? config.zohoAccountsBase, 'contacts.zoho');
+	const res = await fetch(`${contactsDomain}/file?ID=${id}&fs=thumb`, {
+		headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
 	});
 	if (!res.ok) return c.json({ error: 'Photo not found' }, 404);
 	const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);

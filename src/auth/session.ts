@@ -177,6 +177,11 @@ export async function getUserToken(deps: AuthDeps, userId: string): Promise<stri
 		clientId: deps.oauth.clientId,
 		clientSecret: deps.oauth.clientSecret,
 		refreshToken,
+		// The data center this specific user's grant was issued from — captured
+		// at consent time (routes.ts) and previously never read back here, which
+		// meant every per-user refresh silently ignored it and always hit the US
+		// endpoint regardless, failing with "invalid_code" for any other DC.
+		accountsBase: stored.accountsServer,
 	};
 	return getZohoAccessToken(creds);
 }

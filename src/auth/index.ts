@@ -27,6 +27,7 @@ export function getAuth(): Auth {
 			clientSecret: config.zohoClientSecret,
 			redirectUri: config.zohoOAuthRedirectUri,
 			loginScopes: config.zohoLoginScopes,
+			accountsBase: config.zohoAccountsBase,
 		},
 		products: config.zohoProducts,
 	});

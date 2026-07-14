@@ -214,5 +214,28 @@ export function runStoresContract(name: string, makeStores: () => Stores): void 
 				expect(await stores.secrets.get('DATA_ENCRYPTION_KEY')).toBe('b');
 			});
 		});
+
+		describe('conversationOwners', () => {
+			it('claims an unclaimed conversation id for the claiming user', async () => {
+				expect(await stores.conversationOwners.claimOrGetOwner('conv-1', 'zuid-1')).toBe('zuid-1');
+			});
+
+			it('returns the existing owner on a later claim by a different user', async () => {
+				await stores.conversationOwners.claimOrGetOwner('conv-1', 'zuid-1');
+				expect(await stores.conversationOwners.claimOrGetOwner('conv-1', 'zuid-2')).toBe('zuid-1');
+			});
+
+			it('is idempotent for the same user', async () => {
+				await stores.conversationOwners.claimOrGetOwner('conv-1', 'zuid-1');
+				expect(await stores.conversationOwners.claimOrGetOwner('conv-1', 'zuid-1')).toBe('zuid-1');
+			});
+
+			it('isolates ownership by conversation id', async () => {
+				await stores.conversationOwners.claimOrGetOwner('conv-1', 'zuid-1');
+				await stores.conversationOwners.claimOrGetOwner('conv-2', 'zuid-2');
+				expect(await stores.conversationOwners.claimOrGetOwner('conv-1', 'zuid-2')).toBe('zuid-1');
+				expect(await stores.conversationOwners.claimOrGetOwner('conv-2', 'zuid-1')).toBe('zuid-2');
+			});
+		});
 	});
 }

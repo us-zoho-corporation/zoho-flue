@@ -53,6 +53,22 @@ describe('getZohoAccessToken', () => {
 		expect(body.get('refresh_token')).toBe('refresh');
 	});
 
+	it('defaults to the US accounts domain when accountsBase is omitted', async () => {
+		const fetchMock = mockFetch('tok_abc');
+		vi.stubGlobal('fetch', fetchMock);
+		await getZohoAccessToken(opts);
+		expect(fetchMock.mock.calls[0][0]).toBe('https://accounts.zoho.com/oauth/v2/token');
+	});
+
+	it('refreshes against the credential-supplied data center, not always the US domain', async () => {
+		const euOpts = { ...opts, refreshToken: 'refresh-eu', accountsBase: 'https://accounts.zoho.eu' };
+		evictZohoToken(euOpts);
+		const fetchMock = mockFetch('tok_eu');
+		vi.stubGlobal('fetch', fetchMock);
+		await getZohoAccessToken(euOpts);
+		expect(fetchMock.mock.calls[0][0]).toBe('https://accounts.zoho.eu/oauth/v2/token');
+	});
+
 	it('returns cached token without re-fetching', async () => {
 		const fetchMock = mockFetch('tok_cached');
 		vi.stubGlobal('fetch', fetchMock);

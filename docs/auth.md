@@ -52,8 +52,9 @@ Granted scopes are stored on `UserTokens.Scopes` and merged (union) on every log
 `GET /api/auth/login?scopes=<extra>` performs **incremental authorization** (comma- or
 space-separated; sent to Zoho comma-delimited). Gate scope-dependent features with
 `hasScope(deps, userId, scope)`. Default login scopes are `AaaServer.profile.READ`
-(identity) and `QuickML.deployment.READ` (so the user's token can reach the Zoho GLM 4.7
-Flash endpoint).
+(identity), `QuickML.deployment.READ` (so the user's token can reach the Zoho GLM 4.7
+Flash endpoint), and `ZohoCRM.org.READ` (so `GET /api/org` can show the user's Zoho CRM
+organization name in the profile popup right after login, with no separate CRM connection needed).
 
 ## Connecting products (Settings)
 
@@ -86,6 +87,13 @@ the GLM chat model's `QuickML.deployment.READ` scope and any future per-user Zoh
 independent caching, concurrent-refresh dedup, and 5-min skew handling for free. If a user
 has no stored token, callers get `reauth_required` (401).
 
+Each user's `accountsServer` (captured at login/consent, e.g. `https://accounts.zoho.eu`)
+is passed through as `accountsBase` on every refresh — a refresh token is only valid
+against the data center it was issued from, so this must be preserved and reused, not
+assumed to be the US default. `zohoDomainFor(accountsServer, subdomain)` (`zoho-oauth.ts`)
+derives any other product domain (`www.zohoapis`, `contacts.zoho`, `desk.zoho`) for that
+same data center — used by `/api/org` and `/api/photo` in `app.ts`.
+
 ## Token encryption
 
 Refresh tokens are AES-256-GCM encrypted; the envelope is `v1:<keyId>:<iv>:<tag>:<ct>`.
@@ -101,8 +109,8 @@ Each store runs on the Catalyst service that fits its access pattern:
 
 - **NoSQL** for the four durable key-value / partition-based stores.
 - **Cache** for `sessions` — short-lived, read on every request, and auto-expiring.
-- **Data Store** for `secrets` — its read-ordered insert gives `createIfAbsent`
-  clean atomic first-writer-wins.
+- **Data Store** for `secrets` and `conversationOwners` — their read-ordered insert
+  gives `createIfAbsent`/`claimOrGetOwner` clean atomic first-writer-wins.
 
 We write our own epoch-ms attributes; all access is admin-scoped via the service
 token. Create these in the console (NoSQL tables/indexes and Cache segments are
@@ -120,17 +128,18 @@ Cache segment (sessions):
 
 - One segment (numeric id via `CATALYST_CACHE_SEGMENT`, or the project's default). The store writes a `sess:{sessionId}` value per session (TTL = the session's remaining lifetime) plus a `usess:{userId}` index set (pinned to Cache's 48h max) that `deleteAllForUser` reads to revoke every session for a user. The index is maintained with read-modify-write; under Flue's single-owner deployment a concurrent lost update could at worst drop an id from logout-everywhere, never corrupt a session — an accepted tradeoff for putting the hot-path session read in Cache.
 
-Data Store table:
+Data Store tables:
 
 - **AppSecrets**: `Key`(unique) · `Value` · `UpdatedAt`(BigInt) — durable app secrets (session-cookie signing key, refresh-token encryption keyring), generated once on first boot by `src/auth/secrets-bootstrap.ts`. Never exposed via any API route.
+- **ConversationOwners**: `ConversationId`(unique) · `UserId` · `CreatedAt`(BigInt) — records which user first claimed a conversation id (`src/store/catalyst/conversation-owner-repo.ts`). Enforced in `src/agents/assistant.ts`'s `route` handler: any other user requesting that id gets `403`. Without this, conversation ids are client-generated with no owner concept anywhere in Flue's own persistence, so any authenticated user who obtained another user's id (a leaked/shared session, or a guess) could read their full message history.
 
 (Flue's own engine state uses a further set of NoSQL tables + a Stratus bucket — see [flue-persistence.md](flue-persistence.md).)
 
 ## Setup checklist
 
 1. Register `ZOHO_OAUTH_REDIRECT_URI` as an Authorized Redirect URI on the Zoho OAuth client.
-2. Ensure the **service-account** refresh token carries `ZohoCatalyst.nosql.item.{CREATE,READ,UPDATE}` (NoSQL stores), `ZohoCatalyst.cache.{CREATE,READ,DELETE}` (Cache sessions), and `ZohoCatalyst.tables.rows.{CREATE,READ,UPDATE,DELETE}` + `ZohoCatalyst.zcql.CREATE` (the `AppSecrets` Data Store table).
-3. Create the NoSQL tables above and the `AppSecrets` Data Store table, and note the Cache segment id (the default segment works). Set `STORE_BACKEND=catalyst` and `CATALYST_CACHE_SEGMENT` to that segment id.
+2. Ensure the **service-account** refresh token carries `ZohoCatalyst.nosql.item.{CREATE,READ,UPDATE}` (NoSQL stores), `ZohoCatalyst.cache.{CREATE,READ,DELETE}` (Cache sessions), and `ZohoCatalyst.tables.rows.{CREATE,READ,UPDATE,DELETE}` + `ZohoCatalyst.zcql.CREATE` (the `AppSecrets`/`ConversationOwners` Data Store tables).
+3. Create the NoSQL tables above and the `AppSecrets`/`ConversationOwners` Data Store tables, and note the Cache segment id (the default segment works). Set `STORE_BACKEND=catalyst` and `CATALYST_CACHE_SEGMENT` to that segment id.
 4. Nothing else to configure: the signed-cookie secret and the refresh-token encryption key are bootstrapped automatically into `AppSecrets` on first boot.
 
 Config keys: [environment.md](environment.md). Smoke test: `tests/smoke/` (live Development).

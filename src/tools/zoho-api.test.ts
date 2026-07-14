@@ -14,7 +14,8 @@ vi.mock('../auth/zoho-auth', () => ({
     getZohoAccessToken: vi.fn(async () => 'test-token'),
 }));
 
-import { defineZohoApiTool } from './zoho-api';
+import { defineZohoApiTool, type MutationGateContext } from './zoho-api';
+import { proposeMutation } from './mutation-gate';
 
 const TOKEN = 'test-token';
 const OAUTH = { clientId: 'id', clientSecret: 'secret', refreshToken: 'refresh' };
@@ -40,10 +41,13 @@ function mockFetch(responses: Array<{ status: number; location?: string; body?: 
 
 /**
  * Builds a fresh `zoho_api` tool instance using the fixed test OAuth credentials.
+ * Defaults to `autoApprove: true` (mutation gate bypassed) so tests unrelated to
+ * the gate aren't coupled to it — see the dedicated "mutation gate" suite below.
+ * @param gate - Partial overrides for the mutation-gate context.
  * @returns The `zoho_api` Flue tool under test.
  */
-function tool() {
-    return defineZohoApiTool(OAUTH);
+function tool(gate: Partial<MutationGateContext> = {}) {
+    return defineZohoApiTool(OAUTH, { conversationId: 'c1', requestId: 'r1', autoApprove: true, ...gate });
 }
 
 describe('zoho_api SSRF protection', () => {
@@ -99,6 +103,78 @@ describe('zoho_api SSRF protection', () => {
         mockFetch([{ status: 302, location: 'https://www.zohoapis.com/next' }]);
         await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/start' } }))
             .rejects.toThrow('Too many redirects');
+    });
+});
+
+describe('zoho_api mutation confirmation gate', () => {
+    it('blocks a mutating call with no mutationId, regardless of what the model claims', async () => {
+        await expect(
+            tool({ autoApprove: false }).run({ input: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}' } }),
+        ).rejects.toThrow('Mutating call blocked');
+    });
+
+    it('blocks a mutating call with a made-up mutationId', async () => {
+        await expect(
+            tool({ autoApprove: false }).run({
+                input: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}', mutationId: 'not-a-real-id' },
+            }),
+        ).rejects.toThrow('Mutating call blocked');
+    });
+
+    it('blocks reuse of a mutationId proposed in this same turn (same requestId) — the core determinism guarantee', async () => {
+        const mutationId = proposeMutation('c1', 'update the deal', 'turn-1');
+        await expect(
+            tool({ conversationId: 'c1', requestId: 'turn-1', autoApprove: false }).run({
+                input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+            }),
+        ).rejects.toThrow('Mutating call blocked');
+    });
+
+    it('allows a mutationId proposed in an earlier turn (different requestId)', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ status: 200, headers: { get: () => null }, text: async () => '{}' });
+        vi.stubGlobal('fetch', fetchMock);
+        const mutationId = proposeMutation('c1', 'update the deal', 'turn-1');
+        await expect(
+            tool({ conversationId: 'c1', requestId: 'turn-2', autoApprove: false }).run({
+                input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+            }),
+        ).resolves.toMatchObject({ status: 200 });
+    });
+
+    it('is one-time use: a second attempt with the same (already-consumed) mutationId is blocked', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200, headers: { get: () => null }, text: async () => '{}' }));
+        const mutationId = proposeMutation('c1', 'update the deal', 'turn-1');
+        await tool({ conversationId: 'c1', requestId: 'turn-2', autoApprove: false }).run({
+            input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+        });
+        await expect(
+            tool({ conversationId: 'c1', requestId: 'turn-3', autoApprove: false }).run({
+                input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+            }),
+        ).rejects.toThrow('Mutating call blocked');
+    });
+
+    it('a mutationId proposed in one conversation cannot be used in another', async () => {
+        const mutationId = proposeMutation('conversation-A', 'update the deal', 'turn-1');
+        await expect(
+            tool({ conversationId: 'conversation-B', requestId: 'turn-2', autoApprove: false }).run({
+                input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+            }),
+        ).rejects.toThrow('Mutating call blocked');
+    });
+
+    it('bypasses the gate entirely when Auto mode is on, even with no mutationId', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200, headers: { get: () => null }, text: async () => '{}' }));
+        await expect(
+            tool({ autoApprove: true }).run({ input: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}' } }),
+        ).resolves.toMatchObject({ status: 200 });
+    });
+
+    it('never gates non-mutating (GET) calls', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200, headers: { get: () => null }, text: async () => '{}' }));
+        await expect(
+            tool({ autoApprove: false }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/Deals/1' } }),
+        ).resolves.toMatchObject({ status: 200 });
     });
 });
 

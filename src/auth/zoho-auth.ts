@@ -4,6 +4,12 @@ export type OAuthCredentials = {
 	clientId: string;
 	clientSecret: string;
 	refreshToken: string;
+	/**
+	 * The Zoho accounts-server origin this refresh token belongs to (e.g.
+	 * `https://accounts.zoho.eu`). A refresh token is only valid against the
+	 * data center it was issued from — defaults to the US DC when omitted.
+	 */
+	accountsBase?: string;
 };
 
 // Zoho access tokens live for 1 hour. Refresh 5 minutes early to absorb clock skew.
@@ -42,7 +48,8 @@ function cacheKey(opts: OAuthCredentials): string {
  * @throws {Error} If the HTTP response is not ok, or the response body has no `access_token`.
  */
 async function fetchToken(opts: OAuthCredentials): Promise<{ token: string; expiresAt: number }> {
-	const res = await fetch('https://accounts.zoho.com/oauth/v2/token', {
+	const base = opts.accountsBase ?? 'https://accounts.zoho.com';
+	const res = await fetch(`${base}/oauth/v2/token`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 		body: new URLSearchParams({
