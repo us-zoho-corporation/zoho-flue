@@ -1,6 +1,7 @@
 import {
   ArrowClockwise,
   ArrowUp,
+  Buildings,
   CaretRight,
   ChartBar,
   Check,
@@ -9,13 +10,15 @@ import {
   EnvelopeSimple,
   Headset,
   Info,
+  ShieldCheck,
   SignOut,
   Sparkle,
   Square,
   WarningCircle,
+  X,
 } from '@phosphor-icons/react';
 import { Badge, Banner, Button, Collapsible, Loader, Popover, SidebarTrigger } from '@cloudflare/kumo';
-import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import { type ToolCallInfo, type ChatMessage, isAssistantMessage, useFlueChat } from './FlueRuntime.tsx';
 import { A2uiPart } from './a2ui/index.ts';
@@ -59,13 +62,26 @@ function Avatar({ profile }: { profile: UserProfile }) {
 
 /**
  * Renders the top-bar account control: a circular avatar button that opens a
- * popover card with the signed-in user's full name, email, and a sign-out
- * button.
+ * popover card with the signed-in user's full name, email, Zoho CRM
+ * organization name + environment (once resolved), and a sign-out button.
  * @param profile - The signed-in user's profile.
  * @param onSignOut - Called when the popover's "Sign out" button is clicked.
  * @returns The avatar button plus its popover.
  */
 function ProfileMenu({ profile, onSignOut }: { profile: UserProfile; onSignOut: () => void }) {
+  // Best-effort: only resolves if the user has connected Zoho CRM. Absent
+  // (never fetched, not connected, or the call failed) just hides the row.
+  const [org, setOrg] = useState<{ orgName: string | null; environment: string | null }>({ orgName: null, environment: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/org', { credentials: 'include' })
+      .then((r) => r.ok ? r.json() as Promise<{ orgName: string | null; environment: string | null }> : null)
+      .then((data) => { if (!cancelled && data) setOrg(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <Popover>
       <Popover.Trigger render={<button className="hdr-profile" aria-label="Account" title="Account" />}>
@@ -77,6 +93,13 @@ function ProfileMenu({ profile, onSignOut }: { profile: UserProfile; onSignOut: 
           <div style={{ minWidth: 0 }}>
             <div className="sb-user-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.displayName}</div>
             <div className="sb-user-sub" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.email}</div>
+            {org.orgName && (
+              <div className="hdr-profile-org">
+                <Buildings size={11} weight="fill" style={{ flexShrink: 0 }} />
+                <span className="hdr-profile-org-name">{org.orgName}</span>
+                {org.environment && <span className="hdr-profile-env">{org.environment}</span>}
+              </div>
+            )}
           </div>
         </div>
         <div className="hdr-profile-card-sep" />
@@ -127,10 +150,25 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
   const noReply = historyReady && !isRunning && (last?.role === 'user' || lastAssistantEmpty);
   const lastUserText = [...messages].reverse().find((m) => m.role === 'user');
 
-  useEffect(() => {
+  // A propose_mutation call is only actionable while it's the very last thing
+  // in the conversation — once the user responds (a click sends an ordinary
+  // message), that response becomes `last` and this naturally goes away, so no
+  // separate "resolved" tracking is needed. Gated on `!isRunning` so the button
+  // click can't race the turn that produced it.
+  const pendingMutation = !isRunning && !!last && isAssistantMessage(last)
+    ? [...last.toolSteps].reverse()
+        .find((s) => s.toolName === 'propose_mutation' && s.state === 'output-available')
+        ?.input as { action?: string; fields?: { label: string; value: string }[] } | undefined
+    : undefined;
+
+  // Layout effect (not a plain effect): runs synchronously after the DOM updates
+  // but before the browser paints, so when the mutation approval card mounts —
+  // growing the fixed composer-wrap overlay — the last message never flashes
+  // covered for a frame before this catches up.
+  useLayoutEffect(() => {
     const el = viewportRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, isRunning]);
+  }, [messages, isRunning, pendingMutation?.action]);
 
   const empty = historyReady && messages.length === 0 && !showPending;
 
@@ -147,7 +185,7 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
         <ProfileMenu profile={profile} onSignOut={onSignOut} />
       </div>
 
-      <div ref={viewportRef} className="chat-viewport">
+      <div ref={viewportRef} className={`chat-viewport${empty ? ' chat-viewport-empty' : ''}`}>
         {empty ? (
           <WelcomeState onPrompt={authGate ? () => onSignIn() : sendMessage} />
         ) : (
@@ -181,7 +219,12 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
               <button className="composer-signin-btn" onClick={onSignIn}>Sign in</button>
             </div>
           ) : (
-            <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} onStop={stop} />
+            <>
+              {pendingMutation?.action && (
+                <MutationApprovalCard action={pendingMutation.action} fields={pendingMutation.fields ?? []} onChoose={sendMessage} />
+              )}
+              <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} onStop={stop} />
+            </>
           )}
         </div>
       </div>
@@ -510,6 +553,64 @@ export function NoReplyNotice({ error, onRetry }: { error?: Error; onRetry: () =
             </Button>
           }
         />
+      </div>
+    </div>
+  );
+}
+
+// ─── Mutation approval ────────────────────────────────────────────────────────
+
+/**
+ * Renders a vertical Approve/Deny control for a pending `propose_mutation` ask,
+ * anchored above the composer (not inline in the scrolling message list) so it
+ * stays reachable with a single click. Disables itself immediately after a
+ * choice to guard against a double-click before the optimistic echo re-renders
+ * it away. Field values are rendered as a structured label/value list rather
+ * than a wrapped sentence — the assistant's own reply is instructed to stay to
+ * one short line, so the values only ever appear here, not in both places.
+ * @param action - A short, one-line description of the proposed action.
+ * @param fields - The individual record fields the action will create/change/delete.
+ * @param onChoose - Called with the user's plain-text response ("Approve" or "Deny").
+ * @returns The rendered mutation approval card.
+ */
+function MutationApprovalCard({ action, fields, onChoose }: { action: string; fields: { label: string; value: string }[]; onChoose: (text: string) => Promise<void> }) {
+  const [choosing, setChoosing] = useState(false);
+
+  /**
+   * Sends the chosen response as the user's next message. No-ops if a choice
+   * is already in flight.
+   * @param text - The response text to send ("Approve" or "Deny").
+   */
+  const choose = useCallback((text: string) => {
+    if (choosing) return;
+    setChoosing(true);
+    onChoose(text);
+  }, [choosing, onChoose]);
+
+  return (
+    <div className="mutation-card">
+      <div className="mutation-card-head">
+        <span className="mutation-card-icon"><ShieldCheck size={14} weight="fill" /></span>
+        <span className="mutation-card-label">Confirm action</span>
+      </div>
+      <p className="mutation-card-summary">{action}</p>
+      {fields.length > 0 && (
+        <div className="mutation-card-fields">
+          {fields.map((f, i) => (
+            <div className="mutation-card-field" key={i}>
+              <span className="mutation-card-field-label">{f.label}</span>
+              <span className="mutation-card-field-value">{f.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mutation-card-actions">
+        <button className="mutation-card-btn mutation-card-approve" disabled={choosing} onClick={() => choose('Approve')}>
+          <Check size={15} weight="bold" /> Approve
+        </button>
+        <button className="mutation-card-btn mutation-card-deny" disabled={choosing} onClick={() => choose('Deny')}>
+          <X size={15} weight="bold" /> Deny
+        </button>
       </div>
     </div>
   );

@@ -11,6 +11,8 @@ import { Thread } from './Thread.tsx';
 import { Welcome } from './Welcome.tsx';
 import { Workflows } from './Workflows.tsx';
 import { applyTheme, loadTheme, saveTheme, type Theme } from './theme.ts';
+import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode.ts';
+import { loadAuthFingerprint, saveAuthFingerprint } from './authFingerprint.ts';
 
 // Used by the Agents admin view (the deployed-agent manifest), not the chat picker.
 export type AgentEntry = {
@@ -141,6 +143,9 @@ export function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [view, setView] = useState<View>(resolveInitialView);
   const [theme, setTheme] = useState<Theme>(loadTheme);
+  // "Auto mode" (HITL confirmation bypass) — a live, global setting (see
+  // autoMode.ts), not tied to any one conversation, sent as a request header.
+  const [autoMode, setAutoMode] = useState<boolean>(isAutoModeEnabled);
   // App-level conversation store: durable observations live here, decoupled from
   // the view, so a response keeps streaming in its own thread across view switches.
   const store = useConversationsStore();
@@ -148,6 +153,16 @@ export function App() {
   useEffect(() => { applyTheme(theme); saveTheme(theme); }, [theme]);
   /** Flips the app theme between `'light'` and `'dark'`. */
   const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
+
+  /**
+   * Updates the live "Auto mode" setting sent on every subsequent request —
+   * takes effect immediately, including in the currently active conversation.
+   * @param enabled - The new "Auto mode" state selected in Settings.
+   */
+  const handleAutoModeChange = useCallback((enabled: boolean) => {
+    setAutoModeEnabled(enabled);
+    setAutoMode(enabled);
+  }, []);
 
   useEffect(() => { saveSessions(sessions); }, [sessions]);
 
@@ -168,10 +183,27 @@ export function App() {
   useEffect(() => {
     fetch('/api/me')
       .then((r) => r.ok ? r.json() as Promise<UserProfile> : null)
-      .then((data) => data && setProfile(data))
+      .then((data) => {
+        // A different identity (or no identity) than whichever this browser
+        // last saw — including a session that simply expired rather than an
+        // explicit Sign out. Never let another identity's chat list or Auto
+        // mode setting carry over.
+        const fingerprint = data?.email ?? null;
+        if (fingerprint !== loadAuthFingerprint()) {
+          saveAuthFingerprint(fingerprint);
+          try { localStorage.removeItem(STORE_KEY); } catch {}
+          setAutoModeEnabled(false);
+          setAutoMode(false);
+          store.reset();
+          const fresh = makeSession(FALLBACK_MODEL);
+          setSessions([fresh]);
+          setActiveId(fresh.id);
+        }
+        if (data) setProfile(data);
+      })
       .catch(() => {})
       .finally(() => setAuthChecked(true));
-  }, []);
+  }, [store]);
 
   const defaultModel = models.find((m) => m.key === defaultKey) ?? models[0] ?? FALLBACK_MODEL;
   const activeSession = sessions.find((s) => s.id === activeId) ?? sessions[sessions.length - 1];
@@ -312,6 +344,8 @@ export function App() {
             onModelChange={handleModelChange}
             theme={theme}
             onToggleTheme={toggleTheme}
+            autoMode={autoMode}
+            onAutoModeChange={handleAutoModeChange}
             onSignOut={handleSignOut}
             onBack={() => setView('chat')}
           />

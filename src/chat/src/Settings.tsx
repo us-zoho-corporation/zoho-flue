@@ -1,5 +1,5 @@
 import { ArrowLeft, Briefcase, CheckCircle, Headset, type Icon } from '@phosphor-icons/react';
-import { Button, LayerCard, Loader, Select, Switch } from '@cloudflare/kumo';
+import { Button, Loader, Select, Switch } from '@cloudflare/kumo';
 import { useCallback, useEffect, useState } from 'react';
 import type { ModelOption, UserProfile } from './App.tsx';
 import type { Theme } from './theme.ts';
@@ -12,6 +12,8 @@ interface SettingsProps {
   onModelChange: (key: string) => void;
   theme: Theme;
   onToggleTheme: () => void;
+  autoMode: boolean;
+  onAutoModeChange: (enabled: boolean) => void;
   onSignOut: () => void;
   onBack: () => void;
 }
@@ -47,11 +49,13 @@ function connectProduct(scopes: string[]) {
  * @param onModelChange - Called with the new model key when the user picks a different default model.
  * @param theme - The current color theme, reflected by the Appearance section's dark-mode switch.
  * @param onToggleTheme - Called when the dark-mode switch is toggled.
+ * @param autoMode - Whether "Auto mode" (HITL confirmation bypass) is currently enabled.
+ * @param onAutoModeChange - Called with the new state when the Auto mode switch is toggled.
  * @param onSignOut - Called when the user clicks "Sign out".
  * @param onBack - Called when the user clicks the "Back" button to leave the settings panel.
  * @returns The rendered settings panel.
  */
-export function Settings({ profile, models, modelsLoading, modelKey, onModelChange, theme, onToggleTheme, onSignOut, onBack }: SettingsProps) {
+export function Settings({ profile, models, modelsLoading, modelKey, onModelChange, theme, onToggleTheme, autoMode, onAutoModeChange, onSignOut, onBack }: SettingsProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [connectionsLoading, setConnectionsLoading] = useState(true);
   // The product key with an in-flight disconnect request, so only its button spins.
@@ -90,12 +94,12 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-8">
+      <div className="settings-scroll flex-1 overflow-y-auto px-8 py-8">
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <h1 className="text-lg font-semibold text-kumo-default mb-6">Settings</h1>
 
-          <div className="flex flex-col gap-4">
-            <LayerCard className="px-5 py-4">
+          <div className="settings-panel">
+            <section className="settings-section">
               <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle mb-3">Account</h2>
               {profile ? (
                 <div className="flex items-center justify-between">
@@ -113,9 +117,11 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
               ) : (
                 <p className="text-sm text-kumo-subtle">Not signed in</p>
               )}
-            </LayerCard>
+            </section>
 
-            <LayerCard className="px-5 py-4">
+            <div className="settings-sep" />
+
+            <section className="settings-section">
               <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle mb-3">Appearance</h2>
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -124,9 +130,27 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                 </div>
                 <Switch checked={theme === 'dark'} onCheckedChange={onToggleTheme} aria-label="Dark mode" />
               </div>
-            </LayerCard>
+            </section>
 
-            <LayerCard className="px-5 py-4">
+            <div className="settings-sep" />
+
+            <section className="settings-section">
+              <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle mb-3">Automation</h2>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-kumo-default">Auto mode</p>
+                  <p className="text-xs text-kumo-subtle mt-0.5">
+                    Skip confirmation prompts — the assistant creates, updates, or deletes records
+                    automatically instead of asking first.
+                  </p>
+                </div>
+                <Switch checked={autoMode} onCheckedChange={onAutoModeChange} aria-label="Auto mode" />
+              </div>
+            </section>
+
+            <div className="settings-sep" />
+
+            <section className="settings-section">
               <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle mb-3">Connections</h2>
               <p className="text-xs text-kumo-subtle mb-3">
                 Connect each Zoho product the assistant should be able to use. Connecting grants that product's full set of scopes in one step.
@@ -140,8 +164,7 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                     return (
                       <div
                         key={c.key}
-                        className="flex items-center justify-between gap-4 px-3 py-2.5 rounded-lg"
-                        style={{ background: 'var(--glass2)', border: '1px solid var(--gb2)' }}
+                        className="settings-connection-row flex items-center justify-between gap-4 px-3 py-2.5"
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div
@@ -176,9 +199,11 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                   })}
                 </div>
               )}
-            </LayerCard>
+            </section>
 
-            <LayerCard className="px-5 py-4">
+            <div className="settings-sep" />
+
+            <section className="settings-section">
               <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle mb-3">Model</h2>
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -202,7 +227,7 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                   </Select>
                 )}
               </div>
-            </LayerCard>
+            </section>
           </div>
         </div>
       </div>
