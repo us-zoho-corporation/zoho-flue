@@ -46,6 +46,10 @@ export interface Session {
 const STORE_KEY = 'flue:sessions:v3';
 // The model new conversations start on — chosen in Settings, persisted here.
 const MODEL_KEY = 'flue:model:v1';
+// Which session was active, so a full-page reload (e.g. returning from a Zoho
+// OAuth redirect) lands back on the conversation the user was actually in,
+// not just whichever session happens to be last in the list.
+const ACTIVE_KEY = 'flue:active-session:v1';
 
 // The assistant agent name is provided to ConversationsProvider in main.tsx. Its
 // behavior is fixed; only the model varies, carried in the instance id
@@ -102,6 +106,22 @@ function loadPreferredModel(): string | null {
 }
 
 /**
+ * Reads the id of the session that was active before the last reload.
+ * @returns The persisted session id, or `null` if none is stored.
+ */
+function loadActiveSessionId(): string | null {
+  try { return localStorage.getItem(ACTIVE_KEY); } catch { return null; }
+}
+
+/**
+ * Persists which session is active, so a full-page reload restores it.
+ * @param id - The id of the now-active session.
+ */
+function saveActiveSessionId(id: string) {
+  try { localStorage.setItem(ACTIVE_KEY, id); } catch {}
+}
+
+/**
  * Builds a new chat session seeded with a fresh id and the given model.
  * @param model - The model the new conversation should start on.
  * @returns The newly created session.
@@ -125,7 +145,11 @@ export function App() {
     const sessions = saved.length
       ? saved
       : (() => { const s = [makeSession(FALLBACK_MODEL)]; saveSessions(s); return s; })();
-    initRef.current = { sessions, activeId: sessions[sessions.length - 1].id };
+    const restoredId = loadActiveSessionId();
+    const activeId = (restoredId && sessions.some((s) => s.id === restoredId))
+      ? restoredId
+      : sessions[sessions.length - 1].id;
+    initRef.current = { sessions, activeId };
   }
 
   const [sessions, setSessions] = useState<Session[]>(initRef.current.sessions);
@@ -165,6 +189,7 @@ export function App() {
   }, []);
 
   useEffect(() => { saveSessions(sessions); }, [sessions]);
+  useEffect(() => { saveActiveSessionId(activeId); }, [activeId]);
 
   useEffect(() => {
     fetch('/api/models')
@@ -191,7 +216,7 @@ export function App() {
         const fingerprint = data?.email ?? null;
         if (fingerprint !== loadAuthFingerprint()) {
           saveAuthFingerprint(fingerprint);
-          try { localStorage.removeItem(STORE_KEY); } catch {}
+          try { localStorage.removeItem(STORE_KEY); localStorage.removeItem(ACTIVE_KEY); } catch {}
           setAutoModeEnabled(false);
           setAutoMode(false);
           store.reset();
@@ -374,6 +399,7 @@ export function App() {
             profile={profile}
             onSignOut={handleSignOut}
             onConnectMcp={() => setView('mcp')}
+            autoMode={autoMode}
           />
         </ActiveConversation>
       )}

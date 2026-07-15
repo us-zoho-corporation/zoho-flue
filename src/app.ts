@@ -2,6 +2,7 @@ import { listAgents, listRuns } from '@flue/runtime';
 import { flue } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { config } from './config';
@@ -33,6 +34,12 @@ if (config._devWarnings.devAuth) {
 }
 
 const app = new Hono();
+
+// Baseline security headers (HSTS, X-Frame-Options, Referrer-Policy, etc.) on
+// every response. No Content-Security-Policy is set here — it's opt-in in
+// Hono and this app doesn't need one — so this can't conflict with the chat
+// SPA's inline styles or the /api/photo route's own hand-set, stricter CSP.
+app.use('*', secureHeaders());
 
 // User login + Catalyst-backed persistence. `stores` and `auth` are the only
 // wiring the app needs; both depend on interfaces, not on Catalyst directly.

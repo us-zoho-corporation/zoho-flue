@@ -20,7 +20,7 @@ export interface A2uiToolPart {
  * crash the whole chat tree — instead it degrades to a small notice.
  */
 class A2uiBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-	state = { failed: false };
+	override state = { failed: false };
 
 	/**
 	 * React error-boundary hook: flips the boundary into its failed state
@@ -33,14 +33,14 @@ class A2uiBoundary extends Component<{ children: ReactNode }, { failed: boolean 
 	 * Logs a render failure caught by the boundary for diagnostics.
 	 * @param error - The error thrown by a descendant renderer.
 	 */
-	componentDidCatch(error: unknown) { console.error('[a2ui] visualization render failed:', error); }
+	override componentDidCatch(error: unknown) { console.error('[a2ui] visualization render failed:', error); }
 
 	/**
 	 * Renders the wrapped children, or a small framed error notice once a
 	 * descendant has thrown.
 	 * @returns The children, or a fallback error notice element.
 	 */
-	render() {
+	override render() {
 		if (this.state.failed) {
 			return (
 				<A2uiFrame>

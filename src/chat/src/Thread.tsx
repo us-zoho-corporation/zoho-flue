@@ -10,6 +10,7 @@ import {
   EnvelopeSimple,
   Headset,
   Info,
+  Lightning,
   Plug,
   ShieldCheck,
   SignOut,
@@ -37,6 +38,8 @@ interface ThreadProps {
   onSignOut: () => void;
   /** Called when the user clicks "Manage connection" on an MCP reconnect card, to open the MCP servers view. */
   onConnectMcp: () => void;
+  /** Whether "Auto mode" (HITL confirmation bypass) is currently on, shown as a top-bar indicator. */
+  autoMode: boolean;
 }
 
 /**
@@ -136,9 +139,10 @@ function textOf(message: FlueConversationMessage): string {
  * @param onSignIn - Called to start the sign-in flow, from the welcome screen or the sign-in prompt.
  * @param profile - The signed-in user's profile, shown behind the top bar's account avatar/popover.
  * @param onSignOut - Called when the account popover's "Sign out" button is clicked.
+ * @param autoMode - Whether "Auto mode" is currently on, shown as a top-bar indicator.
  * @returns The chat area, including top bar, message viewport, and composer.
  */
-export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile, onSignOut, onConnectMcp }: ThreadProps) {
+export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile, onSignOut, onConnectMcp, autoMode }: ThreadProps) {
   const { messages, isRunning, historyReady, error, sendMessage, stop } = useFlueChat();
   // This conversation's model runs as the logged-in user, but nobody is signed in.
   const authGate = requiresAuth && !isSignedIn;
@@ -288,7 +292,7 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
               {pendingFormRequest && (
                 <FormRequestCard spec={pendingFormRequest} onSubmit={sendMessage} />
               )}
-              <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} onStop={stop} />
+              <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} onStop={stop} autoMode={autoMode} />
             </>
           )}
         </div>
@@ -719,23 +723,43 @@ function ConnectionRequiredCard({ payload, onConnectMcp, retryText, onRetry }: {
   // itself — so after the user actually connects (a full-page OAuth redirect
   // and back) and lands on the same still-last turn, it would otherwise keep
   // showing an active "Connect" button as if nothing happened. For the Zoho
-  // case there's a cheap live source of truth to check against on mount;
+  // case there's a cheap live source of truth to check against — on mount,
+  // AND whenever the tab regains focus/visibility, since the OAuth consent
+  // screen is a real cross-origin navigation and a reload's exact timing
+  // relative to this component's mount isn't something to rely on: checking
+  // again the moment the user's attention returns to the tab means a missed
+  // or premature mount-time check self-corrects without needing a message.
   // MCP has no equivalent single endpoint to re-verify without re-probing
   // the server, so its card has no analogous "confirmed" state.
   const [nowConnected, setNowConnected] = useState(false);
+  const nowConnectedRef = useRef(false);
   const [retrying, setRetrying] = useState(false);
   useEffect(() => {
     if (payload.kind !== 'zoho' || !payload.product) return;
     let cancelled = false;
-    fetch('/api/auth/connections', { credentials: 'include' })
-      .then((res) => res.json())
-      .then((data: { connections?: { key: string; connected: boolean }[] }) => {
-        if (cancelled) return;
-        const match = data.connections?.find((c) => c.key === payload.product);
-        if (match?.connected) setNowConnected(true);
-      })
-      .catch(() => { /* leave the card actionable — a failed check isn't proof of anything */ });
-    return () => { cancelled = true; };
+
+    /** Re-checks this product's connection status and flips the card once granted. */
+    const check = () => {
+      if (nowConnectedRef.current) return;
+      fetch('/api/auth/connections', { credentials: 'include' })
+        .then((res) => res.json())
+        .then((data: { connections?: { key: string; connected: boolean }[] }) => {
+          if (cancelled) return;
+          const match = data.connections?.find((c) => c.key === payload.product);
+          if (match?.connected) { nowConnectedRef.current = true; setNowConnected(true); }
+        })
+        .catch(() => { /* leave the card actionable — a failed check isn't proof of anything */ });
+    };
+
+    check();
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, [payload.kind, payload.product]);
 
   /**
@@ -851,19 +875,22 @@ interface ComposerProps {
   isRunning: boolean;
   onSend: (text: string) => Promise<void>;
   onStop: () => void;
+  /** Whether "Auto mode" (HITL confirmation bypass) is currently on, shown right next to the model label. */
+  autoMode: boolean;
 }
 
 /**
  * Renders the message input row: an auto-growing textarea plus a send/stop
  * button that toggles based on whether a turn is currently running, and the
- * active model's label.
+ * active model's label alongside the current confirmation mode.
  * @param modelLabel - The display name of the active model, shown below the input row.
  * @param isRunning - Whether a turn is currently in flight; toggles the button between send and stop.
  * @param onSend - Called with the trimmed message text when the user sends it.
  * @param onStop - Called when the stop button is clicked to cancel the in-flight turn.
+ * @param autoMode - Whether "Auto mode" is currently on, shown next to the model label.
  * @returns The rendered composer.
  */
-function Composer({ modelLabel, isRunning, onSend, onStop }: ComposerProps) {
+function Composer({ modelLabel, isRunning, onSend, onStop, autoMode }: ComposerProps) {
   const [value, setValue] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -919,7 +946,13 @@ function Composer({ modelLabel, isRunning, onSend, onStop }: ComposerProps) {
           </button>
         )}
       </div>
-      <span className="composer-model" title="Change the model for new conversations in Settings">{modelLabel}</span>
+      <div className="composer-meta">
+        <span className="composer-model" title="Change the model for new conversations in Settings">{modelLabel}</span>
+        <span className={`mode-indicator${autoMode ? ' mode-indicator-auto' : ''}`} title="Change in Settings">
+          {autoMode ? <Lightning size={11} weight="fill" /> : <ShieldCheck size={11} weight="fill" />}
+          <span className="mode-indicator-label">{autoMode ? 'Auto mode' : 'Manual'}</span>
+        </span>
+      </div>
     </div>
   );
 }

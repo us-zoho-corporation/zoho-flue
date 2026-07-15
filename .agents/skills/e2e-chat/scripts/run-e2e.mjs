@@ -50,10 +50,13 @@ try {
   await page.waitForSelector('.welcome h1', { timeout: 20_000 }).catch(() => {});
   const welcomeText = await page.locator('.welcome h1').innerText().catch(() => '');
   check('authenticated empty state (welcome shown)', /what can i help/i.test(welcomeText), welcomeText);
+  // The signed-in email lives in the top-bar account popover, not the sidebar.
+  await page.locator('button[aria-label="Account"]').click();
   const email = await page.locator('.sb-user-sub').first().innerText().catch(() => '');
   check('signed in as the fake dev user', email.includes('dev@example.com'), email);
   const loginVisible = await page.locator('text=Welcome to Zoho AI').count();
   check('login screen is NOT shown', loginVisible === 0);
+  await page.keyboard.press('Escape'); // close the popover before continuing
 
   // 3) Send a prompt and assert an assistant response renders.
   const composer = page.locator('textarea[placeholder="Ask anything about your Zoho workspace"]');
@@ -124,7 +127,9 @@ try {
   }
 
   // 7) Sign out → login screen returns and the local chat list is cleared.
-  await page.locator('button[aria-label="Sign out"]').click();
+  // Also lives behind the account popover, not a top-level button.
+  await page.locator('button[aria-label="Account"]').click();
+  await page.locator('.hdr-profile-signout').click();
   const loggedOut = await page
     .waitForSelector('text=Welcome to Zoho AI', { timeout: 15_000 })
     .then(() => true)

@@ -216,6 +216,19 @@ body { background: var(--page-bg); color: var(--txt1); }
 }
 .hdr-title { font: 600 15px var(--font-sans); color: var(--txt1); }
 .hdr-sub { font: 500 12px var(--font-sans); color: var(--txt3); }
+/* Sits right next to the model label under the composer — that's the control
+   Auto mode actually changes the behavior of, so the indicator belongs beside
+   it, not off in the top bar where it reads as unrelated account chrome.
+   Manual is the quieter, "this is the default/safe state" look; Auto mode is
+   deliberately a warmer accent so it reads as "something is different right
+   now" — the whole point is to catch the user's eye when mutations are no
+   longer gated behind a confirmation click. */
+.mode-indicator {
+  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+  border-radius: 999px; padding: 2px 8px; font: 600 11px var(--font-sans);
+  color: var(--txt3); background: var(--glass2); border: 1px solid var(--gb2);
+}
+.mode-indicator-auto { color: var(--accent-fg); background: var(--accent-soft); border-color: transparent; }
 .hdr-profile {
   display: flex; align-items: center; padding: 2px; border-radius: 999px;
   border: none; background: transparent; cursor: pointer; transition: background 140ms var(--ease-out);
@@ -392,6 +405,7 @@ body { background: var(--page-bg); color: var(--txt1); }
 .composer-send:hover:not(:disabled) { background: var(--accent-fg); }
 .composer-send:disabled { opacity: 0.4; cursor: default; }
 .composer-model { font: 400 11.5px var(--font-sans); color: var(--txt3); padding: 0 4px; }
+.composer-meta { display: flex; align-items: center; gap: 8px; padding-top: 2px; }
 
 /* Sign-in gate that replaces the composer when a model requires login. */
 .composer-signin {
