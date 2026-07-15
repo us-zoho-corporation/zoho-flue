@@ -141,5 +141,38 @@ export const renderStatCards = defineTool({
 	run: async () => rendered('metric cards'),
 });
 
+// ─── Record card ────────────────────────────────────────────────────────────────
+
+const recordField = v.object({
+	label: v.pipe(v.string(), v.description('The field name, e.g. "Amount" or "Closing Date".')),
+	value: v.pipe(v.string(), v.description('The field\'s value, exactly as it should be shown (e.g. "25000", "2026-08-31").')),
+});
+
+export const renderRecordCard = defineTool({
+	name: 'render_record_card',
+	description:
+		'Display a single record\'s fields as a clean, structured card — for confirming what was '
+		+ 'just created/updated, or previewing one record\'s details (a proposed mutation\'s own '
+		+ 'confirmation card already does this for you — this tool is for everywhere else, e.g. '
+		+ 'after a create/update call succeeds, or showing a record you looked up). Use this '
+		+ 'instead of listing field: value pairs in your written reply — your reply should be one '
+		+ 'short line (e.g. "Done — the deal was created."); the card shows the rest.',
+	input: v.object({
+		title: v.pipe(v.string(), v.description('The record\'s primary identifier, e.g. a Deal name or Contact\'s full name.')),
+		subtitle: v.optional(v.pipe(v.string(), v.description('Short context line, e.g. "Zoho CRM · Deal" or the module/record type.'))),
+		status: v.optional(v.pipe(
+			v.picklist(['success', 'neutral']),
+			v.description('"success" shows a checkmark (just created/updated); omit or "neutral" for a plain preview/lookup.'),
+		)),
+		fields: v.pipe(v.array(recordField), v.description('The record\'s field values, in display order.')),
+	}),
+	output: ack,
+	/**
+	 * Acknowledges that the model's record-card spec (carried in the tool input) was rendered.
+	 * @returns An acknowledgement instructing the model to add a short written takeaway.
+	 */
+	run: async () => rendered('a record card'),
+});
+
 /** All a2ui presentation tools, ready to spread into an agent's `tools`. */
-export const a2uiTools = [renderChart, renderComparisonTable, renderStatCards];
+export const a2uiTools = [renderChart, renderComparisonTable, renderStatCards, renderRecordCard];

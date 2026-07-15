@@ -20,3 +20,4 @@ Updates fields on an existing CRM record. Pass only the fields to change.
 
 - Mutating — requires HITL approval. Decision options: approve / edit / reject / respond.
 - `change_record_owner` is a thin wrapper over this same endpoint (sets only the `Owner` field) — see Change Owner in the `zoho-crm-record-actions` skill.
+- **Never guess a picklist field's value** (e.g. `Stage`, `Lead_Source`, `Industry`) when changing one — Zoho rejects any value the org hasn't actually configured. First call `zoho_skill_get({ skill: "zoho-crm-modules-and-fields", reference: "get-layouts" })` for the module's real, layout-scoped values. For Deals, changing `Stage` (or `Pipeline`) needs the extra `get-pipelines` step too — see the same note in [Create Record](create-record.md), which applies identically here.

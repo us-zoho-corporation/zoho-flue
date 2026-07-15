@@ -6,6 +6,7 @@ vi.mock('./connect', async (orig) => ({ ...(await orig<typeof import('./connect'
 
 const { buildMcpTools, jsonSchemaToValibot } = await import('./tools');
 import type { McpServer } from '../store/types';
+import { parseConnectionRequired } from '../tools/connection-required';
 
 /**
  * Builds a minimal `McpServer` fixture for tests, with sensible defaults for
@@ -48,11 +49,17 @@ describe('buildMcpTools', () => {
 		expect(res).toEqual([{ type: 'text', text: 'TOOL OUTPUT' }]);
 	});
 
-	it('returns an error text instead of throwing when a tool call fails', async () => {
+	it('throws a connection-required (reconnect) payload instead of a fake-successful text result when a tool call fails', async () => {
+		// A tool that was already discovered failing at call time is treated as
+		// a broken connection (expired auth, server down), not a retriable
+		// input error — see connection-required.ts.
 		conn.callMcpTool.mockRejectedValueOnce(new Error('boom'));
 		const tools = buildMcpTools([{ server: server(), authToken: null, tools: [{ name: 'x', description: '' }] }]);
-		const res = await tools[0].run({ input: {} }) as { text: string }[];
-		expect(res[0].text).toMatch(/failed: boom/);
+		const err = await Promise.resolve(tools[0].run({ input: {} })).then(
+			() => { throw new Error('expected run() to throw'); },
+			(e: unknown) => e as Error,
+		);
+		expect(parseConnectionRequired(err.message)).toMatchObject({ kind: 'mcp', mode: 'reconnect', label: 'My Server', serverId: 's1' });
 	});
 
 	it('disambiguates duplicate tool names across servers', () => {

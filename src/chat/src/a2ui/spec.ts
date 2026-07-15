@@ -8,7 +8,7 @@
 // title (when present) is surfaced even while pending so a skeleton can label
 // itself as it fills in.
 
-export const A2UI_TOOL_NAMES = ['render_chart', 'render_comparison_table', 'render_stat_cards'] as const;
+export const A2UI_TOOL_NAMES = ['render_chart', 'render_comparison_table', 'render_stat_cards', 'render_record_card'] as const;
 export type A2uiToolName = (typeof A2UI_TOOL_NAMES)[number];
 
 /**
@@ -215,4 +215,54 @@ export function parseStatCardsSpec(input: unknown): ParseResult<StatCardsSpec> {
 
 	if (cards.length === 0) return { status: 'pending', title };
 	return { status: 'ready', spec: { title, cards } };
+}
+
+export interface RecordField {
+	label: string;
+	value: string;
+}
+
+export type RecordCardStatus = 'success' | 'neutral';
+
+export interface RecordCardSpec {
+	title: string;
+	subtitle?: string;
+	status: RecordCardStatus;
+	fields: RecordField[];
+}
+
+/**
+ * Normalizes a possibly-partial `render_record_card` tool-call payload into a `RecordCardSpec`.
+ * Skips any field missing a `label` or `value`. Reports `pending` until a `title` and at least
+ * one complete field exist.
+ * @param input - Untrusted (possibly partial) tool-call input.
+ * @returns `{ status: 'ready', spec }` once a title and at least one field exist, otherwise `{ status: 'pending', title? }`.
+ */
+export function parseRecordCardSpec(input: unknown): ParseResult<RecordCardSpec> {
+	const obj = asObject(input);
+	const title = str(obj?.['title']);
+	if (!obj) return { status: 'pending' };
+
+	const rawFields = Array.isArray(obj['fields']) ? (obj['fields'] as unknown[]) : [];
+	const fields: RecordField[] = [];
+	for (const f of rawFields) {
+		const fo = asObject(f);
+		const label = str(fo?.['label']);
+		const value = str(fo?.['value']);
+		if (!fo || label === undefined || value === undefined) continue;
+		fields.push({ label, value });
+	}
+
+	if (!title || fields.length === 0) return { status: 'pending', title };
+
+	const status = str(obj['status']);
+	return {
+		status: 'ready',
+		spec: {
+			title,
+			subtitle: str(obj['subtitle']),
+			status: status === 'success' ? 'success' : 'neutral',
+			fields,
+		},
+	};
 }

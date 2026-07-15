@@ -1,9 +1,10 @@
 import { Component, type ReactNode } from 'react';
 import { A2uiChart } from './A2uiChart.tsx';
+import { A2uiRecordCard } from './A2uiRecordCard.tsx';
 import { A2uiStatCards } from './A2uiStatCards.tsx';
 import { A2uiTable } from './A2uiTable.tsx';
 import { A2uiFrame, A2uiPending } from './Frame.tsx';
-import { parseChartSpec, parseStatCardsSpec, parseTableSpec, type A2uiToolName } from './spec.ts';
+import { parseChartSpec, parseRecordCardSpec, parseStatCardsSpec, parseTableSpec, type A2uiToolName } from './spec.ts';
 
 export interface A2uiToolPart {
 	toolCallId: string;
@@ -93,6 +94,10 @@ function A2uiPartInner({ part }: { part: A2uiToolPart }) {
 	if (name === 'render_stat_cards') {
 		const r = parseStatCardsSpec(part.input);
 		return r.status === 'ready' ? <A2uiStatCards spec={r.spec} /> : <A2uiPending title={r.title} />;
+	}
+	if (name === 'render_record_card') {
+		const r = parseRecordCardSpec(part.input);
+		return r.status === 'ready' ? <A2uiRecordCard spec={r.spec} /> : <A2uiPending title={r.title} />;
 	}
 	return null;
 }

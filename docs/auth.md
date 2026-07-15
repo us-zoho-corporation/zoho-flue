@@ -56,7 +56,7 @@ space-separated; sent to Zoho comma-delimited). Gate scope-dependent features wi
 Flash endpoint), and `ZohoCRM.org.READ` (so `GET /api/org` can show the user's Zoho CRM
 organization name in the profile popup right after login, with no separate CRM connection needed).
 
-## Connecting products (Settings)
+## Connecting products (Settings) — and why the `zoho_api` tool depends on it
 
 `config.zohoProducts` is the catalog of Zoho products (CRM, Desk) the chat's Settings
 panel offers as one-click connections, each with its full scope bundle (kept in sync with
@@ -65,20 +65,31 @@ the `## Scopes` sections of `src/skills/zoho-crm-*`/`zoho-desk-*`). `GET
 already covers that bundle. The Settings UI's "Connect" button sends the user through
 `GET /api/auth/login?scopes=<product scopes>&returnTo=/?view=settings` — the existing
 incremental-auth path, with `returnTo` pointed back at the Settings view (the chat's
-`resolveInitialView()` in `App.tsx` reads `?view=` on load and strips it) — so a
-missing-scope failure (like a Desk tool call 401ing because the user never granted
-`Desk.tickets.READ`) can be resolved by connecting that product from Settings instead of
-a full re-login. `POST /api/auth/connections/:key/disconnect` drops a product's scope
-bundle from the stored grant (locally only — it doesn't call Zoho's revoke endpoint, so
-re-connecting doesn't need a fresh consent screen).
+`resolveInitialView()` in `App.tsx` reads `?view=` on load and strips it). `POST
+/api/auth/connections/:key/disconnect` drops a product's scope bundle from the stored
+grant (locally only — it doesn't call Zoho's revoke endpoint, so re-connecting doesn't
+need a fresh consent screen).
 
-Note: the `zoho_api` tool (`src/tools/zoho-api.ts`) used by the `assistant` agent for
-CRM/Desk calls always authenticates with the **service-account** credentials
-(`config.zohoClientId/zohoClientSecret/zohoRefreshToken`, set up via the `zoho-oauth`
-skill), not the signed-in user's per-user token above — so a broken/expired
-`ZOHO_OAUTH_REFRESH_TOKEN` surfaces as an `invalid_code` tool error regardless of what
-any user has connected in Settings. The per-user connections here currently only gate
-the GLM chat model's `QuickML.deployment.READ` scope and any future per-user Zoho API use.
+The `zoho_api` tool (`src/tools/zoho-api.ts`) used by the `assistant` agent for CRM/Desk
+calls runs as the **signed-in user**, not the service account — it identifies the target
+product from the URL's hostname, checks the user's own granted scopes against that
+product's bundle (excluding scopes shared with the default login grant, e.g.
+`ZohoCRM.org.READ`, from counting as evidence of a deliberate prior connection), and gets
+its bearer token via `getUserToken`. If the bundle isn't fully granted, it throws a
+`ConnectionRequiredPayload` (`src/tools/connection-required.ts`) instead of running —
+`mode: 'connect'` if the user has none of the product's own scopes yet, `'reconnect'` if
+some are missing. The chat parses this off the tool step's `errorText` (Flue already
+carries a thrown error's message through as `errorText` on an `output-error` part —
+previously discarded by `src/chat/src/flue-model.ts`'s view model, now passed through)
+and renders a Connect/Reconnect card whose button re-runs the exact same
+`/api/auth/login?scopes=...` flow as the Settings panel, returning to the chat instead of
+Settings. MCP tool calls use the same structured error for a different trigger: a call to
+an already-discovered tool that fails at runtime (expired auth, server down) throws
+`{ kind: 'mcp', mode: 'reconnect' }` instead of returning the failure as fake-successful
+text, and the chat's button for that opens the MCP servers view (there's no one-click fix
+for an MCP server — the user may need a new URL or token). A server that's disabled or
+fails **discovery** (at turn start) simply contributes no tools at all — the model never
+attempts to call one, so there's no tool-call error to react to for that case.
 
 ## Per-user tokens
 

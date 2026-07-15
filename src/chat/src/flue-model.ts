@@ -9,6 +9,9 @@ export interface ToolCallInfo {
 	toolName: string;
 	state: 'input-available' | 'output-available' | 'output-error';
 	input: unknown;
+	output?: unknown;
+	/** The thrown error's message, only present when `state === 'output-error'`. */
+	errorText?: string;
 }
 
 export interface AssistantMessage extends FlueConversationMessage {
@@ -34,7 +37,14 @@ export function isAssistantMessage(m: ChatMessage): m is AssistantMessage {
  * @returns The corresponding `ToolCallInfo`.
  */
 function toToolCall(part: Extract<FlueConversationMessage['parts'][number], { type: 'dynamic-tool' }>): ToolCallInfo {
-	return { toolCallId: part.toolCallId, toolName: part.toolName, state: part.state, input: part.input };
+	return {
+		toolCallId: part.toolCallId,
+		toolName: part.toolName,
+		state: part.state,
+		input: part.input,
+		output: part.state === 'output-available' ? part.output : undefined,
+		errorText: part.state === 'output-error' ? part.errorText : undefined,
+	};
 }
 
 /**

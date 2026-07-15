@@ -1,8 +1,8 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { config } from '../config';
-import { getZohoAccessToken, type OAuthCredentials } from '../auth/zoho-auth';
 import { consumeMutation, isMutatingMethod } from './mutation-gate';
+import { requireZohoConnection, type ZohoConnectionDeps } from './zoho-connection';
 
 /** Per-turn context the mutation confirmation gate needs (see `mutation-gate.ts`). */
 export interface MutationGateContext {
@@ -10,6 +10,12 @@ export interface MutationGateContext {
 	requestId: string;
 	/** When `true` ("Auto mode"), the gate is bypassed entirely — no `mutationId` required. */
 	autoApprove: boolean;
+}
+
+/** What `zoho_api` needs to run as the logged-in user and check their connection. */
+export interface ZohoApiDeps extends ZohoConnectionDeps {
+	/** Resolves a live Zoho access token for the user, refreshing via their own stored connection. */
+	getUserToken: (userId: string) => Promise<string>;
 }
 
 /**
@@ -31,16 +37,40 @@ function isAllowedUrl(url: string): boolean {
 }
 
 /**
- * Returns a tool for making authenticated Zoho API calls. Credentials live in
- * a closure; the token is refreshed on every call via the shared token cache so
- * it never goes stale after the boot-time token expires.
- * @param oauth - Zoho OAuth client credentials used to mint/refresh the bearer token.
+ * Identifies which Zoho product (if any) owns a target URL, by hostname —
+ * Desk is always served from `desk.zoho.<dc>`, CRM from `<x>.zohoapis.<dc>`,
+ * regardless of data center. Anything else (e.g. a future product, or a
+ * hostname `zoho_api` doesn't yet special-case) returns `null`, meaning no
+ * per-product connection gate applies to it.
+ * @param url - The target URL to classify.
+ * @returns `'crm'`, `'desk'`, or `null`.
+ */
+function productForUrl(url: string): 'crm' | 'desk' | null {
+	try {
+		const hostname = new URL(url).hostname.toLowerCase();
+		if (hostname.startsWith('desk.zoho.')) return 'desk';
+		if (hostname.includes('zohoapis.')) return 'crm';
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Returns a tool for making authenticated Zoho API calls as the logged-in
+ * user. Before every call to a known product (CRM/Desk), verifies the user
+ * has granted that product's full scope bundle — if not, throws a
+ * `ConnectionRequiredPayload` (see `connection-required.ts`) instead of
+ * proceeding, so the chat UI can offer a Connect/Reconnect button rather than
+ * a raw failure or (worse) silently succeeding via a shared credential the
+ * user never actually authorized.
+ * @param deps - The current user's id and token/scope accessors, plus the configured product scope bundles.
  * @param gate - This turn's mutation-confirmation context. Unless `autoApprove`,
  * every mutating call must carry a `mutationId` minted by `propose_mutation` in
  * an earlier turn — this is enforced here, not left to the model's judgment.
  * @returns A Flue tool named `zoho_api` that performs the authenticated HTTP request.
  */
-export function defineZohoApiTool(oauth: OAuthCredentials, gate: MutationGateContext) {
+export function defineZohoApiTool(deps: ZohoApiDeps, gate: MutationGateContext) {
 	return defineTool({
 		name: 'zoho_api',
 		description: 'Make an authenticated HTTP request to a Zoho API endpoint.',
@@ -65,20 +95,34 @@ export function defineZohoApiTool(oauth: OAuthCredentials, gate: MutationGateCon
 			body: v.string(),
 		}),
 		/**
-		 * Executes the authenticated Zoho API request. Mutating methods are rejected unless
-		 * `gate.autoApprove` is set or `input.mutationId` is a valid, not-same-turn id from
-		 * `propose_mutation`. The (allowed) URL — and any redirect hops — is then validated
-		 * against `config.zohoAllowedHostnames` before attaching the bearer token.
+		 * Executes the authenticated Zoho API request as the logged-in user.
+		 * Rejects with a `ConnectionRequiredPayload` if the target is a known
+		 * product (CRM/Desk) the user hasn't granted the full scope bundle for.
+		 * Mutating methods are further rejected unless `gate.autoApprove` is set
+		 * or `input.mutationId` is a valid, not-same-turn id from
+		 * `propose_mutation`. The (allowed) URL — and any redirect hops — is
+		 * validated against `config.zohoAllowedHostnames` before attaching the
+		 * bearer token.
 		 * @param input - The requested method, target URL, optional request body, optional
 		 * extra headers (e.g. Zoho Desk's `orgId`), and — for mutating methods — the
 		 * confirmation `mutationId`.
 		 * @param signal - Abort signal forwarded to the underlying `fetch` call.
 		 * @returns The final response's HTTP status and body text.
-		 * @throws {Error} If a mutating call lacks a valid `mutationId`, if the URL (or a
-		 * redirect target) is not under an allowed Zoho domain, or if the number of redirect
-		 * hops exceeds `config.zohoApiMaxRedirects`.
+		 * @throws {Error} A `ConnectionRequiredPayload`-encoded error (see `connection-required.ts`)
+		 * if the target product's scope bundle isn't fully granted; if a mutating call lacks a
+		 * valid `mutationId`; if the URL (or a redirect target) is not under an allowed Zoho
+		 * domain; or if the number of redirect hops exceeds `config.zohoApiMaxRedirects`.
 		 */
 		async run({ input, signal }) {
+			if (!isAllowedUrl(input.url)) {
+				throw new Error(
+					`Request blocked: ${input.url} is not under an allowed Zoho domain (${config.zohoAllowedHostnames.join(', ')}).`,
+				);
+			}
+
+			const product = productForUrl(input.url);
+			if (product) await requireZohoConnection(deps, product);
+
 			if (isMutatingMethod(input.method) && !gate.autoApprove) {
 				const valid = !!input.mutationId && consumeMutation(gate.conversationId, input.mutationId, gate.requestId);
 				if (!valid) {
@@ -90,12 +134,11 @@ export function defineZohoApiTool(oauth: OAuthCredentials, gate: MutationGateCon
 					);
 				}
 			}
-			if (!isAllowedUrl(input.url)) {
-				throw new Error(
-					`Request blocked: ${input.url} is not under an allowed Zoho domain (${config.zohoAllowedHostnames.join(', ')}).`,
-				);
+
+			if (!deps.userId) {
+				throw new Error('Not signed in — zoho_api requires a logged-in user.');
 			}
-			const token = await getZohoAccessToken(oauth);
+			const token = await deps.getUserToken(deps.userId);
 			const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
 			if (input.body !== undefined) {
 				headers['Content-Type'] = 'application/json';

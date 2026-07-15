@@ -38,6 +38,8 @@ export function currentUserToken(): string | undefined {
  * same-turn propose-then-execute attempts.
  */
 export interface TurnContext {
+	/** The logged-in user's id, so per-turn tools (e.g. `zoho_api`) can check their own connection/scopes. */
+	userId?: string;
 	/** The logged-in user's connected MCP server tools, injected into the turn. */
 	mcpTools?: unknown[];
 	/**

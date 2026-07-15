@@ -39,10 +39,6 @@ export function Welcome({ onSignIn }: { onSignIn: () => void }) {
           <p className="login-note">You'll be redirected to Zoho Accounts to sign in.</p>
         </div>
       </div>
-
-      <div className="login-footer">
-        <span>© {new Date().getFullYear()} Zoho Corporation</span>
-      </div>
     </div>
   );
 }

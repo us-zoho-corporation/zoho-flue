@@ -1,24 +1,27 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
+// `vi.mock` factories are hoisted above top-level consts, so the scope lists
+// are inlined here rather than shared via an outer variable (referencing one
+// would throw "Cannot access ... before initialization").
 vi.mock('../config', () => ({
     config: {
         zohoAllowedHostnames: ['zoho.com', 'zohoapis.com'],
         zohoApiMaxRedirects: 5,
+        zohoLoginScopes: 'AaaServer.profile.READ,ZohoCRM.org.READ',
+        zohoProducts: [
+            { key: 'crm', label: 'Zoho CRM', description: '', scopes: ['ZohoCRM.modules.ALL', 'ZohoCRM.settings.ALL'] },
+            { key: 'desk', label: 'Zoho Desk', description: '', scopes: ['Desk.basic.READ', 'Desk.tickets.READ'] },
+        ],
     },
 }));
 
-// The tool resolves its bearer token via getZohoAccessToken(oauth) on each call.
-// Mock it to return a fixed token so tests stay offline and deterministic.
-// (Inlined literal — vi.mock factories run hoisted, before top-level consts.)
-vi.mock('../auth/zoho-auth', () => ({
-    getZohoAccessToken: vi.fn(async () => 'test-token'),
-}));
-
-import { defineZohoApiTool, type MutationGateContext } from './zoho-api';
+import { defineZohoApiTool, type MutationGateContext, type ZohoApiDeps } from './zoho-api';
 import { proposeMutation } from './mutation-gate';
+import { parseConnectionRequired } from './connection-required';
 
 const TOKEN = 'test-token';
-const OAUTH = { clientId: 'id', clientSecret: 'secret', refreshToken: 'refresh' };
+const CRM_SCOPES = ['ZohoCRM.modules.ALL', 'ZohoCRM.settings.ALL'];
+const DESK_SCOPES = ['Desk.basic.READ', 'Desk.tickets.READ'];
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -40,14 +43,39 @@ function mockFetch(responses: Array<{ status: number; location?: string; body?: 
 }
 
 /**
- * Builds a fresh `zoho_api` tool instance using the fixed test OAuth credentials.
- * Defaults to `autoApprove: true` (mutation gate bypassed) so tests unrelated to
- * the gate aren't coupled to it — see the dedicated "mutation gate" suite below.
+ * Builds a fresh `zoho_api` tool instance. Defaults `autoApprove: true` (mutation
+ * gate bypassed) and grants both CRM and Desk scopes so tests unrelated to those
+ * gates aren't coupled to them — see the dedicated suites below for each.
  * @param gate - Partial overrides for the mutation-gate context.
+ * @param deps - Partial overrides for the tool's user/scope dependencies.
  * @returns The `zoho_api` Flue tool under test.
  */
-function tool(gate: Partial<MutationGateContext> = {}) {
-    return defineZohoApiTool(OAUTH, { conversationId: 'c1', requestId: 'r1', autoApprove: true, ...gate });
+function tool(gate: Partial<MutationGateContext> = {}, deps: Partial<ZohoApiDeps> = {}) {
+    return defineZohoApiTool(
+        {
+            userId: 'u1',
+            getUserToken: async () => TOKEN,
+            getGrantedScopes: async () => [...CRM_SCOPES, ...DESK_SCOPES],
+            products: [
+                { key: 'crm', label: 'Zoho CRM', description: '', scopes: CRM_SCOPES },
+                { key: 'desk', label: 'Zoho Desk', description: '', scopes: DESK_SCOPES },
+            ],
+            ...deps,
+        },
+        { conversationId: 'c1', requestId: 'r1', autoApprove: true, ...gate },
+    );
+}
+
+/**
+ * Runs a tool call expected to throw and returns the caught error.
+ * @param run - A thunk returning the tool's `run()` promise (sync or async).
+ * @returns The rejected value, expected to be an `Error`.
+ */
+async function catchError(run: () => unknown): Promise<Error> {
+    return Promise.resolve(run()).then(
+        () => { throw new Error('expected run() to throw, but it resolved'); },
+        (e: unknown) => e as Error,
+    );
 }
 
 describe('zoho_api SSRF protection', () => {
@@ -103,6 +131,62 @@ describe('zoho_api SSRF protection', () => {
         mockFetch([{ status: 302, location: 'https://www.zohoapis.com/next' }]);
         await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/start' } }))
             .rejects.toThrow('Too many redirects');
+    });
+});
+
+describe('zoho_api connection/scope gate', () => {
+    it('throws a connect payload when the user has none of the product scopes', async () => {
+        const err = await catchError(() => tool({}, { getGrantedScopes: async () => ['AaaServer.profile.READ'] })
+            .run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }));
+        const payload = parseConnectionRequired(err.message);
+        expect(payload).toMatchObject({ kind: 'zoho', mode: 'connect', product: 'crm' });
+    });
+
+    it('does not count scopes shared with the default login grant as a prior connection', async () => {
+        // ZohoCRM.org.READ-style overlap: everyone gets some login scopes by
+        // default, but that alone must not read as "you connected CRM before".
+        const err = await catchError(() => tool({}, {
+            getGrantedScopes: async () => ['ZohoCRM.org.READ'],
+            products: [{ key: 'crm', label: 'Zoho CRM', description: '', scopes: [...CRM_SCOPES, 'ZohoCRM.org.READ'] }],
+        }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }));
+        expect(parseConnectionRequired(err.message)?.mode).toBe('connect');
+    });
+
+    it('throws a reconnect payload when some but not all product scopes are granted', async () => {
+        const err = await catchError(() => tool({}, { getGrantedScopes: async () => [CRM_SCOPES[0]] })
+            .run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }));
+        const payload = parseConnectionRequired(err.message);
+        expect(payload).toMatchObject({ kind: 'zoho', mode: 'reconnect', product: 'crm' });
+    });
+
+    it('proceeds normally once all required scopes are granted', async () => {
+        mockFetch([{ status: 200, body: '{}' }]);
+        await expect(
+            tool({}, { getGrantedScopes: async () => CRM_SCOPES }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }),
+        ).resolves.toMatchObject({ status: 200 });
+    });
+
+    it('gates Desk calls independently from CRM', async () => {
+        const err = await catchError(() => tool({}, { getGrantedScopes: async () => CRM_SCOPES })
+            .run({ input: { method: 'GET', url: 'https://desk.zoho.com/api/v1/tickets' } }));
+        const payload = parseConnectionRequired(err.message);
+        expect(payload).toMatchObject({ kind: 'zoho', mode: 'connect', product: 'desk' });
+    });
+
+    it('does not gate a URL that is not a known product', async () => {
+        mockFetch([{ status: 200, body: '{}' }]);
+        await expect(
+            tool({}, { getGrantedScopes: async () => [] }).run({ input: { method: 'GET', url: 'https://api.zoho.com/oauth/user/info' } }),
+        ).resolves.toMatchObject({ status: 200 });
+    });
+
+    it('checks the connection gate before the mutation gate', async () => {
+        // If the user isn't even connected, that's the error to surface —
+        // not a confusing "missing mutationId" for an action that can't
+        // succeed anyway.
+        const err = await catchError(() => tool({ autoApprove: false }, { getGrantedScopes: async () => [] })
+            .run({ input: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}' } }));
+        expect(parseConnectionRequired(err.message)?.kind).toBe('zoho');
     });
 });
 

@@ -24,12 +24,14 @@ export const config = {
 	zohoClientSecret: required('ZOHO_OAUTH_CLIENT_SECRET'),
 	zohoRefreshToken: required('ZOHO_OAUTH_REFRESH_TOKEN'),
 	// Data-center domain suffix for the shared service account (com | eu | in |
-	// com.au | com.cn | jp — see https://www.zoho.com/crm/developer/docs/api/v8/multi-dc.html).
-	// A refresh token — and every accounts/API/desk/contacts domain derived from
-	// it below — only works against the SAME data center it was issued from;
-	// using the wrong one fails with "invalid_code" no matter how valid the
-	// token otherwise is. Per-user connections instead carry their own DC,
-	// captured at consent time (see StoredToken.accountsServer).
+	// com.au | com.cn | jp — see https://www.zoho.com/crm/developer/docs/api/v8/multi-dc.html),
+	// used only for the Catalyst GLM warm token (providers/index.ts) — zoho_api
+	// itself runs as the logged-in user, not this service account (see
+	// ZohoApiDeps in tools/zoho-api.ts). A refresh token only works against the
+	// SAME data center it was issued from; using the wrong one fails with
+	// "invalid_code" no matter how valid the token otherwise is. Per-user
+	// connections instead carry their own DC, captured at consent time (see
+	// StoredToken.accountsServer).
 	zohoAccountsBase: `https://accounts.zoho.${process.env['ZOHO_DOMAIN_SUFFIX'] ?? 'com'}`,
 	catalystEndpoint: required('CATALYST_ENDPOINT'),
 	catalystOrgId: required('CATALYST_ORG_ID'),
@@ -151,13 +153,14 @@ export const config = {
 	// which surfaces as the reply cutting off mid-stream. 8192 leaves headroom.
 	catalystMaxTokens: 8_192,
 
-	// Zoho API tool — domains the zoho_api tool is permitted to reach. Derived
-	// from the same data-center suffix as zohoAccountsBase, since zoho_api always
-	// calls out as the shared service account, never a per-user connection.
-	zohoAllowedHostnames: [
-		`zoho.${process.env['ZOHO_DOMAIN_SUFFIX'] ?? 'com'}`,
-		`zohoapis.${process.env['ZOHO_DOMAIN_SUFFIX'] ?? 'com'}`,
-	],
+	// Zoho API tool — domains the zoho_api tool is permitted to reach. zoho_api
+	// runs as whichever user is logged in (see ZohoApiDeps in tools/zoho-api.ts),
+	// and different users can each be in a different Zoho data center — so this
+	// is every known DC's domain, not just the one zohoAccountsBase points the
+	// shared service account at. Still a fixed, fully-enumerated allowlist of
+	// real Zoho domains, so this doesn't weaken the SSRF guard at all.
+	zohoAllowedHostnames: (['com', 'eu', 'in', 'com.au', 'com.cn', 'jp'] as const)
+		.flatMap((suffix) => [`zoho.${suffix}`, `zohoapis.${suffix}`]),
 	// Maximum number of redirects the zoho_api tool will follow
 	zohoApiMaxRedirects: 5,
 

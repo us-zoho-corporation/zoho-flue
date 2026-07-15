@@ -3,6 +3,7 @@ import { Button, Loader, Select, Switch } from '@cloudflare/kumo';
 import { useCallback, useEffect, useState } from 'react';
 import type { ModelOption, UserProfile } from './App.tsx';
 import type { Theme } from './theme.ts';
+import { connectZohoScopes } from './connectionRequired.ts';
 
 interface SettingsProps {
   profile: UserProfile | null;
@@ -36,8 +37,7 @@ const PRODUCT_ICONS: Record<string, Icon> = { crm: Briefcase, desk: Headset };
  * @param scopes - The OAuth scopes to request for the product being connected.
  */
 function connectProduct(scopes: string[]) {
-  const returnTo = encodeURIComponent('/?view=settings');
-  window.location.assign(`/api/auth/login?scopes=${encodeURIComponent(scopes.join(','))}&returnTo=${returnTo}`);
+  connectZohoScopes(scopes, '/?view=settings');
 }
 
 /**

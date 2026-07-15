@@ -2,6 +2,7 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import type { McpServer } from '../store/types';
 import { callMcpTool, type ProbedTool } from './connect';
+import { throwConnectionRequired } from '../tools/connection-required';
 
 export interface LoadedServer {
 	server: McpServer;
@@ -93,11 +94,24 @@ export function buildMcpTools(loaded: LoadedServer[]): McpTool[] {
 				description: `[${server.name}] ${t.description || t.name}`.slice(0, 1024),
 				input: jsonSchemaToValibot(t.inputSchema),
 				output: v.any(),
+				/**
+				 * Calls the remote MCP tool. A failure here is treated as a broken
+				 * connection rather than a retriable tool error — the server was
+				 * reachable when its tools were discovered for this turn, so a
+				 * failure now most likely means its auth expired or it went down,
+				 * not that the model passed bad arguments. Throws a structured
+				 * `ConnectionRequiredPayload` instead of returning a fake-successful
+				 * text result, so the chat surfaces a Reconnect affordance instead
+				 * of the model silently absorbing (and maybe hiding) the failure.
+				 * @param input - The tool's arguments, as the model supplied them.
+				 * @returns The remote tool's text output.
+				 * @throws {Error} A `ConnectionRequiredPayload`-encoded error if the call fails.
+				 */
 				async run({ input }) {
 					try {
 						return [{ type: 'text', text: await callMcpTool(target, t.name, (input ?? {}) as Record<string, unknown>) }];
-					} catch (err) {
-						return [{ type: 'text', text: `MCP tool "${t.name}" on ${server.name} failed: ${err instanceof Error ? err.message : String(err)}` }];
+					} catch {
+						throwConnectionRequired({ kind: 'mcp', mode: 'reconnect', label: server.name, serverId: server.id });
 					}
 				},
 			}));

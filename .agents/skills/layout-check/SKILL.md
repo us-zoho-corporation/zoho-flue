@@ -58,6 +58,12 @@ assistant to do something that triggers a mutation confirmation card, etc.).
 Prefer resizing one browser context's viewport over juggling multiple browser
 instances when checking several widths in one script.
 
+**Don't edit the script again once it's copied into `scripts/` and running.**
+`flue dev` watches that whole directory too, and a file change mid-conversation
+can kill the in-flight turn or wedge the server outright — see the `e2e-chat`
+skill's Gotchas for what that looks like and how to recover. Fix the
+scratchpad copy and re-copy fresh instead of patching the live one.
+
 ## Measure, then screenshot
 
 For gaps and overlaps, compare `boundingBox()` on the two elements involved —

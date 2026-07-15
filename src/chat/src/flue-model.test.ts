@@ -47,6 +47,20 @@ const tool = (toolName: string, input: unknown = {}): FlueConversationPart => ({
 	input,
 	output: { ok: true },
 });
+/**
+ * Builds a failed dynamic-tool message part, for test fixtures.
+ * @param toolName - The name of the tool that was called.
+ * @param errorText - The thrown error's message.
+ * @returns A `FlueConversationPart` of type `'dynamic-tool'` in the `'output-error'` state.
+ */
+const errorTool = (toolName: string, errorText: string): FlueConversationPart => ({
+	type: 'dynamic-tool',
+	toolName,
+	toolCallId: `${toolName}-${n++}`,
+	state: 'output-error',
+	input: {},
+	errorText,
+});
 
 /**
  * Filters `collapseTurns` output down to just the assistant entries.
@@ -79,6 +93,20 @@ describe('collapseTurns', () => {
 		const answerText = a[0].parts.filter((p) => p.type === 'text').map((p) => (p.type === 'text' ? p.text : '')).join('');
 		expect(answerText).toBe('Standard adds workflows.');
 		expect(a[0].toolSteps.map((s) => s.toolName)).toEqual(['zoho_kb_search']);
+	});
+
+	test('carries a failed tool step\'s errorText through, not just its state', () => {
+		// Regression: toToolCall previously dropped `output`/`errorText` for
+		// every tool call, so a component couldn't tell an error apart from a
+		// generic failure — needed to render a Connect/Reconnect card from a
+		// structured error message.
+		const out = collapseTurns([
+			user('do the thing'),
+			assistant(errorTool('zoho_api', '__connection_required__:{"kind":"zoho"}'), text('You need to connect Zoho CRM first.')),
+		]);
+		const step = assistants(out)[0].toolSteps[0];
+		expect(step.state).toBe('output-error');
+		expect(step.errorText).toBe('__connection_required__:{"kind":"zoho"}');
 	});
 
 	test('keeps the answer when it is bundled in the same message as a chart call', () => {

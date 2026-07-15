@@ -373,6 +373,7 @@ export function App() {
             onSignIn={handleSignIn}
             profile={profile}
             onSignOut={handleSignOut}
+            onConnectMcp={() => setView('mcp')}
           />
         </ActiveConversation>
       )}

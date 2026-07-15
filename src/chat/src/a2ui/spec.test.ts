@@ -4,6 +4,7 @@ import {
 	parseChartSpec,
 	parseTableSpec,
 	parseStatCardsSpec,
+	parseRecordCardSpec,
 } from './spec.ts';
 
 describe('isA2uiTool', () => {
@@ -11,6 +12,7 @@ describe('isA2uiTool', () => {
 		expect(isA2uiTool('render_chart')).toBe(true);
 		expect(isA2uiTool('render_comparison_table')).toBe(true);
 		expect(isA2uiTool('render_stat_cards')).toBe(true);
+		expect(isA2uiTool('render_record_card')).toBe(true);
 		expect(isA2uiTool('zoho_kb_search')).toBe(false);
 		expect(isA2uiTool('zoho_api')).toBe(false);
 	});
@@ -127,5 +129,53 @@ describe('parseStatCardsSpec', () => {
 		const r = parseStatCardsSpec({ cards: [{ label: 'X', value: '1', trend: 'sideways' }] });
 		expect(r.status).toBe('ready');
 		if (r.status === 'ready') expect(r.spec.cards[0].trend).toBeUndefined();
+	});
+});
+
+describe('parseRecordCardSpec', () => {
+	test('is pending without a title or with no complete fields', () => {
+		expect(parseRecordCardSpec({ fields: [{ label: 'Amount', value: '25000' }] }).status).toBe('pending');
+		expect(parseRecordCardSpec({ title: 'Test Company', fields: [] }).status).toBe('pending');
+		expect(parseRecordCardSpec({ title: 'Test Company', fields: [{ label: 'Amount' }] }).status).toBe('pending');
+	});
+
+	test('is ready once a title and at least one field exist, defaulting status to neutral', () => {
+		const r = parseRecordCardSpec({
+			title: 'Test Company - Sample Deal',
+			fields: [{ label: 'Amount', value: '25000' }, { label: 'Stage', value: 'Qualification' }],
+		});
+		expect(r.status).toBe('ready');
+		if (r.status === 'ready') {
+			expect(r.spec.title).toBe('Test Company - Sample Deal');
+			expect(r.spec.status).toBe('neutral');
+			expect(r.spec.fields).toHaveLength(2);
+		}
+	});
+
+	test('keeps subtitle and an explicit success status', () => {
+		const r = parseRecordCardSpec({
+			title: 'Test Company - Sample Deal', subtitle: 'Zoho CRM · Deal', status: 'success',
+			fields: [{ label: 'Amount', value: '25000' }],
+		});
+		expect(r.status).toBe('ready');
+		if (r.status === 'ready') {
+			expect(r.spec.subtitle).toBe('Zoho CRM · Deal');
+			expect(r.spec.status).toBe('success');
+		}
+	});
+
+	test('drops a field missing a label or value but keeps the rest', () => {
+		const r = parseRecordCardSpec({
+			title: 'X',
+			fields: [{ label: 'Amount', value: '25000' }, { label: 'Broken' }, { value: 'orphan' }],
+		});
+		expect(r.status).toBe('ready');
+		if (r.status === 'ready') expect(r.spec.fields).toEqual([{ label: 'Amount', value: '25000' }]);
+	});
+
+	test('ignores an invalid status value, defaulting to neutral', () => {
+		const r = parseRecordCardSpec({ title: 'X', status: 'bogus', fields: [{ label: 'A', value: '1' }] });
+		expect(r.status).toBe('ready');
+		if (r.status === 'ready') expect(r.spec.status).toBe('neutral');
 	});
 });

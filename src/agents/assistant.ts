@@ -1,7 +1,9 @@
 import { defineAgent, defineAgentProfile, type AgentRouteHandler } from '@flue/runtime';
 import { config } from '../config';
-import { defineZohoApiTool } from '../tools/zoho-api';
+import { defineZohoApiTool, type ZohoApiDeps } from '../tools/zoho-api';
+import { defineCheckZohoConnectionTool } from '../tools/check-zoho-connection';
 import { defineProposeMutationTool } from '../tools/propose-mutation';
+import { defineRequestInputTool } from '../tools/request-input';
 import { zohoSkillTools } from '../tools/zoho-skills';
 import { a2uiTools } from '../tools/a2ui';
 import { zohoKbTools } from '../mcp/zoho-kb';
@@ -11,14 +13,6 @@ import { loadUserMcpTools } from '../mcp/live';
 import { CATALYST_GLM_API } from '../providers/catalyst-glm';
 import { getStores } from '../store';
 
-// Tools hold these credentials in a closure; the model only ever sees parameter names.
-const oauth = {
-	clientId: config.zohoClientId,
-	clientSecret: config.zohoClientSecret,
-	refreshToken: config.zohoRefreshToken,
-	accountsBase: config.zohoAccountsBase,
-};
-
 // The assistant's behavior — tools + instructions — is single-sourced here. Only
 // the model varies between conversations, so it is NOT part of the identity.
 // `zoho_api` (and `propose_mutation`, when confirmation is required) are
@@ -26,7 +20,7 @@ const oauth = {
 // `defineAgent` below, bound to that turn's mutation-gate context, so the
 // confirmation requirement can't go stale or be bypassed by stale closures.
 const zohoAssistant = defineAgentProfile({
-	tools: [...zohoSkillTools, ...a2uiTools, ...(config.zohoDocsBearerToken ? zohoKbTools : [])],
+	tools: [...zohoSkillTools, ...a2uiTools, defineRequestInputTool(), ...(config.zohoDocsBearerToken ? zohoKbTools : [])],
 	instructions:
 		'You are a Zoho product assistant. For questions about Zoho products (features, '
 		+ 'configuration, APIs, troubleshooting), use zoho_kb_search to find the relevant '
@@ -35,9 +29,25 @@ const zohoAssistant = defineAgentProfile({
 		+ 'need an article’s full text. Ground your answer in the documentation and cite source URLs.\n\n'
 		+ 'You can also *run* a Zoho CRM or Desk implementation for the user, not just describe one. '
 		+ 'When asked to start, continue, or perform CRM/Desk setup work (create/inspect modules, '
-		+ 'fields, records, workflow rules, tickets, departments, agents, etc.), use zoho_skill_get to '
-		+ 'load the relevant operation\'s exact endpoint, parameters, and scopes before calling zoho_api '
-		+ '— never guess a Zoho endpoint from memory. Available skills:\n'
+		+ 'fields, records, workflow rules, tickets, departments, agents, etc.):\n'
+		+ '1. Call check_zoho_connection for the relevant product (crm or desk) FIRST, before anything '
+		+ 'else. If it throws, the user hasn\'t connected that product (or their connection is missing '
+		+ 'scopes) — say so in ONE short line and stop; do not call zoho_skill_get or zoho_api for it, '
+		+ 'a Connect/Reconnect button appears in the chat automatically, and do not explain how to '
+		+ 'connect yourself, the button already does that. This check is cheap and instant — always do '
+		+ 'it before spending turns on skill lookups or an API call that would only fail the same way, '
+		+ 'and do it again on any later turn before retrying, including right after the user says '
+		+ 'they\'ve connected — proceed with the original request immediately once it succeeds, do not '
+		+ 'ask the user to repeat themselves.\n'
+		+ '2. Once connected, use zoho_skill_get to load the relevant operation\'s exact endpoint, '
+		+ 'parameters, and scopes before calling zoho_api — never guess a Zoho endpoint from memory, '
+		+ 'and never guess a picklist field\'s value (Stage, Pipeline, Lead_Source, Industry, etc.) — '
+		+ 'these are customized per org/layout with no universal default, and Zoho rejects any value '
+		+ 'the org hasn\'t actually configured. The zoho-crm-modules-and-fields skill\'s Get Layouts (and, '
+		+ 'for Deals\' Pipeline/Stage specifically, Get Pipelines too) has the real values — check it '
+		+ 'before creating or updating a record with one, especially when you\'re inventing the data '
+		+ 'yourself (e.g. a sample/dummy record) rather than reflecting a value the user gave you. '
+		+ 'Available skills:\n'
 		+ '- zoho-crm-records, zoho-crm-modules-and-fields, zoho-crm-query, zoho-crm-bulk-operations, '
 		+ 'zoho-crm-record-actions, zoho-crm-related-records, zoho-crm-attachments, zoho-crm-emails, '
 		+ 'zoho-crm-users-and-org, zoho-crm-workflow-automation (CRM v8 REST API)\n'
@@ -57,20 +67,24 @@ const zohoAssistant = defineAgentProfile({
 		+ '- comparing options/plans/editions across attributes → render_comparison_table;\n'
 		+ '- comparing quantities across categories, a trend over time, or parts of a whole → '
 		+ 'render_chart (bar / line or area / pie);\n'
-		+ '- a few headline metrics or KPIs → render_stat_cards.\n'
+		+ '- a few headline metrics or KPIs → render_stat_cards;\n'
+		+ '- a single record\'s own field values — confirming what was just created/updated, or '
+		+ 'previewing one you looked up — → render_record_card, not a plain-text key:value list. Set '
+		+ '`status: "success"` when confirming a completed create/update.\n'
 		+ 'If you are about to list three or more numbers, dates, or compared items, render a '
 		+ 'visualization instead of a wall of text, then add a short written takeaway (2-4 sentences) '
 		+ 'that interprets it. Use at most one or two visualizations per answer, and skip them for '
 		+ 'simple factual, yes/no, or how-to answers. Keep all figures grounded in the documentation you cite.\n\n'
 		+ 'Never show the same values twice. If you render a visualization, your written reply must not '
 		+ 'restate the individual figures it already shows — write a short interpretive takeaway instead '
-		+ '(or no written figures at all), not a second copy of the data. For a single record\'s own field '
-		+ 'values (e.g. confirming what was just created/updated, or summarizing details you used to '
-		+ 'create/update it), prefer a plain-text key:value list over a visualization — render_stat_cards '
-		+ 'and render_comparison_table are for comparing multiple items or several independent KPIs, not '
-		+ 'for restating one record\'s fields that you already listed in prose. The same rule applies to '
-		+ 'propose_mutation: its confirmation card already renders every field you pass it, so your written '
-		+ 'reply must not also list them — say what you are about to do in one short line and stop there.',
+		+ '(or no written figures at all), not a second copy of the data. This applies just as much to '
+		+ 'render_record_card and propose_mutation (its confirmation card already renders every field '
+		+ 'you pass it) as to a chart or table — your written reply is one short line (e.g. "Done — the '
+		+ 'deal was created." or "I\'ll create this once you confirm."), never a repeat of the field list.\n\n'
+		+ 'When you need specific information from the user before you can proceed — required fields you '
+		+ 'don\'t have, or an exact value only they can supply — call request_input with the field list '
+		+ 'rather than asking in prose; it renders as a fillable form, so give one short sentence of '
+		+ 'context and then end your turn, do not also spell out the fields yourself.',
 });
 
 /**
@@ -141,6 +155,8 @@ function confirmationPolicyInstructions(autoApprove: boolean): string {
  *    claims it (`stores.conversationOwners.claimOrGetOwner`); any other user
  *    is rejected with 403 before Flue's own handler ever runs.
  *  - populates the request context for the logged-in user:
+ *     - the user's id, so `zoho_api` (built per-turn below) can check the user's
+ *       own connection/scopes before acting, and use their own token to call Zoho;
  *     - a fresh `requestId` for this turn — the mutation confirmation gate
  *       (`src/tools/mutation-gate.ts`) uses it to tell "this turn" apart from
  *       "an earlier turn";
@@ -178,17 +194,25 @@ export const route: AgentRouteHandler = async (c, next) => {
 	]);
 	// Recorded synchronously, before next() — see request-context.ts for why this
 	// (not AsyncLocalStorage) is what defineAgent's initializer reads from below.
-	setTurnContext(id, { mcpTools, hitlAutoApprove, requestId });
+	setTurnContext(id, { userId, mcpTools, hitlAutoApprove, requestId });
 	return runWithRequestContext({ userToken }, () => next());
 };
 
 /**
  * Builds this turn's agent definition: the shared `zohoAssistant` profile (skill,
- * a2ui, and optional KB tools/instructions) plus a `zoho_api` tool — and, unless
- * "Auto mode" is on, a `propose_mutation` tool — freshly bound to this turn's
- * mutation-gate context (from the request context set in `route`), plus any MCP
- * tools the logged-in user has connected, augmented with a confirmation-policy
- * paragraph — then resolved to the model chosen for this conversation id.
+ * a2ui, and optional KB tools/instructions) plus `check_zoho_connection` and
+ * `zoho_api` — both bound to the logged-in user's own connection (their token,
+ * their granted scopes; see `ZohoConnectionDeps` in `zoho-connection.ts` —
+ * there is no shared-service-account fallback, a missing/outdated connection
+ * throws a `ConnectionRequiredPayload` instead of running). `check_zoho_connection`
+ * exists purely so the model can discover that cheaply, in one step, instead of
+ * only via a `zoho_api` call that was always going to fail the same way —
+ * `zoho_api` enforces the same gate regardless, so this isn't a second, weaker
+ * check. Also, unless "Auto mode" is on, a `propose_mutation` tool — freshly
+ * bound to this turn's mutation-gate context (from the request context set in
+ * `route`), plus any MCP tools the logged-in user has connected, augmented with
+ * a confirmation-policy paragraph — then resolved to the model chosen for this
+ * conversation id.
  * @param id - The conversation/instance id, passed through to `modelForConversation`
  * and used as this turn's mutation-gate conversation id.
  * @returns The agent's `{ profile, model }` for this turn.
@@ -202,10 +226,18 @@ export default defineAgent(({ id }) => {
 	// isolated "turn", so a propose_mutation id can never be reused within one.
 	const requestId = turn?.requestId ?? crypto.randomUUID();
 	const gate = { conversationId: id, requestId, autoApprove };
+	const auth = getAuth();
+	const zohoDeps: ZohoApiDeps = {
+		userId: turn?.userId,
+		getUserToken: (userId) => auth.getUserToken(userId),
+		getGrantedScopes: async (userId) => (await getStores().tokens.get(userId))?.scopes ?? [],
+		products: config.zohoProducts,
+	};
 	const profile = {
 		...zohoAssistant,
 		tools: [
-			defineZohoApiTool(oauth, gate),
+			defineCheckZohoConnectionTool(zohoDeps),
+			defineZohoApiTool(zohoDeps, gate),
 			...(autoApprove ? [] : [defineProposeMutationTool(gate.conversationId, gate.requestId)]),
 			...(zohoAssistant.tools ?? []),
 			...mcp,

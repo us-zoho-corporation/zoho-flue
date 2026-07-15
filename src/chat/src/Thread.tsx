@@ -10,6 +10,7 @@ import {
   EnvelopeSimple,
   Headset,
   Info,
+  Plug,
   ShieldCheck,
   SignOut,
   Sparkle,
@@ -23,6 +24,8 @@ import Markdown from 'react-markdown';
 import { type ToolCallInfo, type ChatMessage, isAssistantMessage, useFlueChat } from './FlueRuntime.tsx';
 import { A2uiPart } from './a2ui/index.ts';
 import type { UserProfile } from './App.tsx';
+import { connectZohoScopes, parseConnectionRequired } from './connectionRequired.ts';
+import { parseFormRequest, type FormRequestSpec } from './formRequest.ts';
 import type { FlueConversationMessage } from '@flue/react';
 
 interface ThreadProps {
@@ -32,6 +35,8 @@ interface ThreadProps {
   onSignIn: () => void;
   profile: UserProfile;
   onSignOut: () => void;
+  /** Called when the user clicks "Manage connection" on an MCP reconnect card, to open the MCP servers view. */
+  onConnectMcp: () => void;
 }
 
 /**
@@ -133,7 +138,7 @@ function textOf(message: FlueConversationMessage): string {
  * @param onSignOut - Called when the account popover's "Sign out" button is clicked.
  * @returns The chat area, including top bar, message viewport, and composer.
  */
-export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile, onSignOut }: ThreadProps) {
+export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile, onSignOut, onConnectMcp }: ThreadProps) {
   const { messages, isRunning, historyReady, error, sendMessage, stop } = useFlueChat();
   // This conversation's model runs as the logged-in user, but nobody is signed in.
   const authGate = requiresAuth && !isSignedIn;
@@ -179,6 +184,25 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
         ?.input as { action?: string; fields?: { label: string; value: string }[] } | undefined
     : undefined;
 
+  // A tool call that needed a connection the user doesn't have (or has
+  // outdated scopes for) throws a structured error instead of failing plainly
+  // — surfaced the same way as a pending mutation: only while it's the last
+  // thing in the conversation, so a fresh message naturally clears it.
+  const pendingConnectionRequired = !isRunning && !pendingMutation && !!last && isAssistantMessage(last)
+    ? [...last.toolSteps].reverse()
+        .map((s) => (s.state === 'output-error' ? parseConnectionRequired(s.errorText) : null))
+        .find((p) => p != null)
+    : undefined;
+
+  // A request_input call needs the user's answers before the model can
+  // usefully continue — surfaced the same way as the other two: only while
+  // it's the last thing in the conversation.
+  const pendingFormRequest = !isRunning && !pendingMutation && !pendingConnectionRequired && !!last && isAssistantMessage(last)
+    ? [...last.toolSteps].reverse()
+        .map((s) => (s.toolName === 'request_input' && s.state === 'output-available' ? parseFormRequest(s.input) : null))
+        .find((p) => p != null)
+    : undefined;
+
   // Layout effect (not a plain effect): runs synchronously after the DOM updates
   // but before the browser paints, so when the mutation approval card mounts —
   // growing the fixed composer-wrap overlay — the last message never flashes
@@ -190,7 +214,7 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
   useLayoutEffect(() => {
     const el = viewportRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, isRunning, pendingMutation?.action, reservedBottom]);
+  }, [messages, isRunning, pendingMutation?.action, pendingConnectionRequired, pendingFormRequest, reservedBottom]);
 
   const empty = historyReady && messages.length === 0 && !showPending;
 
@@ -209,7 +233,11 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
 
       <div
         ref={viewportRef}
-        className={`chat-viewport${empty ? ' chat-viewport-empty' : ''}`}
+        className={[
+          'chat-viewport',
+          empty && 'chat-viewport-empty',
+          (pendingMutation?.action || pendingConnectionRequired || pendingFormRequest) && 'chat-viewport-pull-bottom',
+        ].filter(Boolean).join(' ')}
         style={{ paddingBottom: empty ? undefined : (reservedBottom || undefined) }}
       >
         {empty ? (
@@ -247,7 +275,18 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
           ) : (
             <>
               {pendingMutation?.action && (
-                <MutationApprovalCard action={pendingMutation.action} fields={pendingMutation.fields ?? []} onChoose={sendMessage} />
+                <MutationApprovalCard onChoose={sendMessage} />
+              )}
+              {pendingConnectionRequired && (
+                <ConnectionRequiredCard
+                  payload={pendingConnectionRequired}
+                  onConnectMcp={onConnectMcp}
+                  retryText={lastUserText && textOf(lastUserText)}
+                  onRetry={sendMessage}
+                />
+              )}
+              {pendingFormRequest && (
+                <FormRequestCard spec={pendingFormRequest} onSubmit={sendMessage} />
               )}
               <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} onStop={stop} />
             </>
@@ -328,6 +367,19 @@ export function AssistantTurn({ message, running }: { message: ChatMessage; runn
   const steps = isAssistantMessage(message) ? message.toolSteps : [];
   const uiParts = isAssistantMessage(message) ? message.uiParts : [];
 
+  // A proposed mutation's fields are exactly a record-card spec ({label,
+  // value} pairs plus a title) — render them through the real a2ui
+  // render_record_card component (a synthesized part, not a genuine model
+  // tool call) instead of a plain label/value list, and let them persist in
+  // history like any other visualization once the turn moves on. The separate
+  // approve/deny control (rendered above the composer, not here) stays
+  // actionable only for the current turn — this card is just the record
+  // preview, not the control.
+  const mutationCards = steps
+    .filter((s) => s.toolName === 'propose_mutation' && s.state === 'output-available')
+    .map((s) => s.input as { action?: string; fields?: { label: string; value: string }[] })
+    .filter((input): input is { action: string; fields: { label: string; value: string }[] } => !!input.action && !!input.fields?.length);
+
   /**
    * Copies the assistant turn's full answer text to the clipboard and
    * briefly flips the copy button into a "Copied!" state.
@@ -339,7 +391,7 @@ export function AssistantTurn({ message, running }: { message: ChatMessage; runn
     });
   }, [fullText]);
 
-  const hasContent = textParts.length > 0 || uiParts.length > 0;
+  const hasContent = textParts.length > 0 || uiParts.length > 0 || mutationCards.length > 0;
   const thinking = running && steps.length === 0 && !hasContent;
 
   return (
@@ -361,6 +413,22 @@ export function AssistantTurn({ message, running }: { message: ChatMessage; runn
         {uiParts.length > 0 && (
           <div className="a2ui-parts flex flex-col">
             {uiParts.map((part) => <A2uiPart key={part.toolCallId} part={part} />)}
+          </div>
+        )}
+
+        {mutationCards.length > 0 && (
+          <div className="a2ui-parts flex flex-col">
+            {mutationCards.map((m, i) => (
+              <A2uiPart
+                key={i}
+                part={{
+                  toolCallId: `propose_mutation-preview-${i}`,
+                  toolName: 'render_record_card',
+                  state: 'output-available',
+                  input: { title: m.action, fields: m.fields.map((f) => ({ label: f.label, value: f.value })) },
+                }}
+              />
+            ))}
           </div>
         )}
 
@@ -451,6 +519,7 @@ const TOOL_VERBS: Record<string, [string, string]> = {
   render_chart:            ['Building',  'Built'],
   render_comparison_table: ['Building',  'Built'],
   render_stat_cards:       ['Building',  'Built'],
+  render_record_card:      ['Building',  'Built'],
 };
 
 /**
@@ -587,19 +656,17 @@ export function NoReplyNotice({ error, onRetry }: { error?: Error; onRetry: () =
 // ─── Mutation approval ────────────────────────────────────────────────────────
 
 /**
- * Renders a vertical Approve/Deny control for a pending `propose_mutation` ask,
- * anchored above the composer (not inline in the scrolling message list) so it
- * stays reachable with a single click. Disables itself immediately after a
- * choice to guard against a double-click before the optimistic echo re-renders
- * it away. Field values are rendered as a structured label/value list rather
- * than a wrapped sentence — the assistant's own reply is instructed to stay to
- * one short line, so the values only ever appear here, not in both places.
- * @param action - A short, one-line description of the proposed action.
- * @param fields - The individual record fields the action will create/change/delete.
+ * Renders a compact Approve/Deny badge for a pending `propose_mutation` ask,
+ * anchored above the composer so it stays reachable with a single click. Just
+ * the control — the proposed record's fields render separately, inline in the
+ * turn itself, as a real a2ui stat-cards visualization (see `AssistantTurn`'s
+ * `mutationCards`), so this doesn't restate them in a second, heavier card.
+ * Disables itself immediately after a choice to guard against a double-click
+ * before the optimistic echo re-renders it away.
  * @param onChoose - Called with the user's plain-text response ("Approve" or "Deny").
- * @returns The rendered mutation approval card.
+ * @returns The rendered approval badge.
  */
-function MutationApprovalCard({ action, fields, onChoose }: { action: string; fields: { label: string; value: string }[]; onChoose: (text: string) => Promise<void> }) {
+function MutationApprovalCard({ onChoose }: { onChoose: (text: string) => Promise<void> }) {
   const [choosing, setChoosing] = useState(false);
 
   /**
@@ -614,30 +681,165 @@ function MutationApprovalCard({ action, fields, onChoose }: { action: string; fi
   }, [choosing, onChoose]);
 
   return (
-    <div className="mutation-card">
-      <div className="mutation-card-head">
-        <span className="mutation-card-icon"><ShieldCheck size={14} weight="fill" /></span>
-        <span className="mutation-card-label">Confirm action</span>
-      </div>
-      <p className="mutation-card-summary">{action}</p>
-      {fields.length > 0 && (
-        <div className="mutation-card-fields">
-          {fields.map((f, i) => (
-            <div className="mutation-card-field" key={i}>
-              <span className="mutation-card-field-label">{f.label}</span>
-              <span className="mutation-card-field-value">{f.value}</span>
-            </div>
-          ))}
-        </div>
+    <div className="action-badge">
+      <span className="action-badge-icon"><ShieldCheck size={13} weight="fill" /></span>
+      <span className="action-badge-label">Confirm this action</span>
+      <button className="action-badge-btn action-badge-approve" disabled={choosing} onClick={() => choose('Approve')}>
+        <Check size={13} weight="bold" /> Approve
+      </button>
+      <button className="action-badge-btn action-badge-deny" disabled={choosing} onClick={() => choose('Deny')}>
+        <X size={13} weight="bold" /> Deny
+      </button>
+    </div>
+  );
+}
+
+// ─── Connection required ──────────────────────────────────────────────────────
+
+/**
+ * Renders a Connect/Reconnect prompt for a tool call that needed a connection
+ * the user doesn't have (or has outdated scopes for), anchored above the
+ * composer like the mutation approval card. Zoho products redirect straight
+ * to the OAuth consent screen for the missing scopes; an MCP server can't be
+ * fixed with a single click (it may need a new URL or token), so its button
+ * instead opens the MCP servers settings view.
+ * @param payload - The parsed connection-required details from the failing tool step.
+ * @param onConnectMcp - Called when the button is clicked for an MCP-kind payload, to open the MCP servers view.
+ * @param retryText - The original message that triggered this connection requirement, if known, so it can be resent once connected without the user retyping it.
+ * @param onRetry - Called with `retryText` once the user chooses to resend it.
+ * @returns The rendered connection-required card.
+ */
+function ConnectionRequiredCard({ payload, onConnectMcp, retryText, onRetry }: {
+  payload: NonNullable<ReturnType<typeof parseConnectionRequired>>;
+  onConnectMcp: () => void;
+  retryText?: string;
+  onRetry: (text: string) => Promise<void>;
+}) {
+  // The card is derived from a *historical* tool step, which never updates
+  // itself — so after the user actually connects (a full-page OAuth redirect
+  // and back) and lands on the same still-last turn, it would otherwise keep
+  // showing an active "Connect" button as if nothing happened. For the Zoho
+  // case there's a cheap live source of truth to check against on mount;
+  // MCP has no equivalent single endpoint to re-verify without re-probing
+  // the server, so its card has no analogous "confirmed" state.
+  const [nowConnected, setNowConnected] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  useEffect(() => {
+    if (payload.kind !== 'zoho' || !payload.product) return;
+    let cancelled = false;
+    fetch('/api/auth/connections', { credentials: 'include' })
+      .then((res) => res.json())
+      .then((data: { connections?: { key: string; connected: boolean }[] }) => {
+        if (cancelled) return;
+        const match = data.connections?.find((c) => c.key === payload.product);
+        if (match?.connected) setNowConnected(true);
+      })
+      .catch(() => { /* leave the card actionable — a failed check isn't proof of anything */ });
+    return () => { cancelled = true; };
+  }, [payload.kind, payload.product]);
+
+  /**
+   * Resends the original message that hit this connection requirement, now
+   * that the connection is confirmed. No-ops if already retrying or the
+   * original message text isn't available.
+   */
+  const retry = useCallback(() => {
+    if (retrying || !retryText) return;
+    setRetrying(true);
+    onRetry(retryText);
+  }, [retrying, retryText, onRetry]);
+
+  const isReconnect = payload.mode === 'reconnect';
+  const verb = isReconnect ? 'Reconnect' : 'Connect';
+
+  return (
+    <div className="action-badge">
+      <span className="action-badge-icon"><Plug size={13} weight="fill" /></span>
+      <span className="action-badge-label">{nowConnected ? `${payload.label} connected` : `${payload.label} needed`}</span>
+      {nowConnected && retryText ? (
+        <button className="action-badge-btn action-badge-approve" disabled={retrying} onClick={retry}>
+          <ArrowClockwise size={13} weight="bold" /> Retry
+        </button>
+      ) : (
+        <button
+          className={`action-badge-btn ${nowConnected ? 'action-badge-connected' : 'action-badge-approve'}`}
+          disabled={nowConnected}
+          onClick={() => (payload.kind === 'zoho' ? connectZohoScopes(payload.scopes ?? [], '/') : onConnectMcp())}
+        >
+          {nowConnected
+            ? <><Check size={13} weight="bold" /> Connected</>
+            : <><Plug size={13} weight="bold" /> {verb}</>}
+        </button>
       )}
-      <div className="mutation-card-actions">
-        <button className="mutation-card-btn mutation-card-approve" disabled={choosing} onClick={() => choose('Approve')}>
-          <Check size={15} weight="bold" /> Approve
-        </button>
-        <button className="mutation-card-btn mutation-card-deny" disabled={choosing} onClick={() => choose('Deny')}>
-          <X size={15} weight="bold" /> Deny
-        </button>
+    </div>
+  );
+}
+
+// ─── Form request ─────────────────────────────────────────────────────────────
+
+/**
+ * Renders a fillable form for a pending `request_input` ask: the model's short
+ * context line plus one labeled input per field (a textarea for `multiline`
+ * ones), anchored above the composer like the other action cards. Submitting
+ * composes the filled-in values into a single plain-text reply (`Label:
+ * value` per line) and sends it as the user's next message — the backend
+ * never needs to know a form was involved, it just sees an ordinary,
+ * unambiguous answer instead of free text the model would have had to parse.
+ * @param spec - The normalized field list and context line to render.
+ * @param onSubmit - Called with the composed reply text once the user submits.
+ * @returns The rendered form card.
+ */
+function FormRequestCard({ spec, onSubmit }: { spec: FormRequestSpec; onSubmit: (text: string) => Promise<void> }) {
+  const [values, setValues] = useState<string[]>(() => spec.fields.map(() => ''));
+  const [submitting, setSubmitting] = useState(false);
+
+  const canSubmit = !submitting && spec.fields.every((f, i) => !f.required || values[i].trim());
+
+  /**
+   * Composes the filled-in fields into a single plain-text reply and sends
+   * it. No-ops if a required field is still empty or a submit is in flight.
+   */
+  const submit = useCallback(() => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    const lines = spec.fields
+      .map((f, i) => [f.label, values[i].trim()] as const)
+      .filter(([, value]) => value)
+      .map(([label, value]) => `${label}: ${value}`);
+    onSubmit(lines.join('\n'));
+  }, [canSubmit, spec.fields, values, onSubmit]);
+
+  return (
+    <div className="form-card">
+      <p className="form-card-prompt">{spec.prompt}</p>
+      <div className="form-card-fields">
+        {spec.fields.map((f, i) => (
+          <label className="form-card-field" key={i}>
+            <span className="form-card-label">{f.label}{f.required && <span className="form-card-required">*</span>}</span>
+            {f.multiline ? (
+              <textarea
+                className="form-card-input form-card-textarea"
+                placeholder={f.placeholder || undefined}
+                value={values[i]}
+                disabled={submitting}
+                onChange={(e) => setValues((v) => v.map((x, j) => (j === i ? e.target.value : x)))}
+              />
+            ) : (
+              <input
+                type="text"
+                className="form-card-input"
+                placeholder={f.placeholder || undefined}
+                value={values[i]}
+                disabled={submitting}
+                onChange={(e) => setValues((v) => v.map((x, j) => (j === i ? e.target.value : x)))}
+              />
+            )}
+          </label>
+        ))}
       </div>
+      <button className="form-card-submit" disabled={!canSubmit} onClick={submit}>
+        <Check size={13} weight="bold" /> Submit
+      </button>
     </div>
   );
 }

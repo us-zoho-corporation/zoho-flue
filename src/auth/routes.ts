@@ -184,11 +184,16 @@ export function createAuthRoutes(deps: AuthDeps): Hono {
 			firstName: firstName || 'Dev', lastName: rest.join(' ') || 'User',
 			photoId: null, createdAt: existing?.createdAt ?? now, lastLoginAt: now,
 		});
+		// Optional `scopes` param (comma/space-separated) lets a test simulate an
+		// already-connected product (e.g. Zoho CRM's full bundle) without a real
+		// Zoho OAuth round-trip — unioned with the base scopes, same as a real
+		// incremental-authorization grant would be.
+		const extraScopes = c.req.query('scopes');
 		await deps.stores.tokens.put({
 			userId,
 			// Placeholder — can't be refreshed against Zoho; fine for Claude + empty-state UX.
 			refreshTokenEnc: encryptSecret('dev-refresh-token-not-usable', deps.keyring),
-			scopes: ['AaaServer.profile.READ', 'QuickML.deployment.READ'],
+			scopes: unionScopes(['AaaServer.profile.READ', 'QuickML.deployment.READ'], extraScopes ? extraScopes.split(/[\s,]+/) : []),
 			accountsServer: 'https://accounts.zoho.com',
 			updatedAt: now,
 		});
