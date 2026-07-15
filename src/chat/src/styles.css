@@ -252,29 +252,43 @@ body { background: var(--page-bg); color: var(--txt1); }
 .icon-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
 
 /* Bottom padding reserves room for the composer AND, when shown, the mutation
-   approval card stacked above it (Thread.tsx keeps this scrolled fully into
-   view via useLayoutEffect) — generous on purpose so the two never collide.
-   The mask fades the last ~64px to transparent, so content scrolling out from
-   under the floating composer/card reads as an intentional soft edge instead
-   of a hard clip. */
+   approval card stacked above it. A fixed guess here previously either left a
+   large gap (card shorter than assumed) or overlapped the last message (card
+   taller) — Thread.tsx now measures the actual composer-wrap height via
+   ResizeObserver and sets this as an inline style; the value below is only
+   the pre-measurement fallback (composer alone, no card). The mask fades the
+   last ~64px to transparent, so content scrolling out from under the floating
+   composer/card reads as an intentional soft edge instead of a hard clip. */
 .chat-viewport {
-  flex: 1; overflow-y: auto; padding: 24px 24px 340px;
+  flex: 1; overflow-y: auto; padding: 24px 24px 110px;
+  /* A short conversation (few messages) is naturally shorter than the
+     viewport — without this, it sits pinned to the top with a large dead gap
+     below it before the composer/mutation card. flex-end anchors it to the
+     bottom instead (the standard chat-app pattern), so the last message
+     always sits close to the composer; once real content overflows, this has
+     no effect and normal top-down scrolling takes over. */
+  display: flex; flex-direction: column; justify-content: flex-end;
   mask-image: linear-gradient(to bottom, black calc(100% - 64px), transparent 100%);
   -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 64px), transparent 100%);
 }
-/* The welcome screen has no message content to protect from the floating
-   composer, so the 340px reserve + fade above just push its vertically
-   centered content upward off-center — drop both when the thread is empty. */
+/* The welcome screen's centered content has no scrolling edge to soften, and
+   needs symmetric top/bottom padding — unlike messages, the composer's
+   dynamic reserve isn't meant for it, and asymmetric padding here would
+   throw off .welcome's flex:1-filled box being centered in the viewport. */
 .chat-viewport-empty {
   padding-bottom: 24px;
   mask-image: none;
   -webkit-mask-image: none;
 }
-.chat-messages { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+.chat-messages { flex-shrink: 0; max-width: 760px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 24px; }
 .history-loading { text-align: center; padding: 40px; font-size: 13px; color: var(--txt3); }
 
 /* ─── Welcome state ──────────────────────────────────────────────────────────── */
-.welcome { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+/* flex: 1 (not height: 100%) — .chat-viewport is now itself a flex column
+   with justify-content: flex-end (see above), so this needs to consume all
+   remaining space itself, or flex-end pushes it down instead of leaving it
+   centered across the full height. */
+.welcome { flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
 .welcome-inner { width: 100%; max-width: 640px; display: flex; flex-direction: column; align-items: center; animation: fadeup 400ms var(--ease-out); }
 .welcome-mark {
   width: 64px; height: 64px; border-radius: 18px; background: var(--glass);
@@ -648,7 +662,7 @@ div:has(> [role="listbox"]) {
 
   .chat-topbar { margin: 10px 10px 0; padding: 8px; }
   .hdr-sub { display: none; }
-  .chat-viewport { padding: 16px 14px 300px; }
+  .chat-viewport { padding: 16px 14px 110px; }
   .composer-wrap { padding: 0 12px 12px; }
   .msg-user-inner { max-width: 88%; }
   .welcome-grid { grid-template-columns: 1fr; }

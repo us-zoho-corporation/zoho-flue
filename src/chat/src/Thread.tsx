@@ -138,6 +138,24 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
   // This conversation's model runs as the logged-in user, but nobody is signed in.
   const authGate = requiresAuth && !isSignedIn;
   const viewportRef = useRef<HTMLDivElement>(null);
+  const composerWrapRef = useRef<HTMLDivElement>(null);
+  // The floating composer-wrap (composer, plus the mutation card when one is
+  // pending) needs the scrolling viewport below to reserve exactly its own
+  // height, or there's either a gap (reserved more than needed) or an overlap
+  // (reserved less) — the mutation card's height varies with how many fields
+  // it lists, so a fixed guess can't fit every case. Measured live instead.
+  const [reservedBottom, setReservedBottom] = useState(0);
+  const VIEWPORT_GAP = 24; // matches .chat-messages' between-message gap
+
+  useEffect(() => {
+    const el = composerWrapRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setReservedBottom(Math.ceil(entry.contentRect.height) + VIEWPORT_GAP);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const last = messages[messages.length - 1];
   // The agent is working but hasn't produced its assistant turn yet — show a
@@ -164,11 +182,15 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
   // Layout effect (not a plain effect): runs synchronously after the DOM updates
   // but before the browser paints, so when the mutation approval card mounts —
   // growing the fixed composer-wrap overlay — the last message never flashes
-  // covered for a frame before this catches up.
+  // covered for a frame before this catches up. Also re-runs once
+  // `reservedBottom` itself changes: the ResizeObserver callback that updates
+  // it fires slightly after this effect on the same render (post-layout, its
+  // own microtask), so without this dependency the viewport could settle one
+  // beat before the reserved space caught up to the card's real height.
   useLayoutEffect(() => {
     const el = viewportRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, isRunning, pendingMutation?.action]);
+  }, [messages, isRunning, pendingMutation?.action, reservedBottom]);
 
   const empty = historyReady && messages.length === 0 && !showPending;
 
@@ -185,7 +207,11 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
         <ProfileMenu profile={profile} onSignOut={onSignOut} />
       </div>
 
-      <div ref={viewportRef} className={`chat-viewport${empty ? ' chat-viewport-empty' : ''}`}>
+      <div
+        ref={viewportRef}
+        className={`chat-viewport${empty ? ' chat-viewport-empty' : ''}`}
+        style={{ paddingBottom: empty ? undefined : (reservedBottom || undefined) }}
+      >
         {empty ? (
           <WelcomeState onPrompt={authGate ? () => onSignIn() : sendMessage} />
         ) : (
@@ -208,7 +234,7 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
         )}
       </div>
 
-      <div className="composer-wrap">
+      <div className="composer-wrap" ref={composerWrapRef}>
         <div className="composer-inner">
           {authGate ? (
             <div className="composer-signin">
