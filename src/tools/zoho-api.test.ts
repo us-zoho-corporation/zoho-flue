@@ -7,6 +7,7 @@ vi.mock('../config', () => ({
     config: {
         zohoAllowedHostnames: ['zoho.com', 'zohoapis.com'],
         zohoApiMaxRedirects: 5,
+        zohoApiMaxResponseChars: 100_000,
         zohoLoginScopes: 'AaaServer.profile.READ,ZohoCRM.org.READ',
         zohoProducts: [
             { key: 'crm', label: 'Zoho CRM', description: '', scopes: ['ZohoCRM.modules.ALL', 'ZohoCRM.settings.ALL'] },
@@ -81,13 +82,13 @@ async function catchError(run: () => unknown): Promise<Error> {
 describe('zoho_api SSRF protection', () => {
     it('allows requests to zoho.com subdomains', async () => {
         mockFetch([{ status: 200, body: '{}' }]);
-        await expect(tool().run({ input: { method: 'GET', url: 'https://api.zoho.com/v2/test' } }))
+        await expect(tool().run({ input: { method: 'GET', url: 'https://api.zoho.com/crm/v8/test' } }))
             .resolves.toMatchObject({ status: 200 });
     });
 
     it('allows requests to zohoapis.com subdomains', async () => {
         mockFetch([{ status: 200, body: '{}' }]);
-        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }))
+        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }))
             .resolves.toMatchObject({ status: 200 });
     });
 
@@ -108,7 +109,7 @@ describe('zoho_api SSRF protection', () => {
             text: async () => '{}',
         });
         vi.stubGlobal('fetch', fetchMock);
-        await tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } });
+        await tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } });
         expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${TOKEN}`);
     });
 
@@ -120,10 +121,10 @@ describe('zoho_api SSRF protection', () => {
 
     it('follows redirects within allowed domains', async () => {
         mockFetch([
-            { status: 302, location: 'https://api.zohoapis.com/crm/v2/leads' },
+            { status: 302, location: 'https://api.zohoapis.com/crm/v8/leads' },
             { status: 200, body: '{"data":[]}' },
         ]);
-        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }))
+        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }))
             .resolves.toMatchObject({ status: 200, body: '{"data":[]}' });
     });
 
@@ -134,10 +135,28 @@ describe('zoho_api SSRF protection', () => {
     });
 });
 
+describe('zoho_api response truncation', () => {
+    it('passes a response under the limit through unchanged', async () => {
+        const body = '{"data":[]}';
+        mockFetch([{ status: 200, body }]);
+        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }))
+            .resolves.toEqual({ status: 200, body });
+    });
+
+    it('truncates a response over the limit and notes it, instead of blowing the model\'s context budget', async () => {
+        const huge = 'x'.repeat(150_000);
+        mockFetch([{ status: 200, body: huge }]);
+        const result = await tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } });
+        expect(result.body.length).toBeLessThan(huge.length);
+        expect(result.body).toContain('x'.repeat(100_000));
+        expect(result.body).toMatch(/truncated: response was 150000 characters/);
+    });
+});
+
 describe('zoho_api connection/scope gate', () => {
     it('throws a connect payload when the user has none of the product scopes', async () => {
         const err = await catchError(() => tool({}, { getGrantedScopes: async () => ['AaaServer.profile.READ'] })
-            .run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }));
+            .run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }));
         const payload = parseConnectionRequired(err.message);
         expect(payload).toMatchObject({ kind: 'zoho', mode: 'connect', product: 'crm' });
     });
@@ -148,13 +167,13 @@ describe('zoho_api connection/scope gate', () => {
         const err = await catchError(() => tool({}, {
             getGrantedScopes: async () => ['ZohoCRM.org.READ'],
             products: [{ key: 'crm', label: 'Zoho CRM', description: '', scopes: [...CRM_SCOPES, 'ZohoCRM.org.READ'] }],
-        }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }));
+        }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }));
         expect(parseConnectionRequired(err.message)?.mode).toBe('connect');
     });
 
     it('throws a reconnect payload when some but not all product scopes are granted', async () => {
         const err = await catchError(() => tool({}, { getGrantedScopes: async () => [CRM_SCOPES[0]] })
-            .run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }));
+            .run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }));
         const payload = parseConnectionRequired(err.message);
         expect(payload).toMatchObject({ kind: 'zoho', mode: 'reconnect', product: 'crm' });
     });
@@ -162,7 +181,7 @@ describe('zoho_api connection/scope gate', () => {
     it('proceeds normally once all required scopes are granted', async () => {
         mockFetch([{ status: 200, body: '{}' }]);
         await expect(
-            tool({}, { getGrantedScopes: async () => CRM_SCOPES }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v2/leads' } }),
+            tool({}, { getGrantedScopes: async () => CRM_SCOPES }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }),
         ).resolves.toMatchObject({ status: 200 });
     });
 

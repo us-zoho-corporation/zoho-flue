@@ -26,7 +26,9 @@ import { type ToolCallInfo, type ChatMessage, isAssistantMessage, useFlueChat } 
 import { A2uiPart } from './a2ui/index.ts';
 import type { UserProfile } from './App.tsx';
 import { connectZohoScopes, parseConnectionRequired } from './connectionRequired.ts';
-import { parseFormRequest, type FormRequestSpec } from './formRequest.ts';
+import { parseFormRequest, matchFormSubmission, type FormRequestSpec } from './formRequest.ts';
+import { A2uiRecordCard } from './a2ui/A2uiRecordCard.tsx';
+import type { RecordCardSpec } from './a2ui/spec.ts';
 import type { FlueConversationMessage } from '@flue/react';
 
 interface ThreadProps {
@@ -38,7 +40,7 @@ interface ThreadProps {
   onSignOut: () => void;
   /** Called when the user clicks "Manage connection" on an MCP reconnect card, to open the MCP servers view. */
   onConnectMcp: () => void;
-  /** Whether "Auto mode" (HITL confirmation bypass) is currently on, shown as a top-bar indicator. */
+  /** Whether "Auto mode" (HITL confirmation bypass) is currently on, shown next to the model label under the composer. */
   autoMode: boolean;
 }
 
@@ -130,6 +132,29 @@ function textOf(message: FlueConversationMessage): string {
 }
 
 /**
+ * Reconstructs a submitted `request_input` form's filled-in fields as a
+ * record-card spec, if `userMsg` immediately follows an assistant turn that
+ * asked for one — so the chat shows the card the user actually filled in,
+ * not the plain-text reply that was really sent to the model. Returns `null`
+ * (the normal text bubble applies) when `prev` isn't such a turn, or the
+ * message's text doesn't cleanly match the form it's supposedly answering
+ * (e.g. the user typed a free-text reply instead of using the form).
+ * @param prev - The message immediately before `userMsg` in the conversation, if any.
+ * @param userMsg - The user message to check.
+ * @returns The reconstructed record-card spec, or `null`.
+ */
+function formSubmissionCardFor(prev: FlueConversationMessage | undefined, userMsg: FlueConversationMessage): RecordCardSpec | null {
+  if (!prev || prev.role !== 'assistant' || !isAssistantMessage(prev)) return null;
+  const step = [...prev.toolSteps].reverse().find((s) => s.toolName === 'request_input' && s.state === 'output-available');
+  if (!step) return null;
+  const spec = parseFormRequest(step.input);
+  if (!spec) return null;
+  const fields = matchFormSubmission(spec, textOf(userMsg));
+  if (!fields || fields.length === 0) return null;
+  return { title: spec.prompt, status: 'neutral', fields };
+}
+
+/**
  * Renders the main chat pane: the top bar, the message viewport (welcome
  * screen, message list with pending/no-reply states), and the composer or a
  * sign-in prompt when the active model requires authentication.
@@ -155,6 +180,15 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
   // it lists, so a fixed guess can't fit every case. Measured live instead.
   const [reservedBottom, setReservedBottom] = useState(0);
   const VIEWPORT_GAP = 24; // matches .chat-messages' between-message gap
+
+  // Maps a failed (connection-required) assistant turn's id to the original
+  // user message that triggered it, once the user clicks Retry — so the
+  // resent duplicate (the message immediately after that turn) can be
+  // suppressed in favor of a "Retried" indicator on the original, instead of
+  // showing the same request twice in history. Session-local: there's no
+  // server-side concept of "this message was a resend," so this doesn't
+  // survive a reload (the resend would show as an ordinary second message).
+  const [retriedTurnLinks, setRetriedTurnLinks] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     const el = composerWrapRef.current;
@@ -249,15 +283,31 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
         ) : (
           <div className="chat-messages">
             {!historyReady && <div className="history-loading"><Loader size="sm" /></div>}
-            {messages.map((msg, idx) => (
-              msg.role === 'user'
-                ? <UserMessage key={msg.id} message={msg} />
-                : <AssistantTurn
+            {messages.map((msg, idx) => {
+              if (msg.role === 'user') {
+                // The message right after a retried turn is the resent
+                // duplicate — suppress it; the original shows a "Retried"
+                // indicator instead of the same request appearing twice.
+                const prev = messages[idx - 1];
+                if (prev && retriedTurnLinks.has(prev.id)) return null;
+                const wasRetried = [...retriedTurnLinks.values()].includes(msg.id);
+                return (
+                  <UserMessage
                     key={msg.id}
-                    message={msg as ChatMessage}
-                    running={isRunning && idx === messages.length - 1}
+                    message={msg}
+                    formCard={formSubmissionCardFor(messages[idx - 1], msg)}
+                    retried={wasRetried}
                   />
-            ))}
+                );
+              }
+              return (
+                <AssistantTurn
+                  key={msg.id}
+                  message={msg as ChatMessage}
+                  running={isRunning && idx === messages.length - 1}
+                />
+              );
+            })}
             {showPending && <PendingTurn />}
             {noReply && (
               <NoReplyNotice error={error} onRetry={() => lastUserText && sendMessage(textOf(lastUserText))} />
@@ -286,7 +336,12 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
                   payload={pendingConnectionRequired}
                   onConnectMcp={onConnectMcp}
                   retryText={lastUserText && textOf(lastUserText)}
-                  onRetry={sendMessage}
+                  onRetry={async (text) => {
+                    if (last && lastUserText) {
+                      setRetriedTurnLinks((m) => new Map(m).set(last.id, lastUserText.id));
+                    }
+                    await sendMessage(text);
+                  }}
                 />
               )}
               {pendingFormRequest && (
@@ -343,11 +398,29 @@ function WelcomeState({ onPrompt }: { onPrompt: (text: string) => void }) {
  * @param message - The user's conversation message to display.
  * @returns The rendered user message bubble.
  */
-function UserMessage({ message }: { message: FlueConversationMessage }) {
+/**
+ * Renders one user turn: the plain text bubble, or — when this message is a
+ * submitted `request_input` form's reply — the record card the user actually
+ * filled in instead (see `formSubmissionCardFor`). When this message was
+ * later resent via a Retry click, shows a small "Retried" indicator instead
+ * of the resend appearing as its own duplicate bubble (see `retriedTurnLinks`).
+ * @param message - The user message to render.
+ * @param formCard - The reconstructed form-submission card for this message, if any.
+ * @param retried - Whether this message was resent via a Retry click.
+ * @returns The rendered user turn.
+ */
+function UserMessage({ message, formCard, retried }: { message: FlueConversationMessage; formCard: RecordCardSpec | null; retried: boolean }) {
   return (
     <div className="msg-user msg-assistant-appear">
       <div className="msg-user-inner">
-        <div className="msg-user-bubble">{textOf(message)}</div>
+        {formCard
+          ? <A2uiRecordCard spec={formCard} />
+          : <div className="msg-user-bubble">{textOf(message)}</div>}
+        {retried && (
+          <span className="msg-user-retried">
+            <ArrowClockwise size={11} weight="bold" /> Retried
+          </span>
+        )}
       </div>
     </div>
   );
@@ -814,7 +887,7 @@ function ConnectionRequiredCard({ payload, onConnectMcp, retryText, onRetry }: {
  * @returns The rendered form card.
  */
 function FormRequestCard({ spec, onSubmit }: { spec: FormRequestSpec; onSubmit: (text: string) => Promise<void> }) {
-  const [values, setValues] = useState<string[]>(() => spec.fields.map(() => ''));
+  const [values, setValues] = useState<string[]>(() => spec.fields.map((f) => f.defaultValue));
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmit = !submitting && spec.fields.every((f, i) => !f.required || values[i].trim());
@@ -837,29 +910,38 @@ function FormRequestCard({ spec, onSubmit }: { spec: FormRequestSpec; onSubmit: 
     <div className="form-card">
       <p className="form-card-prompt">{spec.prompt}</p>
       <div className="form-card-fields">
-        {spec.fields.map((f, i) => (
-          <label className="form-card-field" key={i}>
-            <span className="form-card-label">{f.label}{f.required && <span className="form-card-required">*</span>}</span>
-            {f.multiline ? (
-              <textarea
-                className="form-card-input form-card-textarea"
-                placeholder={f.placeholder || undefined}
-                value={values[i]}
-                disabled={submitting}
-                onChange={(e) => setValues((v) => v.map((x, j) => (j === i ? e.target.value : x)))}
-              />
-            ) : (
-              <input
-                type="text"
-                className="form-card-input"
-                placeholder={f.placeholder || undefined}
-                value={values[i]}
-                disabled={submitting}
-                onChange={(e) => setValues((v) => v.map((x, j) => (j === i ? e.target.value : x)))}
-              />
-            )}
-          </label>
-        ))}
+        {spec.fields.map((f, i) => {
+          const onChange = (e: { target: { value: string } }) =>
+            setValues((v) => v.map((x, j) => (j === i ? e.target.value : x)));
+          return (
+            <label className="form-card-field" key={i}>
+              <span className="form-card-label">{f.label}{f.required && <span className="form-card-required">*</span>}</span>
+              {f.type === 'textarea' ? (
+                <textarea
+                  className="form-card-input form-card-textarea"
+                  placeholder={f.placeholder || undefined}
+                  value={values[i]}
+                  disabled={submitting}
+                  onChange={onChange}
+                />
+              ) : f.type === 'select' ? (
+                <select className="form-card-input" value={values[i]} disabled={submitting} onChange={onChange}>
+                  <option value="" disabled={f.required}>{f.placeholder || 'Choose…'}</option>
+                  {f.options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              ) : (
+                <input
+                  type={f.type === 'date' ? 'date' : f.type === 'number' ? 'number' : 'text'}
+                  className="form-card-input"
+                  placeholder={f.placeholder || undefined}
+                  value={values[i]}
+                  disabled={submitting}
+                  onChange={onChange}
+                />
+              )}
+            </label>
+          );
+        })}
       </div>
       <button className="form-card-submit" disabled={!canSubmit} onClick={submit}>
         <Check size={13} weight="bold" /> Submit

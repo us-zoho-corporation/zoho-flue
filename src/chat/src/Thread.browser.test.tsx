@@ -60,11 +60,11 @@ describe('ToolCallRow (browser)', () => {
 				toolName="zoho_api"
 				toolCallId="c2"
 				state="output-available"
-				input={{ url: 'https://www.zohoapis.com/crm/v2/leads' }}
+				input={{ url: 'https://www.zohoapis.com/crm/v8/leads' }}
 				index={0}
 			/>,
 		);
-		await expect.element(screen.getByText('Fetched /crm/v2/leads')).toBeInTheDocument();
+		await expect.element(screen.getByText('Fetched /crm/v8/leads')).toBeInTheDocument();
 	});
 });
 

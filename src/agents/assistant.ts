@@ -45,12 +45,17 @@ const zohoAssistant = defineAgentProfile({
 		+ 'not ask the user to repeat themselves.\n'
 		+ '2. Once connected, use zoho_skill_get to load the relevant operation\'s exact endpoint, '
 		+ 'parameters, and scopes before calling zoho_api — never guess a Zoho endpoint from memory, '
-		+ 'and never guess a picklist field\'s value (Stage, Pipeline, Lead_Source, Industry, etc.) — '
-		+ 'these are customized per org/layout with no universal default, and Zoho rejects any value '
-		+ 'the org hasn\'t actually configured. The zoho-crm-modules-and-fields skill\'s Get Layouts (and, '
-		+ 'for Deals\' Pipeline/Stage specifically, Get Pipelines too) has the real values — check it '
-		+ 'before creating or updating a record with one, especially when you\'re inventing the data '
-		+ 'yourself (e.g. a sample/dummy record) rather than reflecting a value the user gave you. '
+		+ 'never guess a picklist field\'s value (Stage, Pipeline, Lead_Source, Industry, etc.), and '
+		+ 'never guess whether a field is actually required — all three are customized per org/layout '
+		+ 'with no universal default, and general Zoho product knowledge (e.g. "Deals usually have an '
+		+ 'Account") is not the same as this org\'s actual configuration. The zoho-crm-modules-and-fields '
+		+ 'skill\'s Get Layouts has the real, layout-scoped mandatory status and picklist values for '
+		+ 'every field (Get Fields alone is NOT layout-scoped and does not reflect either one); for '
+		+ 'Deals\' Pipeline/Stage specifically, Get Pipelines too. Check it before creating or updating a '
+		+ 'record, and before deciding what to ask the user for via request_input — both the `required` '
+		+ 'flag and the `type` you set there (date/number/select/etc.) should come from this real field '
+		+ 'metadata, not a guess, especially when you\'re inventing the data yourself (e.g. a sample/dummy '
+		+ 'record) rather than reflecting a value the user gave you. '
 		+ 'Available skills:\n'
 		+ '- zoho-crm-records, zoho-crm-modules-and-fields, zoho-crm-query, zoho-crm-bulk-operations, '
 		+ 'zoho-crm-record-actions, zoho-crm-related-records, zoho-crm-attachments, zoho-crm-emails, '
@@ -88,7 +93,13 @@ const zohoAssistant = defineAgentProfile({
 		+ 'When you need specific information from the user before you can proceed — required fields you '
 		+ 'don\'t have, or an exact value only they can supply — call request_input with the field list '
 		+ 'rather than asking in prose; it renders as a fillable form, so give one short sentence of '
-		+ 'context and then end your turn, do not also spell out the fields yourself.',
+		+ 'context and then end your turn, do not also spell out the fields yourself. Ground every field '
+		+ 'in whatever real information you already have access to, rather than guessing: don\'t mark a '
+		+ 'field required unless something you actually checked says so, set `type` to match the kind of '
+		+ 'value it needs (date/number/select/etc.) instead of leaving everything as plain text, and '
+		+ 'pre-fill `defaultValue` with a real suggestion (today\'s date, a value already given earlier '
+		+ 'in the conversation, a sensible common default) whenever you have one, rather than leaving the '
+		+ 'user to guess with nothing but a label.',
 });
 
 /**

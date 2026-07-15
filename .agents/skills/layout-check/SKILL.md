@@ -34,10 +34,12 @@ see `.agents/skills/e2e-chat/SKILL.md` for how that works. `boot.sh` refuses to
 start if `:3583`/`:5173` are already busy; a stale server from an earlier
 session is the most common source of confusing, flaky measurements.
 
-**Known gotcha:** the very first Playwright action against a freshly booted
-server (a click, a `waitForSelector`) often times out — Vite is still
-cold-compiling the module graph. This isn't a real failure; retry the script
-once before concluding something is broken. It has never needed a third try.
+**Known gotcha:** the first Playwright action (a click, a `waitForSelector`)
+in a script's first run often times out — this happens even against an
+already-warm server that answered a previous script just fine, so it isn't
+purely "Vite is still cold-compiling"; treat it as a first-run-only flake in
+general. This isn't a real failure; retry the script once before concluding
+something is broken. It has never needed a third try.
 
 ## Drive to the exact state in question
 
@@ -63,6 +65,15 @@ instances when checking several widths in one script.
 can kill the in-flight turn or wedge the server outright — see the `e2e-chat`
 skill's Gotchas for what that looks like and how to recover. Fix the
 scratchpad copy and re-copy fresh instead of patching the live one.
+
+**Never call `process.exit()` right after your final `console.log`s.** When
+stdout is piped (not a TTY — true whenever a tool runs the script for you),
+writes are async; an immediate `process.exit()` can terminate the process
+before they've flushed, silently dropping every `PASS`/`FAIL` line you just
+printed (you'll see only the last line or two, or nothing). Set
+`process.exitCode = failures > 0 ? 1 : 0` instead and let the script exit
+naturally once the event loop drains (harmless here since these scripts
+don't hold anything else open after `browser.close()`).
 
 ## Measure, then screenshot
 

@@ -7,7 +7,7 @@ describe('request_input', () => {
 		const result = await tool.run({
 			input: {
 				prompt: 'A few more details to create this Deal:',
-				fields: [{ label: 'Deal Name', placeholder: '', required: true, multiline: false }],
+				fields: [{ label: 'Deal Name', type: 'text', options: [], placeholder: '', defaultValue: '', required: true }],
 			},
 		});
 		expect(result.note).toMatch(/end your turn/i);

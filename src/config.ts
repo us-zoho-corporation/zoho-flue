@@ -163,5 +163,16 @@ export const config = {
 		.flatMap((suffix) => [`zoho.${suffix}`, `zohoapis.${suffix}`]),
 	// Maximum number of redirects the zoho_api tool will follow
 	zohoApiMaxRedirects: 5,
+	// Maximum characters of a zoho_api response body returned to the model.
+	// A single unbounded response (e.g. a bulk records list with no `fields`/
+	// `per_page` narrowing) can be hundreds of thousands of tokens — large
+	// enough to jump straight past the model's remaining context budget in one
+	// tool call, before Flue's automatic compaction (which reacts between
+	// turns, not mid-response) gets a chance to react. Observed live: a
+	// conversation failed outright with "prompt is too long: 1049417 tokens >
+	// 1000000 maximum" from a single such response. Truncating here, with a
+	// clear note, keeps any one call bounded and nudges the model to narrow
+	// its request instead of assuming it saw the whole thing.
+	zohoApiMaxResponseChars: 100_000,
 
 };

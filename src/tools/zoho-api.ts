@@ -19,6 +19,21 @@ export interface ZohoApiDeps extends ZohoConnectionDeps {
 }
 
 /**
+ * Truncates an oversized Zoho API response body to `config.zohoApiMaxResponseChars`,
+ * appending a note so the model knows it's seeing a partial response rather
+ * than mistaking a cut-off document for the complete one.
+ * @param text - The raw response body text.
+ * @returns `text` unchanged if within the limit, otherwise the truncated text plus a trailing note.
+ */
+function truncateResponseBody(text: string): string {
+	if (text.length <= config.zohoApiMaxResponseChars) return text;
+	return `${text.slice(0, config.zohoApiMaxResponseChars)}\n\n`
+		+ `[...truncated: response was ${text.length} characters, showing the first ${config.zohoApiMaxResponseChars}. `
+		+ 'This is NOT the complete response — narrow your request instead of assuming it is (e.g. add `fields` '
+		+ 'to return fewer columns, reduce `per_page`, add filter criteria, or use a COQL aggregate query).]';
+}
+
+/**
  * Returns true if `url`'s hostname matches or is a subdomain of an entry in `config.zohoAllowedHostnames`.
  * @param url - The absolute URL to check.
  * @returns `true` if the URL's hostname is an allowed Zoho domain or a subdomain of one,
@@ -107,7 +122,8 @@ export function defineZohoApiTool(deps: ZohoApiDeps, gate: MutationGateContext) 
 		 * extra headers (e.g. Zoho Desk's `orgId`), and — for mutating methods — the
 		 * confirmation `mutationId`.
 		 * @param signal - Abort signal forwarded to the underlying `fetch` call.
-		 * @returns The final response's HTTP status and body text.
+		 * @returns The final response's HTTP status and body text, truncated (with a trailing
+		 * note) at `config.zohoApiMaxResponseChars` if the real response was larger.
 		 * @throws {Error} A `ConnectionRequiredPayload`-encoded error (see `connection-required.ts`)
 		 * if the target product's scope bundle isn't fully granted; if a mutating call lacks a
 		 * valid `mutationId`; if the URL (or a redirect target) is not under an allowed Zoho
@@ -179,7 +195,7 @@ export function defineZohoApiTool(deps: ZohoApiDeps, gate: MutationGateContext) 
 					continue;
 				}
 
-				return { status: res.status, body: await res.text() };
+				return { status: res.status, body: truncateResponseBody(await res.text()) };
 			}
 
 			throw new Error(`Too many redirects (max ${config.zohoApiMaxRedirects}).`);
