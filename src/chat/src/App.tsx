@@ -25,7 +25,9 @@ export type AgentEntry = {
 // A selectable provider-model (from /api/models). The chat runs one `assistant`
 // agent; the chosen model is carried per conversation in the instance id.
 // `requiresAuth` models run as the logged-in user, so the chat prompts sign-in.
-export type ModelOption = { key: string; label: string; requiresAuth?: boolean };
+// `attachmentMimeTypes` gates the composer's attachment button — empty/absent
+// means the model accepts no attachments.
+export type ModelOption = { key: string; label: string; requiresAuth?: boolean; attachmentMimeTypes?: string[] };
 
 export type UserProfile = {
   displayName: string;
@@ -394,6 +396,7 @@ export function App() {
           <Thread
             modelLabel={activeSession.modelLabel}
             requiresAuth={models.find((m) => m.key === activeSession.modelKey)?.requiresAuth ?? false}
+            attachmentMimeTypes={models.find((m) => m.key === activeSession.modelKey)?.attachmentMimeTypes ?? []}
             isSignedIn={!!profile}
             onSignIn={handleSignIn}
             profile={profile}

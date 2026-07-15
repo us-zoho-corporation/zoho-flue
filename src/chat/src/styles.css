@@ -346,6 +346,16 @@ body { background: var(--page-bg); color: var(--txt1); }
   display: inline-flex; align-items: center; gap: 4px; margin-top: 5px;
   font: 500 11.5px var(--font-sans); color: var(--txt3);
 }
+.msg-attachments { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-bottom: 6px; }
+.msg-attachment-img {
+  max-width: 220px; max-height: 220px; border-radius: 12px; border: 1px solid var(--gb);
+  box-shadow: var(--ghi);
+}
+.msg-attachment-missing {
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 10px;
+  background: var(--glass2); border: 1px solid var(--gb2); color: var(--txt3);
+  font: 500 12px var(--font-sans);
+}
 
 .msg-assistant { display: flex; gap: 12px; }
 .msg-assistant-content { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 10px; }
@@ -413,6 +423,32 @@ body { background: var(--page-bg); color: var(--txt1); }
 .composer-send:disabled { opacity: 0.4; cursor: default; }
 .composer-model { font: 400 11.5px var(--font-sans); color: var(--txt3); padding: 0 4px; }
 .composer-meta { display: flex; align-items: center; gap: 8px; padding-top: 2px; }
+.composer-attach {
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 11px; background: transparent; color: var(--txt2); cursor: pointer;
+  flex-shrink: 0; transition: background 180ms var(--ease-out), color 180ms var(--ease-out);
+}
+.composer-attach:hover { background: var(--hover); color: var(--txt1); }
+.composer-attach-disabled { color: var(--txt3); opacity: 0.6; cursor: default; }
+.composer-attach-disabled:hover { background: transparent; color: var(--txt3); }
+.composer-attach-popover {
+  max-width: 240px; padding: 10px 12px; border-radius: 10px; font: 400 12.5px/1.5 var(--font-sans);
+  color: var(--txt2); background: var(--glass); backdrop-filter: blur(var(--blur)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
+  border: 1px solid var(--gb); box-shadow: var(--ghi), var(--gsh);
+}
+.composer-attachments { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 8px; }
+.composer-attachment { position: relative; width: 52px; height: 52px; flex-shrink: 0; }
+.composer-attachment img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 1px solid var(--gb2);
+}
+.composer-attachment-remove {
+  position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; border: 1px solid var(--gb);
+  background: var(--glass2); color: var(--txt2); cursor: pointer;
+}
+.composer-attachment-remove:hover { background: var(--hover); color: var(--txt1); }
+.composer-attachment-error { margin: 0 2px 6px; font: 500 12px var(--font-sans); color: var(--danger); }
 
 /* Sign-in gate that replaces the composer when a model requires login. */
 .composer-signin {

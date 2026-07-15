@@ -47,7 +47,7 @@ All env reads and static constants live here — nowhere else reads `process.env
 |---|---|
 | `zohoClientId/Secret/RefreshToken` | OAuth credentials |
 | `catalystEndpoint/OrgId` | Catalyst GLM endpoint |
-| `chatModels` | Selectable provider-models `{ key, label, spec }` (served at `/api/models`) |
+| `chatModels` | Selectable provider-models `{ key, label, spec, requiresAuth, attachmentMimeTypes }` (served at `/api/models`) |
 | `defaultChatModelKey` | Default model key (`claude` → `anthropic/claude-sonnet-5`) |
 | `anthropicApiKey` | Key for the built-in `anthropic` provider (required for the default model) |
 | `catalystContextWindow` | Input context window (tokens) — drives Flue's compaction |
@@ -99,6 +99,8 @@ Separately, `src/store/catalyst/flue/` implements Flue's own `PersistenceAdapter
 ## Chat UI (`src/chat/`)
 
 A Vite + React app (Kumo components) that renders live agent conversations through `@flue/react`'s `useFlueAgent`. `FlueRuntime.tsx` adapts Flue's durable event stream into view state; `Thread.tsx` renders messages, tool activity, and a2ui surfaces. Served in dev with `pnpm chat` (proxies `/api` and `/agents` to the agent server on `:3583`).
+
+**Image attachments** ride Flue's direct-prompt `images` field (`AgentPromptImage[]`, base64 + MIME type — the only attachment channel the SDK exposes; there's no generic multi-file upload). `config.chatModels[].attachmentMimeTypes` gates the composer's attachment button per selected model (empty disables it with an explanatory popover — Catalyst GLM is assumed to support none); `/api/models` serves this alongside `label`/`requiresAuth`. `ConversationsStore.send()` (`conversations.tsx`) forwards `images` to `client.agents.send()` and echoes them optimistically as `file` message parts (a `data:` URL preview) so an attached image renders immediately, before the durable copy arrives. Historical attachment bytes are **not** re-servable after a reload without an opt-in `attachments` middleware export this app doesn't currently wire up, so a `file` part with no resolvable `url` (post-reload) renders as a "not available" placeholder instead of a broken image.
 
 In production, `pnpm chat:build` outputs static assets to `src/chat/dist`, and `app.ts` serves them same-origin (static files + SPA fallback to `index.html`) ahead of the `flue()` mount — see [Deploying to Catalyst](deploy-catalyst.md).
 

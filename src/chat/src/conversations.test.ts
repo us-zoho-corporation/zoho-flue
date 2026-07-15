@@ -38,7 +38,7 @@ class FakeObservation {
  */
 function makeClient() {
   const observations = new Map<string, FakeObservation>();
-  const sends: { id: string; message: string }[] = [];
+  const sends: { id: string; message: string; images?: { type: 'image'; data: string; mimeType: string; filename?: string }[] }[] = [];
   const client = {
     agents: {
       /**
@@ -56,9 +56,11 @@ function makeClient() {
        * test helper: records a send call instead of making a real request.
        * @param _name - The agent name (unused by the fake).
        * @param id - The conversation id the message was sent to.
-       * @param opts - The send options containing the message text.
+       * @param opts - The send options containing the message text and optional image attachments.
        */
-      send: async (_name: string, id: string, opts: { message: string }) => { sends.push({ id, message: opts.message }); },
+      send: async (_name: string, id: string, opts: { message: string; images?: { type: 'image'; data: string; mimeType: string; filename?: string }[] }) => {
+        sends.push({ id, message: opts.message, images: opts.images });
+      },
     },
   };
   return { client: client as never, observations, sends };
@@ -130,6 +132,36 @@ describe('ConversationsStore', () => {
     v = store.getView('A');
     const helloCount = v.messages.filter((m) => m.parts.some((p) => 'text' in p && p.text === 'hello')).length;
     expect(helloCount).toBe(1);
+  });
+
+  it('sends image attachments alongside text and echoes them as file parts', async () => {
+    store.setActive('A');
+    const obs = ctx.observations.get('A')!;
+    obs.set({ phase: 'live', conversation: conv([]) });
+
+    await store.send('A', 'look at this', [{ data: 'YWJj', mimeType: 'image/png', filename: 'shot.png' }]);
+    expect(ctx.sends).toEqual([{
+      id: 'A', message: 'look at this',
+      images: [{ type: 'image', data: 'YWJj', mimeType: 'image/png', filename: 'shot.png' }],
+    }]);
+
+    const v = store.getView('A');
+    const overlay = v.messages.find((m) => m.parts.some((p) => 'text' in p && p.text === 'look at this'));
+    expect(overlay).toBeDefined();
+    const filePart = overlay!.parts.find((p) => p.type === 'file') as { mediaType: string; url: string; filename?: string } | undefined;
+    expect(filePart).toMatchObject({ mediaType: 'image/png', url: 'data:image/png;base64,YWJj', filename: 'shot.png' });
+  });
+
+  it('sends an attachment-only message (no text) as just the file part', async () => {
+    store.setActive('A');
+    const obs = ctx.observations.get('A')!;
+    obs.set({ phase: 'live', conversation: conv([]) });
+
+    await store.send('A', '', [{ data: 'ZGVm', mimeType: 'image/jpeg' }]);
+    const v = store.getView('A');
+    const overlay = v.messages[v.messages.length - 1];
+    expect(overlay.parts.every((p) => p.type === 'file')).toBe(true);
+    expect(overlay.parts).toHaveLength(1);
   });
 
   it('releases an idle, non-active conversation after the grace period but keeps a running one', () => {

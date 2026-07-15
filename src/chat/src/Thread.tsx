@@ -11,6 +11,7 @@ import {
   Headset,
   Info,
   Lightning,
+  Paperclip,
   Plug,
   ShieldCheck,
   SignOut,
@@ -22,14 +23,14 @@ import {
 import { Badge, Banner, Button, Collapsible, Loader, Popover, SidebarTrigger } from '@cloudflare/kumo';
 import { type KeyboardEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
-import { type ToolCallInfo, type ChatMessage, isAssistantMessage, useFlueChat } from './FlueRuntime.tsx';
+import { type ToolCallInfo, type ChatMessage, type ChatAttachment, isAssistantMessage, useFlueChat } from './FlueRuntime.tsx';
 import { A2uiPart } from './a2ui/index.ts';
 import type { UserProfile } from './App.tsx';
 import { connectZohoScopes, parseConnectionRequired } from './connectionRequired.ts';
 import { parseFormRequest, matchFormSubmission, type FormRequestSpec } from './formRequest.ts';
 import { A2uiRecordCard } from './a2ui/A2uiRecordCard.tsx';
 import type { RecordCardSpec } from './a2ui/spec.ts';
-import type { FlueConversationMessage } from '@flue/react';
+import type { FlueConversationMessage, FlueConversationPart } from '@flue/react';
 
 interface ThreadProps {
   modelLabel: string;
@@ -42,6 +43,8 @@ interface ThreadProps {
   onConnectMcp: () => void;
   /** Whether "Auto mode" (HITL confirmation bypass) is currently on, shown next to the model label under the composer. */
   autoMode: boolean;
+  /** MIME types the active model accepts as image attachments; empty disables the composer's attachment button. */
+  attachmentMimeTypes: string[];
 }
 
 /**
@@ -165,9 +168,10 @@ function formSubmissionCardFor(prev: FlueConversationMessage | undefined, userMs
  * @param profile - The signed-in user's profile, shown behind the top bar's account avatar/popover.
  * @param onSignOut - Called when the account popover's "Sign out" button is clicked.
  * @param autoMode - Whether "Auto mode" is currently on, shown as a top-bar indicator.
+ * @param attachmentMimeTypes - MIME types the active model accepts as image attachments.
  * @returns The chat area, including top bar, message viewport, and composer.
  */
-export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile, onSignOut, onConnectMcp, autoMode }: ThreadProps) {
+export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile, onSignOut, onConnectMcp, autoMode, attachmentMimeTypes }: ThreadProps) {
   const { messages, isRunning, historyReady, error, sendMessage, stop } = useFlueChat();
   // This conversation's model runs as the logged-in user, but nobody is signed in.
   const authGate = requiresAuth && !isSignedIn;
@@ -347,7 +351,14 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
               {pendingFormRequest && (
                 <FormRequestCard spec={pendingFormRequest} onSubmit={sendMessage} />
               )}
-              <Composer modelLabel={modelLabel} isRunning={isRunning} onSend={sendMessage} onStop={stop} autoMode={autoMode} />
+              <Composer
+                modelLabel={modelLabel}
+                isRunning={isRunning}
+                onSend={sendMessage}
+                onStop={stop}
+                autoMode={autoMode}
+                attachmentMimeTypes={attachmentMimeTypes}
+              />
             </>
           )}
         </div>
@@ -410,12 +421,27 @@ function WelcomeState({ onPrompt }: { onPrompt: (text: string) => void }) {
  * @returns The rendered user turn.
  */
 function UserMessage({ message, formCard, retried }: { message: FlueConversationMessage; formCard: RecordCardSpec | null; retried: boolean }) {
+  const files = message.parts.filter((p): p is Extract<FlueConversationPart, { type: 'file' }> => p.type === 'file');
+  const text = textOf(message);
   return (
     <div className="msg-user msg-assistant-appear">
       <div className="msg-user-inner">
+        {files.length > 0 && (
+          <div className="msg-attachments">
+            {files.map((f, i) => (
+              f.mediaType.startsWith('image/') && f.url
+                ? <img key={i} src={f.url} alt={f.filename ?? 'Attached image'} className="msg-attachment-img" />
+                : (
+                  <span key={i} className="msg-attachment-missing">
+                    <Paperclip size={12} /> {f.filename ?? 'Attachment'} — not available
+                  </span>
+                )
+            ))}
+          </div>
+        )}
         {formCard
           ? <A2uiRecordCard spec={formCard} />
-          : <div className="msg-user-bubble">{textOf(message)}</div>}
+          : text && <div className="msg-user-bubble">{text}</div>}
         {retried && (
           <span className="msg-user-retried">
             <ArrowClockwise size={11} weight="bold" /> Retried
@@ -955,37 +981,113 @@ function FormRequestCard({ spec, onSubmit }: { spec: FormRequestSpec; onSubmit: 
 interface ComposerProps {
   modelLabel: string;
   isRunning: boolean;
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, images?: ChatAttachment[]) => Promise<void>;
   onStop: () => void;
   /** Whether "Auto mode" (HITL confirmation bypass) is currently on, shown right next to the model label. */
   autoMode: boolean;
+  /** MIME types the active model accepts as image attachments; empty disables the attachment button. */
+  attachmentMimeTypes: string[];
+}
+
+// The SDK caps base64 image data at 14 MiB of characters per image (see
+// @flue/sdk's AgentPromptImage docs) — checked client-side so an oversized
+// file is rejected immediately instead of failing after a round trip.
+const MAX_ATTACHMENT_BASE64_CHARS = 14 * 1024 * 1024;
+
+/** One image attachment staged in the composer before sending. */
+interface PendingAttachment {
+  /** Full `data:<mime>;base64,<data>` URL — used directly as an `<img>` preview source. */
+  dataUrl: string;
+  mimeType: string;
+  filename: string;
+}
+
+/**
+ * Reads a `File` into a `PendingAttachment`, rejecting it if it isn't one of
+ * `allowedMimeTypes` or its base64 payload would exceed the SDK's per-image cap.
+ * @param file - The selected file to read.
+ * @param allowedMimeTypes - MIME types the active model accepts.
+ * @returns The staged attachment, or an error message if it was rejected.
+ */
+async function readAttachment(file: File, allowedMimeTypes: string[]): Promise<{ attachment: PendingAttachment } | { error: string }> {
+  if (!allowedMimeTypes.includes(file.type)) {
+    return { error: `${file.name}: unsupported file type (${file.type || 'unknown'})` };
+  }
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  if (base64.length > MAX_ATTACHMENT_BASE64_CHARS) {
+    return { error: `${file.name}: too large to attach` };
+  }
+  return { attachment: { dataUrl, mimeType: file.type, filename: file.name } };
 }
 
 /**
  * Renders the message input row: an auto-growing textarea plus a send/stop
- * button that toggles based on whether a turn is currently running, and the
- * active model's label alongside the current confirmation mode.
+ * button that toggles based on whether a turn is currently running, the
+ * active model's label alongside the current confirmation mode, and an
+ * attachment button (disabled with an explanatory popover when the active
+ * model accepts no image attachments).
  * @param modelLabel - The display name of the active model, shown below the input row.
  * @param isRunning - Whether a turn is currently in flight; toggles the button between send and stop.
- * @param onSend - Called with the trimmed message text when the user sends it.
+ * @param onSend - Called with the trimmed message text (and any staged image attachments) when the user sends it.
  * @param onStop - Called when the stop button is clicked to cancel the in-flight turn.
  * @param autoMode - Whether "Auto mode" is currently on, shown next to the model label.
+ * @param attachmentMimeTypes - MIME types the active model accepts as image attachments.
  * @returns The rendered composer.
  */
-function Composer({ modelLabel, isRunning, onSend, onStop, autoMode }: ComposerProps) {
+function Composer({ modelLabel, isRunning, onSend, onStop, autoMode, attachmentMimeTypes }: ComposerProps) {
   const [value, setValue] = useState('');
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentsSupported = attachmentMimeTypes.length > 0;
 
   /**
-   * Trims and sends the current composer text, then clears the input. No-ops
-   * if the trimmed text is empty or a turn is already running.
+   * Reads and stages every file the user picked, skipping (with an error
+   * note) any that fail the type/size check, then resets the file input so
+   * selecting the same file again re-triggers `onChange`.
+   * @param e - The file input's change event.
+   */
+  const handleFileChange = useCallback(async (e: { target: HTMLInputElement }) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    const results = await Promise.all(files.map((f) => readAttachment(f, attachmentMimeTypes)));
+    const staged = results.filter((r): r is { attachment: PendingAttachment } => 'attachment' in r).map((r) => r.attachment);
+    const errors = results.filter((r): r is { error: string } => 'error' in r).map((r) => r.error);
+    if (staged.length > 0) setAttachments((prev) => [...prev, ...staged]);
+    setAttachmentError(errors[0] ?? null);
+  }, [attachmentMimeTypes]);
+
+  /**
+   * Trims and sends the current composer text plus any staged attachments,
+   * then clears both. No-ops if there's neither text nor an attachment, or a
+   * turn is already running — an attachment alone is a valid, sendable message.
    */
   const handleSend = useCallback(() => {
     const text = value.trim();
-    if (!text || isRunning) return;
+    if ((!text && attachments.length === 0) || isRunning) return;
     setValue('');
-    onSend(text);
-  }, [value, isRunning, onSend]);
+    setAttachments([]);
+    setAttachmentError(null);
+    const images: ChatAttachment[] = attachments.map((a) => ({
+      data: a.dataUrl.slice(a.dataUrl.indexOf(',') + 1),
+      mimeType: a.mimeType,
+      filename: a.filename,
+    }));
+    onSend(text, images.length ? images : undefined);
+  }, [value, attachments, isRunning, onSend]);
+
+  /** Removes one staged attachment by index. */
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   /**
    * Sends the message when Enter is pressed without Shift, preventing the
@@ -1008,7 +1110,52 @@ function Composer({ modelLabel, isRunning, onSend, onStop, autoMode }: ComposerP
 
   return (
     <div className="composer-root">
+      {attachments.length > 0 && (
+        <div className="composer-attachments">
+          {attachments.map((a, i) => (
+            <div className="composer-attachment" key={i}>
+              <img src={a.dataUrl} alt={a.filename} />
+              <button
+                className="composer-attachment-remove"
+                aria-label={`Remove ${a.filename}`}
+                title={`Remove ${a.filename}`}
+                onClick={() => removeAttachment(i)}
+              >
+                <X size={11} weight="bold" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {attachmentError && <p className="composer-attachment-error">{attachmentError}</p>}
       <div className="composer-row">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={attachmentMimeTypes.join(',')}
+          multiple
+          hidden
+          onChange={handleFileChange}
+        />
+        {attachmentsSupported ? (
+          <button
+            className="composer-attach"
+            aria-label="Attach image"
+            title="Attach image"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Paperclip size={17} />
+          </button>
+        ) : (
+          <Popover>
+            <Popover.Trigger render={<button className="composer-attach composer-attach-disabled" aria-label="Attach image (unsupported)" />}>
+              <Paperclip size={17} />
+            </Popover.Trigger>
+            <Popover.Content align="start" sideOffset={8} className="composer-attach-popover">
+              {modelLabel} doesn’t support file attachments. Switch models in Settings to attach a file.
+            </Popover.Content>
+          </Popover>
+        )}
         <textarea
           ref={textareaRef}
           autoFocus
@@ -1023,7 +1170,7 @@ function Composer({ modelLabel, isRunning, onSend, onStop, autoMode }: ComposerP
             <Square size={15} weight="fill" />
           </button>
         ) : (
-          <button className="composer-send" aria-label="Send" onClick={handleSend} disabled={!value.trim()}>
+          <button className="composer-send" aria-label="Send" onClick={handleSend} disabled={!value.trim() && attachments.length === 0}>
             <ArrowUp size={17} weight="bold" />
           </button>
         )}

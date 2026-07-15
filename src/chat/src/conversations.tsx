@@ -1,9 +1,9 @@
 import { useFlueClient } from '@flue/react';
-import type { AgentConversationObservation, FlueClient, FlueConversationMessage, FlueConversationState } from '@flue/sdk';
+import type { AgentConversationObservation, FlueClient, FlueConversationMessage, FlueConversationPart, FlueConversationState } from '@flue/sdk';
 import { createContext, useContext, useMemo, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { collapseTurns } from './flue-model.ts';
-import { FlueChatContext, type FlueChat } from './FlueRuntime.tsx';
+import { FlueChatContext, type ChatAttachment, type FlueChat } from './FlueRuntime.tsx';
 
 // A conversation whose response has finished and is no longer visible is kept
 // observed for this grace period, then its connection is released.
@@ -45,7 +45,7 @@ interface Entry {
 export class ConversationsStore {
   private entries = new Map<string, Entry>();
   private views = new Map<string, FlueChat>();
-  private senders = new Map<string, (text: string) => Promise<void>>();
+  private senders = new Map<string, (text: string, images?: ChatAttachment[]) => Promise<void>>();
   private stoppers = new Map<string, () => Promise<void>>();
   private listeners = new Set<() => void>();
   private activeId?: string;
@@ -74,11 +74,11 @@ export class ConversationsStore {
    * Returns the memoized `sendMessage` function for a conversation, creating it
    * on first use so identity stays stable across renders.
    * @param convId - The conversation id to get a sender for.
-   * @returns A function that sends a text message to the conversation.
+   * @returns A function that sends a text message (with optional image attachments) to the conversation.
    */
-  private senderFor(convId: string): (text: string) => Promise<void> {
+  private senderFor(convId: string): (text: string, images?: ChatAttachment[]) => Promise<void> {
     let s = this.senders.get(convId);
-    if (!s) { s = (text: string) => this.send(convId, text); this.senders.set(convId, s); }
+    if (!s) { s = (text, images) => this.send(convId, text, images); this.senders.set(convId, s); }
     return s;
   }
   /**
@@ -233,23 +233,35 @@ export class ConversationsStore {
   }
 
   /**
-   * Sends a user message to a conversation, showing an optimistic echo of it
-   * immediately and rolling the echo back if the send fails.
+   * Sends a user message (with optional image attachments) to a conversation,
+   * showing an optimistic echo of it immediately and rolling the echo back if
+   * the send fails. Attachments echo as `file` parts carrying a local `data:`
+   * URL preview, same shape the SDK uses for a durably-recorded one.
    * @param convId - The conversation id to send to.
-   * @param text - The message text to send.
+   * @param text - The message text to send. May be empty when `images` carries the whole message.
+   * @param images - Image attachments to send alongside `text`.
    * @throws {Error} If `client.agents.send` rejects (e.g. network failure); rethrown after the optimistic echo is rolled back.
    */
-  async send(convId: string, text: string): Promise<void> {
+  async send(convId: string, text: string, images?: ChatAttachment[]): Promise<void> {
     const entry = this.ensureOpen(convId);
+    const fileParts: FlueConversationPart[] = (images ?? []).map((img) => ({
+      type: 'file',
+      mediaType: img.mimeType,
+      url: `data:${img.mimeType};base64,${img.data}`,
+      filename: img.filename,
+    }));
     entry.overlay = {
       id: `optimistic-${Date.now()}`,
       role: 'user',
-      parts: [{ type: 'text', text, state: 'done' }],
+      parts: text ? [...fileParts, { type: 'text', text, state: 'done' }] : fileParts,
       metadata: { timestamp: new Date().toISOString() },
     } as FlueConversationMessage;
     this.recompute(convId); // reflect the echo immediately
     try {
-      await this.client.agents.send(this.agentName, convId, { message: text });
+      await this.client.agents.send(this.agentName, convId, {
+        message: text,
+        images: images?.length ? images.map((img) => ({ type: 'image', data: img.data, mimeType: img.mimeType, filename: img.filename })) : undefined,
+      });
       // The instance may have been `absent` when we started observing (a brand-new
       // conversation). `send` just created it, so refresh the observation to catch
       // up and begin following the streamed response. (No-op if already live.)
@@ -338,14 +350,16 @@ export function ActiveConversation({ convId, onFirstMessage, children }: { convI
   const chat = useMemo<FlueChat>(() => ({
     ...view,
     /**
-     * Sends a message on the active conversation, invoking `onFirstMessage`
-     * first if this is the conversation's first user message.
+     * Sends a message (with optional image attachments) on the active
+     * conversation, invoking `onFirstMessage` first if this is the
+     * conversation's first user message.
      * @param text - The message text to send.
+     * @param images - Image attachments to send alongside `text`.
      * @returns A promise that resolves once the underlying send completes.
      */
-    sendMessage: (text: string) => {
+    sendMessage: (text: string, images?: ChatAttachment[]) => {
       if (onFirstMessage && !view.messages.some((m) => m.role === 'user')) onFirstMessage(text);
-      return view.sendMessage(text);
+      return view.sendMessage(text, images);
     },
   }), [view, onFirstMessage]);
   return <FlueChatContext.Provider value={chat}>{children}</FlueChatContext.Provider>;

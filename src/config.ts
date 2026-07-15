@@ -140,10 +140,23 @@ export const config = {
 	// id (`<key>__<uuid>`) so a single `assistant` agent can resolve the chosen
 	// model per conversation. `requiresAuth` marks models that run as the logged-in
 	// user (their token must carry the needed scope), so the chat can prompt sign-in.
+	// `attachmentMimeTypes` gates the composer's attachment button — Flue's direct-
+	// prompt `images` field only accepts vision-capable models, and image support
+	// varies per model/provider, so this is a real capability check, not cosmetic.
+	// An empty list disables the button with an explanatory popover instead of
+	// letting the user attach something the model can't read. The Catalyst GLM
+	// model is assumed to support none (not verified against its actual wire
+	// protocol — treat as unsupported unless/until confirmed otherwise).
 	// The default is `defaultChatModelKey`.
 	chatModels: [
-		{ key: 'claude', label: 'Claude Sonnet 5', spec: 'anthropic/claude-sonnet-5', requiresAuth: false },
-		{ key: 'glm', label: 'Zoho GLM 4.7 Flash', spec: 'catalyst-glm/crm-di-glm47b_30b_it', requiresAuth: true },
+		{
+			key: 'claude', label: 'Claude Sonnet 5', spec: 'anthropic/claude-sonnet-5', requiresAuth: false,
+			attachmentMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+		},
+		{
+			key: 'glm', label: 'Zoho GLM 4.7 Flash', spec: 'catalyst-glm/crm-di-glm47b_30b_it', requiresAuth: true,
+			attachmentMimeTypes: [],
+		},
 	] as const,
 	defaultChatModelKey: 'claude',
 	// Catalyst GLM input context window (tokens). Drives Flue's built-in compaction.
