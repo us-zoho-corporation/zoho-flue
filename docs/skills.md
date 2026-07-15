@@ -56,6 +56,7 @@ allowed-tools: <...>  # Optional/experimental. Space-separated pre-approved tool
 | `flue-docs` | Searching and reading Flue framework documentation via CLI |
 | `run-agent` | Running the agent, tests, type-check, lint, or the browser chat UI |
 | `e2e-chat` | Full browser E2E of the chat from an authenticated empty state (dev-login seam) |
+| `layout-check` | Diagnosing/verifying spacing, overlap, alignment, or responsive layout bugs in `src/chat/` via measured DOM geometry, not just screenshots |
 | `add-agent` | Creating a new agent in `src/agents/` |
 | `add-provider` | Registering a new provider in `src/providers/` |
 | `catalyst-glm` | Debugging GLM responses, history format, EXTRA_KEY_FOUND_IN_JSON |
