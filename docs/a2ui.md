@@ -24,7 +24,7 @@ Because the spec lives in the tool input, the chart or table **builds live** whi
 | `render_stat_cards` | headline KPIs with change indicators | `cards[]` of `{ label, value, delta?, trend?, help? }` |
 | `render_record_card` | a single record's own field values — confirming a create/update, or previewing one looked up | `title`, optional `subtitle`/`status` (`"success"` \| `"neutral"`), `fields[]` of `{ label, value }` |
 
-The assistant's instructions carry a "never show the same values twice" rule: whenever a visualization (including `render_record_card`) renders a set of values, the model's own written reply must not restate them — one short interpretive line instead. This applies to `propose_mutation`'s confirmation card too (see below).
+The assistant's instructions carry a "never show the same values twice" rule: whenever a visualization (including `render_record_card`) renders a set of values, the model's own written reply must not restate them — one short interpretive line instead. This applies to `propose_mutation`'s and `propose_mutation_batch`'s confirmation cards too (see below).
 
 ## Frontend — `src/chat/src/a2ui/`
 
@@ -46,6 +46,8 @@ Two flows in `Thread.tsx` reuse `A2uiRecordCard` for data that never actually we
 
 - **`propose_mutation` preview** — `AssistantTurn`'s `mutationCards` synthesizes an `A2uiPart` with `toolName: 'render_record_card'` directly from `propose_mutation`'s own input (`action` → `title`, `fields` passed straight through), so the proposed record's fields render as a card without the model needing to call `render_record_card` a second time for data it already sent once.
 - **Submitted `request_input` form** — when a user message immediately follows an assistant turn whose last tool step was `request_input`, `formSubmissionCardFor` reconstructs the filled-in `label: value` pairs from the message's plain text (the same text actually sent to the model — see below) and matches them against that `request_input` call's real field list. If every line matches a real field, `UserMessage` renders an `A2uiRecordCard` instead of the plain bubble; if the text doesn't cleanly match (e.g. the user typed a free-text reply instead of using the form), it falls back to the plain bubble. This only affects *display* — the wire message is unchanged either way.
+
+A third flow, `propose_mutation_batch`'s preview, follows the same "synthesize from the tool's own input, don't ask the model to repeat itself" idea but renders through a purpose-built `MutationSequenceCard` instead of `A2uiRecordCard` — one card holding a numbered step per action (each with its own field rows), so an approved batch reads as one ordered operation rather than several unrelated record cards stacked by coincidence of layout.
 
 ## `request_input` — interactive forms (not a display-only a2ui tool)
 

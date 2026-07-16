@@ -226,11 +226,24 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
         ?.input as { action?: string; fields?: { label: string; value: string }[] } | undefined
     : undefined;
 
+  // Same as `pendingMutation`, but for a `propose_mutation_batch` ask — a
+  // single approval that gates a whole ordered sequence of actions instead of
+  // one. Mutually exclusive with `pendingMutation`: the model calls one or the
+  // other per turn, never both.
+  const pendingMutationBatch = !isRunning && !pendingMutation && !!last && isAssistantMessage(last)
+    ? [...last.toolSteps].reverse()
+        .find((s) => s.toolName === 'propose_mutation_batch' && s.state === 'output-available')
+        ?.input as { actions?: { action?: string; fields?: { label: string; value: string }[] }[] } | undefined
+    : undefined;
+  const pendingMutationBatchActions = pendingMutationBatch?.actions?.filter(
+    (a): a is { action: string; fields: { label: string; value: string }[] } => !!a.action,
+  );
+
   // A tool call that needed a connection the user doesn't have (or has
   // outdated scopes for) throws a structured error instead of failing plainly
   // — surfaced the same way as a pending mutation: only while it's the last
   // thing in the conversation, so a fresh message naturally clears it.
-  const pendingConnectionRequired = !isRunning && !pendingMutation && !!last && isAssistantMessage(last)
+  const pendingConnectionRequired = !isRunning && !pendingMutation && !pendingMutationBatchActions?.length && !!last && isAssistantMessage(last)
     ? [...last.toolSteps].reverse()
         .map((s) => (s.state === 'output-error' ? parseConnectionRequired(s.errorText) : null))
         .find((p) => p != null)
@@ -239,7 +252,7 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
   // A request_input call needs the user's answers before the model can
   // usefully continue — surfaced the same way as the other two: only while
   // it's the last thing in the conversation.
-  const pendingFormRequest = !isRunning && !pendingMutation && !pendingConnectionRequired && !!last && isAssistantMessage(last)
+  const pendingFormRequest = !isRunning && !pendingMutation && !pendingMutationBatchActions?.length && !pendingConnectionRequired && !!last && isAssistantMessage(last)
     ? [...last.toolSteps].reverse()
         .map((s) => (s.toolName === 'request_input' && s.state === 'output-available' ? parseFormRequest(s.input) : null))
         .find((p) => p != null)
@@ -256,7 +269,7 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
   useLayoutEffect(() => {
     const el = viewportRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, isRunning, pendingMutation?.action, pendingConnectionRequired, pendingFormRequest, reservedBottom]);
+  }, [messages, isRunning, pendingMutation?.action, pendingMutationBatchActions?.length, pendingConnectionRequired, pendingFormRequest, reservedBottom]);
 
   const empty = historyReady && messages.length === 0 && !showPending;
 
@@ -278,7 +291,7 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
         className={[
           'chat-viewport',
           empty && 'chat-viewport-empty',
-          (pendingMutation?.action || pendingConnectionRequired || pendingFormRequest) && 'chat-viewport-pull-bottom',
+          (pendingMutation?.action || !!pendingMutationBatchActions?.length || pendingConnectionRequired || pendingFormRequest) && 'chat-viewport-pull-bottom',
         ].filter(Boolean).join(' ')}
         style={{ paddingBottom: empty ? undefined : (reservedBottom || undefined) }}
       >
@@ -334,6 +347,9 @@ export function Thread({ modelLabel, requiresAuth, isSignedIn, onSignIn, profile
             <>
               {pendingMutation?.action && (
                 <MutationApprovalCard onChoose={sendMessage} />
+              )}
+              {!!pendingMutationBatchActions?.length && (
+                <MutationApprovalCard onChoose={sendMessage} batchCount={pendingMutationBatchActions.length} />
               )}
               {pendingConnectionRequired && (
                 <ConnectionRequiredCard
@@ -483,6 +499,19 @@ export function AssistantTurn({ message, running }: { message: ChatMessage; runn
     .map((s) => s.input as { action?: string; fields?: { label: string; value: string }[] })
     .filter((input): input is { action: string; fields: { label: string; value: string }[] } => !!input.action && !!input.fields?.length);
 
+  // Same idea as `mutationCards`, but for a `propose_mutation_batch` ask — one
+  // ordered sequence of actions rendered as a single ordered-steps card
+  // (`MutationSequenceCard`) rather than a flat stack of record cards, so the
+  // "these will run in this order" framing is explicit, not just an accident
+  // of top-to-bottom layout.
+  const mutationBatchCards = steps
+    .filter((s) => s.toolName === 'propose_mutation_batch' && s.state === 'output-available')
+    .map((s) => s.input as { actions?: { action?: string; fields?: { label: string; value: string }[] }[] })
+    .map((input) => (input.actions ?? []).filter(
+      (a): a is { action: string; fields: { label: string; value: string }[] } => !!a.action && !!a.fields?.length,
+    ))
+    .filter((actions) => actions.length > 0);
+
   /**
    * Copies the assistant turn's full answer text to the clipboard and
    * briefly flips the copy button into a "Copied!" state.
@@ -494,7 +523,7 @@ export function AssistantTurn({ message, running }: { message: ChatMessage; runn
     });
   }, [fullText]);
 
-  const hasContent = textParts.length > 0 || uiParts.length > 0 || mutationCards.length > 0;
+  const hasContent = textParts.length > 0 || uiParts.length > 0 || mutationCards.length > 0 || mutationBatchCards.length > 0;
   const thinking = running && steps.length === 0 && !hasContent;
 
   return (
@@ -532,6 +561,12 @@ export function AssistantTurn({ message, running }: { message: ChatMessage; runn
                 }}
               />
             ))}
+          </div>
+        )}
+
+        {mutationBatchCards.length > 0 && (
+          <div className="a2ui-parts flex flex-col">
+            {mutationBatchCards.map((steps, i) => <MutationSequenceCard key={i} steps={steps} />)}
           </div>
         )}
 
@@ -759,17 +794,20 @@ export function NoReplyNotice({ error, onRetry }: { error?: Error; onRetry: () =
 // ─── Mutation approval ────────────────────────────────────────────────────────
 
 /**
- * Renders a compact Approve/Deny badge for a pending `propose_mutation` ask,
- * anchored above the composer so it stays reachable with a single click. Just
- * the control — the proposed record's fields render separately, inline in the
- * turn itself, as a real a2ui stat-cards visualization (see `AssistantTurn`'s
- * `mutationCards`), so this doesn't restate them in a second, heavier card.
- * Disables itself immediately after a choice to guard against a double-click
- * before the optimistic echo re-renders it away.
+ * Renders a compact Approve/Deny badge for a pending `propose_mutation` (or
+ * `propose_mutation_batch`) ask, anchored above the composer so it stays
+ * reachable with a single click. Just the control — the proposed record's
+ * fields render separately, inline in the turn itself, as a real a2ui
+ * record card or a `MutationSequenceCard` for a batch (see `AssistantTurn`'s
+ * `mutationCards`/`mutationBatchCards`), so this doesn't restate them in a
+ * second, heavier card. Disables itself immediately after a choice to guard
+ * against a double-click before the optimistic echo re-renders it away.
  * @param onChoose - Called with the user's plain-text response ("Approve" or "Deny").
+ * @param batchCount - When approving a batch, the number of actions in it —
+ * shown in the label so it's clear one click confirms all of them together.
  * @returns The rendered approval badge.
  */
-function MutationApprovalCard({ onChoose }: { onChoose: (text: string) => Promise<void> }) {
+function MutationApprovalCard({ onChoose, batchCount }: { onChoose: (text: string) => Promise<void>; batchCount?: number }) {
   const [choosing, setChoosing] = useState(false);
 
   /**
@@ -786,13 +824,48 @@ function MutationApprovalCard({ onChoose }: { onChoose: (text: string) => Promis
   return (
     <div className="action-badge">
       <span className="action-badge-icon"><ShieldCheck size={13} weight="fill" /></span>
-      <span className="action-badge-label">Confirm this action</span>
+      <span className="action-badge-label">{batchCount ? `Confirm these ${batchCount} actions` : 'Confirm this action'}</span>
       <button className="action-badge-btn action-badge-approve" disabled={choosing} onClick={() => choose('Approve')}>
         <Check size={13} weight="bold" /> Approve
       </button>
       <button className="action-badge-btn action-badge-deny" disabled={choosing} onClick={() => choose('Deny')}>
         <X size={13} weight="bold" /> Deny
       </button>
+    </div>
+  );
+}
+
+/**
+ * Renders a `propose_mutation_batch` ask's ordered sequence of actions as a
+ * single numbered-steps card — each step showing its own action line and
+ * field rows — so the plan reads as one coherent, ordered operation rather
+ * than a stack of unrelated record cards. Purely a preview, like
+ * `mutationCards`' `render_record_card` usage; the actual Approve/Deny
+ * control renders separately, above the composer.
+ * @param steps - The batch's actions, in the exact order they'll be performed.
+ * @returns The rendered ordered-sequence card.
+ */
+function MutationSequenceCard({ steps }: { steps: { action: string; fields: { label: string; value: string }[] }[] }) {
+  return (
+    <div className="mutation-sequence-card">
+      {steps.map((s, i) => (
+        <div className="mutation-sequence-step" key={i}>
+          <span className="mutation-sequence-step-num">{i + 1}</span>
+          <div className="mutation-sequence-step-body">
+            <p className="mutation-sequence-step-title">{s.action}</p>
+            {s.fields.length > 0 && (
+              <div className="mutation-sequence-step-fields">
+                {s.fields.map((f, j) => (
+                  <div className="mutation-sequence-step-field" key={j}>
+                    <span className="mutation-sequence-step-label">{f.label}</span>
+                    <span className="mutation-sequence-step-value">{f.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

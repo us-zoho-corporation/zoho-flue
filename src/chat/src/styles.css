@@ -721,6 +721,34 @@ div:has(> [role="listbox"]) {
 .form-card-submit:hover:not(:disabled) { background: var(--accent-fg); }
 .form-card-submit:disabled { opacity: 0.5; cursor: default; }
 
+/* ─── Mutation sequence card ─────────────────────────────────────────────────────
+   A propose_mutation_batch preview: one glass card holding several numbered
+   steps, each a mini record — deliberately distinct from a2ui-record-card's
+   single-record layout so a batch reads as "this many things, in this order"
+   at a glance, not as several unrelated cards stacked by coincidence. */
+.mutation-sequence-card {
+  width: 100%; box-sizing: border-box; border-radius: 16px; padding: 6px 18px; margin-top: 8px;
+  background: linear-gradient(165deg, var(--glass) 0%, var(--glass2) 100%);
+  backdrop-filter: blur(var(--blur)) saturate(1.5); -webkit-backdrop-filter: blur(var(--blur)) saturate(1.5);
+  border: 1px solid var(--gb); box-shadow: var(--ghi), var(--gsh);
+}
+.mutation-sequence-step { display: flex; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--gb2); }
+.mutation-sequence-step:last-child { border-bottom: none; }
+.mutation-sequence-step-num {
+  flex-shrink: 0; width: 22px; height: 22px; margin-top: 1px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-soft); color: var(--accent-fg); font: 600 11.5px var(--font-sans);
+}
+.mutation-sequence-step-body { min-width: 0; flex: 1; }
+.mutation-sequence-step-title { margin: 0; font: 600 14px/1.4 var(--font-sans); color: var(--txt1); }
+.mutation-sequence-step-fields { display: flex; flex-direction: column; margin-top: 8px; gap: 4px; }
+.mutation-sequence-step-field { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.mutation-sequence-step-label { flex-shrink: 0; font: 500 12px var(--font-sans); color: var(--txt3); }
+.mutation-sequence-step-value {
+  min-width: 0; text-align: right; font: 500 12.5px/1.4 var(--font-sans); color: var(--txt1);
+  word-break: break-word;
+}
+
 /* ─── Markdown ───────────────────────────────────────────────────────────────── */
 .message-content { font: 400 15px/1.6 var(--font-sans); color: var(--txt1); }
 .message-content > *:first-child { margin-top: 0; }

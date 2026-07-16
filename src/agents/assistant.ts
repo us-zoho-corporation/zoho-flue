@@ -2,7 +2,7 @@ import { defineAgent, defineAgentProfile, type AgentRouteHandler } from '@flue/r
 import { config } from '../config';
 import { defineZohoApiTool, type ZohoApiDeps } from '../tools/zoho-api';
 import { defineCheckZohoConnectionTool } from '../tools/check-zoho-connection';
-import { defineProposeMutationTool } from '../tools/propose-mutation';
+import { defineProposeMutationTool, defineProposeMutationBatchTool } from '../tools/propose-mutation';
 import { defineRequestInputTool } from '../tools/request-input';
 import { zohoSkillTools } from '../tools/zoho-skills';
 import { a2uiTools } from '../tools/a2ui';
@@ -87,9 +87,10 @@ const zohoAssistant = defineAgentProfile({
 		+ 'Never show the same values twice. If you render a visualization, your written reply must not '
 		+ 'restate the individual figures it already shows — write a short interpretive takeaway instead '
 		+ '(or no written figures at all), not a second copy of the data. This applies just as much to '
-		+ 'render_record_card and propose_mutation (its confirmation card already renders every field '
-		+ 'you pass it) as to a chart or table — your written reply is one short line (e.g. "Done — the '
-		+ 'deal was created." or "I\'ll create this once you confirm."), never a repeat of the field list.\n\n'
+		+ 'render_record_card and propose_mutation/propose_mutation_batch (their confirmation cards '
+		+ 'already render every field/action you pass them) as to a chart or table — your written reply '
+		+ 'is one short line (e.g. "Done — the deal was created." or "I\'ll do this once you confirm."), '
+		+ 'never a repeat of the field or action list.\n\n'
 		+ 'When you need specific information from the user before you can proceed — required fields you '
 		+ 'don\'t have, or an exact value only they can supply — call request_input with the field list '
 		+ 'rather than asking in prose; it renders as a fillable form, so give one short sentence of '
@@ -147,17 +148,26 @@ function confirmationPolicyInstructions(autoApprove: boolean): string {
 		? 'Auto mode is ON: the user has pre-approved mutating actions for this session. Before making '
 			+ 'any mutating call (zoho_api with POST, PUT, PATCH, or DELETE), briefly state in your '
 			+ 'written reply what you are about to create/change/delete, then proceed immediately — do '
-			+ 'not call propose_mutation (it is unavailable) and do not wait for approval.'
+			+ 'not call propose_mutation or propose_mutation_batch (both are unavailable) and do not wait '
+			+ 'for approval.'
 		: 'Before making any mutating call (zoho_api with POST, PUT, PATCH, or DELETE), you MUST first '
 			+ 'call propose_mutation with a short action line plus every field being created/changed/deleted '
 			+ 'broken out individually (label + value each) — the chat UI renders these as a structured '
-			+ 'confirmation card. zoho_api enforces this itself — it will reject the call without a valid '
-			+ 'mutationId, so there is no way to skip this step. After calling propose_mutation, reply with '
-			+ 'ONE short line saying what this will do — do not restate the field values, the card already '
-			+ 'shows them — then end your turn: do NOT call zoho_api in the same turn, it will fail. Only '
-			+ 'after the user\'s next message may you retry zoho_api with the returned mutationId — and only '
-			+ 'if that message approves the action; if they decline or ask for changes, do not call zoho_api '
-			+ 'at all.';
+			+ 'confirmation card. If you are about to perform SEVERAL such actions together as one coherent '
+			+ 'operation (e.g. creating a handful of related records, or a batch of dependent creates/'
+			+ 'updates), call propose_mutation_batch ONCE instead, with every action listed in the exact '
+			+ 'order you will perform them — the chat UI renders the whole sequence as one ordered '
+			+ 'confirmation card and the user approves it with a single click, rather than being asked once '
+			+ 'per action. Use propose_mutation_batch only when the actions are genuinely part of one '
+			+ 'operation the user asked for as a group; keep using plain propose_mutation for a single, '
+			+ 'standalone action. Either way, zoho_api enforces this itself — it will reject the call '
+			+ 'without a valid mutationId, so there is no way to skip this step. After calling either tool, '
+			+ 'reply with ONE short line saying what this will do — do not restate the action(s) or field '
+			+ 'values, the card already shows them — then end your turn: do NOT call zoho_api in the same '
+			+ 'turn, it will fail. Only after the user\'s next message may you retry zoho_api with the '
+			+ 'returned mutationId(s) — for a batch, retry once per action, in the same order, each with its '
+			+ 'matching mutationId — and only if that message approves the action(s); if they decline or ask '
+			+ 'for changes, do not call zoho_api at all.';
 }
 
 /**
@@ -223,11 +233,13 @@ export const route: AgentRouteHandler = async (c, next) => {
  * exists purely so the model can discover that cheaply, in one step, instead of
  * only via a `zoho_api` call that was always going to fail the same way —
  * `zoho_api` enforces the same gate regardless, so this isn't a second, weaker
- * check. Also, unless "Auto mode" is on, a `propose_mutation` tool — freshly
- * bound to this turn's mutation-gate context (from the request context set in
- * `route`), plus any MCP tools the logged-in user has connected, augmented with
- * a confirmation-policy paragraph — then resolved to the model chosen for this
- * conversation id.
+ * check. Also, unless "Auto mode" is on, `propose_mutation` and
+ * `propose_mutation_batch` tools — both freshly bound to this turn's
+ * mutation-gate context (from the request context set in `route`; the batch
+ * tool just mints one independent id per action via the same underlying gate,
+ * no changes needed there) — plus any MCP tools the logged-in user has
+ * connected, augmented with a confirmation-policy paragraph — then resolved
+ * to the model chosen for this conversation id.
  * @param id - The conversation/instance id, passed through to `modelForConversation`
  * and used as this turn's mutation-gate conversation id.
  * @returns The agent's `{ profile, model }` for this turn.
@@ -253,7 +265,10 @@ export default defineAgent(({ id }) => {
 		tools: [
 			defineCheckZohoConnectionTool(zohoDeps),
 			defineZohoApiTool(zohoDeps, gate),
-			...(autoApprove ? [] : [defineProposeMutationTool(gate.conversationId, gate.requestId)]),
+			...(autoApprove ? [] : [
+				defineProposeMutationTool(gate.conversationId, gate.requestId),
+				defineProposeMutationBatchTool(gate.conversationId, gate.requestId),
+			]),
 			...(zohoAssistant.tools ?? []),
 			...mcp,
 		],
