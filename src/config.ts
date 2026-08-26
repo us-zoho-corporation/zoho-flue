@@ -57,6 +57,9 @@ export const config = {
 			scopes: [
 				'ZohoCRM.modules.ALL',
 				'ZohoCRM.settings.ALL',
+				'ZohoCRM.settings.blueprint.ALL',
+				'ZohoCRM.settings.workflow_rules.ALL',
+				'ZohoCRM.settings.automation_actions.ALL',
 				'ZohoCRM.bulk.ALL',
 				'ZohoCRM.notifications.ALL',
 				'ZohoCRM.coql.READ',
@@ -114,7 +117,19 @@ export const config = {
 	// without Zoho OAuth (for local testing / the e2e-chat harness). Never in prod.
 	devAuth: process.env['ENV'] === 'local' || process.env['ENV'] === 'CI',
 
-	zohoDocsBearerToken: process.env['ZOHO_DOCS_BEARER_TOKEN'] ?? '',
+	// Docs knowledge-base MCP server (help-docs.zoho-forge.com) — it runs its OWN
+	// OAuth 2.1 authorization server (PKCE required), entirely separate from
+	// accounts.zoho.com, discoverable at its /.well-known/oauth-authorization-server.
+	// client id/secret come from a one-time dynamic client registration (RFC 7591)
+	// against its /register endpoint. Optional: an empty client id disables the
+	// knowledge-base tools/connection entirely (see src/mcp/zoho-kb.ts, mcp/builtins.ts).
+	docsOauthClientId: process.env['DOCS_OAUTH_CLIENT_ID'] ?? '',
+	docsOauthClientSecret: process.env['DOCS_OAUTH_CLIENT_SECRET'] ?? '',
+	docsOauthAuthorizeUrl: 'https://help-docs.zoho-forge.com/authorize',
+	docsOauthTokenUrl: 'https://help-docs.zoho-forge.com/token',
+	docsOauthRedirectUri: process.env['DOCS_OAUTH_REDIRECT_URI'] ?? '',
+	docsOauthScopes: 'openid profile email',
+	zohoDocsMcpUrl: process.env['ZOHO_DOCS_ENDPOINT'] ?? 'https://help-docs.zoho-forge.com/mcp',
 
 	// Anthropic is a built-in Flue provider — only its key is needed. Optional here;
 	// enforced at startup by registerAnthropic() when an anthropic/* model is offered.

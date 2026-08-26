@@ -6,7 +6,7 @@ import { defineProposeMutationTool, defineProposeMutationBatchTool } from '../to
 import { defineRequestInputTool } from '../tools/request-input';
 import { zohoSkillTools } from '../tools/zoho-skills';
 import { a2uiTools } from '../tools/a2ui';
-import { zohoKbTools } from '../mcp/zoho-kb';
+import { defineZohoKbTools } from '../mcp/zoho-kb';
 import { getAuth } from '../auth';
 import { currentTurnContext, runWithRequestContext, setTurnContext } from '../auth/request-context';
 import { loadUserMcpTools } from '../mcp/live';
@@ -20,13 +20,16 @@ import { getStores } from '../store';
 // `defineAgent` below, bound to that turn's mutation-gate context, so the
 // confirmation requirement can't go stale or be bypassed by stale closures.
 const zohoAssistant = defineAgentProfile({
-	tools: [...zohoSkillTools, ...a2uiTools, defineRequestInputTool(), ...(config.zohoDocsBearerToken ? zohoKbTools : [])],
+	tools: [...zohoSkillTools, ...a2uiTools, defineRequestInputTool()],
 	instructions:
 		'You are a Zoho product assistant. For questions about Zoho products (features, '
 		+ 'configuration, APIs, troubleshooting), use zoho_kb_search to find the relevant '
 		+ 'documentation, then answer directly and concisely from what you found. Refine and '
 		+ 'search again only if the first results fall short, and use zoho_kb_get_page when you '
-		+ 'need an article’s full text. Ground your answer in the documentation and cite source URLs.\n\n'
+		+ 'need an article’s full text. Ground your answer in the documentation and cite source URLs. '
+		+ 'If the knowledge base isn\'t connected yet, calling zoho_kb_search throws and a Connect/'
+		+ 'Reconnect button appears in the chat automatically — say so in one short line and stop, '
+		+ 'do not explain how to connect yourself.\n\n'
 		+ 'You can also *run* a Zoho CRM or Desk implementation for the user, not just describe one. '
 		+ 'When asked to start, continue, or perform CRM/Desk setup work (create/inspect modules, '
 		+ 'fields, records, workflow rules, tickets, departments, agents, etc.):\n'
@@ -59,7 +62,7 @@ const zohoAssistant = defineAgentProfile({
 		+ 'Available skills:\n'
 		+ '- zoho-crm-records, zoho-crm-modules-and-fields, zoho-crm-query, zoho-crm-bulk-operations, '
 		+ 'zoho-crm-record-actions, zoho-crm-related-records, zoho-crm-attachments, zoho-crm-emails, '
-		+ 'zoho-crm-users-and-org, zoho-crm-workflow-automation (CRM v8 REST API)\n'
+		+ 'zoho-crm-users-and-org, zoho-crm-workflow-automation, zoho-crm-blueprints (CRM v8 REST API)\n'
 		+ '- zoho-desk-organizations, zoho-desk-tickets, zoho-desk-accounts, zoho-desk-contacts, '
 		+ 'zoho-desk-agents-and-departments (Desk v1 REST API)\n'
 		+ 'For any Desk call, first load zoho-desk-organizations and resolve `orgId` once per '
@@ -270,6 +273,9 @@ export default defineAgent(({ id }) => {
 				defineProposeMutationBatchTool(gate.conversationId, gate.requestId),
 			]),
 			...(zohoAssistant.tools ?? []),
+			...(config.docsOauthClientId
+				? defineZohoKbTools({ userId: turn?.userId, getDocsToken: (userId) => auth.getDocsToken(userId) })
+				: []),
 			...mcp,
 		],
 		instructions: `${zohoAssistant.instructions}\n\n${confirmationPolicyInstructions(autoApprove)}`,

@@ -26,6 +26,14 @@ function makeDeps(): AuthDeps {
 			redirectUri: 'http://localhost:3583/api/auth/callback',
 			loginScopes: 'AaaServer.profile.READ',
 		},
+		docsOauth: {
+			clientId: 'docs-cid',
+			clientSecret: 'docs-secret',
+			authorizeUrl: 'https://help-docs.zoho-forge.com/authorize',
+			tokenUrl: 'https://help-docs.zoho-forge.com/token',
+			redirectUri: 'http://localhost:3583/api/auth/docs/callback',
+			scopes: 'openid profile email',
+		},
 		products: [
 			{ key: 'crm', label: 'Zoho CRM', description: 'CRM access.', scopes: ['ZohoCRM.modules.ALL'] },
 			{ key: 'desk', label: 'Zoho Desk', description: 'Desk access.', scopes: ['Desk.basic.READ', 'Desk.tickets.READ'] },
@@ -209,8 +217,33 @@ describe('GET /connections', () => {
 			connections: [
 				{ key: 'crm', label: 'Zoho CRM', description: 'CRM access.', scopes: ['ZohoCRM.modules.ALL'], connected: false },
 				{ key: 'desk', label: 'Zoho Desk', description: 'Desk access.', scopes: ['Desk.basic.READ', 'Desk.tickets.READ'], connected: false },
+				{ key: 'docs', label: 'Zoho Knowledge Base', description: expect.any(String), scopes: [], connected: false, kind: 'docs' },
 			],
 		});
+	});
+
+	it('omits the docs row entirely when no docs OAuth client is configured', async () => {
+		const deps = makeDeps();
+		deps.docsOauth = { ...deps.docsOauth, clientId: '' };
+		const app = makeApp(deps);
+		const { connections } = await (await app.request('/connections')).json() as { connections: Array<{ key: string }> };
+		expect(connections.map((c) => c.key)).toEqual(['crm', 'desk']);
+	});
+
+	it('marks docs connected once a token is stored for the user', async () => {
+		mockZoho();
+		const deps = makeDeps();
+		const app = makeApp(deps);
+		const login = await app.request('/login');
+		const state = new URL(login.headers.get('location')!).searchParams.get('state')!;
+		const cb = await app.request(`/callback?code=abc&state=${encodeURIComponent(state)}`, {
+			headers: { Cookie: cookieHeader(jarFrom(login)) },
+		});
+		const session = cookieHeader(jarFrom(cb));
+		await deps.stores.docsTokens.put({ userId: '777', refreshTokenEnc: 'enc:docs', updatedAt: Date.now() });
+
+		const { connections } = await (await app.request('/connections', { headers: { Cookie: session } })).json() as { connections: Array<{ key: string; connected: boolean }> };
+		expect(connections.find((c) => c.key === 'docs')?.connected).toBe(true);
 	});
 
 	it('marks a product connected once the user has granted its full scope bundle', async () => {
@@ -275,6 +308,23 @@ describe('POST /connections/:key/disconnect', () => {
 		expect(after?.scopes).toEqual(expect.arrayContaining(['AaaServer.profile.READ', 'ZohoCRM.modules.ALL']));
 		expect(after?.scopes).not.toContain('Desk.basic.READ');
 		expect(after?.scopes).not.toContain('Desk.tickets.READ');
+	});
+
+	it('drops the stored docs token outright (no scope bundle to diff)', async () => {
+		mockZoho();
+		const deps = makeDeps();
+		const app = makeApp(deps);
+		const login = await app.request('/login');
+		const state = new URL(login.headers.get('location')!).searchParams.get('state')!;
+		const cb = await app.request(`/callback?code=abc&state=${encodeURIComponent(state)}`, {
+			headers: { Cookie: cookieHeader(jarFrom(login)) },
+		});
+		const session = cookieHeader(jarFrom(cb));
+		await deps.stores.docsTokens.put({ userId: '777', refreshTokenEnc: 'enc:docs', updatedAt: Date.now() });
+
+		const res = await app.request('/connections/docs/disconnect', { method: 'POST', headers: { Cookie: session } });
+		expect(await res.json()).toEqual({ ok: true });
+		expect(await deps.stores.docsTokens.get('777')).toBeNull();
 	});
 });
 

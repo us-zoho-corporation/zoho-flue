@@ -8,7 +8,7 @@
  */
 export interface ConnectionRequiredPayload {
 	/** Which connection family this is — determines how the chat's "Connect" button behaves. */
-	kind: 'zoho' | 'mcp';
+	kind: 'zoho' | 'mcp' | 'docs';
 	/** Never connected at all vs. connected but missing scopes/otherwise stale. */
 	mode: 'connect' | 'reconnect';
 	/** Human-readable name shown in the card, e.g. "Zoho CRM" or the MCP server's name. */

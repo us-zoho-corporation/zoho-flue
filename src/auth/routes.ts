@@ -8,6 +8,7 @@ import {
 	exchangeCodeForTokens,
 	fetchUserInfo,
 } from './zoho-oauth';
+import { buildDocsAuthorizeUrl, exchangeDocsCodeForTokens, forgetDocsToken, getDocsAccessToken } from './docs-oauth';
 import {
 	clearSession,
 	getUserToken,
@@ -17,6 +18,7 @@ import {
 	resolveUser,
 	safeReturnTo,
 	unionScopes,
+	DOCS_LOGIN_COOKIE,
 	LOGIN_COOKIE,
 	type AuthDeps,
 } from './session';
@@ -127,6 +129,70 @@ export function createAuthRoutes(deps: AuthDeps): Hono {
 		return c.json({ ok: true });
 	});
 
+	// ── Docs knowledge-base OAuth (its own authorization server, PKCE — see
+	// docs-oauth.ts's module doc for why this isn't folded into the Zoho
+	// login flow above). Requires an existing session: unlike /login (which
+	// can also be a first-ever sign-in), this connects an *additional*
+	// service to an already-identified user.
+
+	app.get('/docs/connect', async (c) => {
+		const userId = c.get('userId');
+		if (!userId) return c.json({ error: 'auth_required' }, 401);
+
+		const { verifier, challenge } = createPkcePair();
+		const state = createState();
+		const returnTo = safeReturnTo(c.req.query('returnTo'));
+
+		const payload: LoginState = { state, verifier, returnTo };
+		await setSignedCookie(c, DOCS_LOGIN_COOKIE, JSON.stringify(payload), deps.sessionSecret, { ...cookieOpts, maxAge: 600 });
+
+		return c.redirect(buildDocsAuthorizeUrl({
+			authorizeUrl: deps.docsOauth.authorizeUrl,
+			clientId: deps.docsOauth.clientId,
+			redirectUri: deps.docsOauth.redirectUri,
+			scopes: deps.docsOauth.scopes,
+			state,
+			codeChallenge: challenge,
+		}));
+	});
+
+	app.get('/docs/callback', async (c) => {
+		const raw = await getSignedCookie(c, deps.sessionSecret, DOCS_LOGIN_COOKIE);
+		deleteCookie(c, DOCS_LOGIN_COOKIE, cookieOpts); // single-use
+		if (!raw) return c.json({ error: 'invalid_login_state' }, 400);
+
+		let login: LoginState;
+		try { login = JSON.parse(raw) as LoginState; } catch { return c.json({ error: 'invalid_login_state' }, 400); }
+
+		if (c.req.query('error')) return c.redirect(`${login.returnTo}?auth=denied`);
+
+		const state = c.req.query('state') ?? '';
+		const code = c.req.query('code') ?? '';
+		if (!code || !safeEqual(state, login.state)) return c.json({ error: 'state_mismatch' }, 403);
+
+		const userId = c.get('userId');
+		if (!userId) return c.json({ error: 'auth_required' }, 401);
+
+		const tokens = await exchangeDocsCodeForTokens({
+			tokenUrl: deps.docsOauth.tokenUrl,
+			clientId: deps.docsOauth.clientId,
+			clientSecret: deps.docsOauth.clientSecret,
+			redirectUri: deps.docsOauth.redirectUri,
+			code,
+			codeVerifier: login.verifier,
+		});
+		if (!tokens.refreshToken) return c.json({ error: 'no_refresh_token' }, 502);
+
+		await deps.stores.docsTokens.put({
+			userId,
+			refreshTokenEnc: encryptSecret(tokens.refreshToken, deps.keyring),
+			updatedAt: Date.now(),
+		});
+		forgetDocsToken(userId);
+
+		return c.redirect(login.returnTo);
+	});
+
 	// Session-scoped identity + granted scopes (no Zoho round-trip).
 	app.get('/me', async (c) => {
 		const userId = c.get('userId');
@@ -142,23 +208,49 @@ export function createAuthRoutes(deps: AuthDeps): Hono {
 		const userId = c.get('userId');
 		const token = userId ? await deps.stores.tokens.get(userId) : null;
 		const granted = new Set(token?.scopes ?? []);
-		const connections = deps.products.map((product) => ({
+		const connections: Array<{
+			key: string; label: string; description: string; scopes: string[]; connected: boolean; kind?: 'docs';
+		}> = deps.products.map((product) => ({
 			key: product.key,
 			label: product.label,
 			description: product.description,
 			scopes: product.scopes,
 			connected: product.scopes.every((scope) => granted.has(scope)),
 		}));
+		// Docs isn't a Zoho product — its own authorization server, own token
+		// store (see docs-oauth.ts) — but it's still just one more row on this
+		// same list: a single fixed grant, so "connected" is just "has a token".
+		if (deps.docsOauth.clientId) {
+			const docsToken = userId ? await deps.stores.docsTokens.get(userId) : null;
+			connections.push({
+				key: 'docs',
+				label: 'Zoho Knowledge Base',
+				description: 'Search Zoho product documentation to answer how-to, configuration, and troubleshooting questions.',
+				scopes: [],
+				connected: !!docsToken,
+				kind: 'docs',
+			});
+		}
 		return c.json({ connections });
 	});
 
 	// Disconnects a product: drops its scope bundle from the user's stored grant
 	// (locally — Zoho's own consent record is unaffected, so re-connecting doesn't
 	// need a fresh consent screen). No-op if the user never granted those scopes.
+	// The docs connection isn't a scope bundle at all — disconnecting just drops
+	// its stored token outright.
 	app.post('/connections/:key/disconnect', async (c) => {
 		const userId = c.get('userId');
 		if (!userId) return c.json({ error: 'auth_required' }, 401);
-		const product = deps.products.find((p) => p.key === c.req.param('key'));
+
+		const key = c.req.param('key');
+		if (key === 'docs') {
+			await deps.stores.docsTokens.delete(userId);
+			forgetDocsToken(userId);
+			return c.json({ ok: true });
+		}
+
+		const product = deps.products.find((p) => p.key === key);
 		if (!product) return c.json({ error: 'unknown_product' }, 404);
 
 		const token = await deps.stores.tokens.get(userId);
@@ -210,6 +302,8 @@ export interface Auth {
 	requireUser: MiddlewareHandler;
 	/** Live Zoho access token for a user (refreshes via their stored token). */
 	getUserToken(userId: string): Promise<string>;
+	/** Live docs knowledge-base access token for a user (refreshes via their stored token). */
+	getDocsToken(userId: string): Promise<string>;
 	/** Resolves the request's logged-in user id (from the session cookie), or null. */
 	resolveUserId(c: Context): Promise<string | null>;
 	/** Resolves the request's logged-in user and returns their live token, or null. */
@@ -227,6 +321,13 @@ export function createAuth(deps: AuthDeps): Auth {
 		optionalUser: optionalUser(deps),
 		requireUser: requireUser(deps),
 		getUserToken: (userId: string) => getUserToken(deps, userId),
+		getDocsToken: (userId: string) => getDocsAccessToken({
+			stores: { docsTokens: deps.stores.docsTokens },
+			keyring: deps.keyring,
+			clientId: deps.docsOauth.clientId,
+			clientSecret: deps.docsOauth.clientSecret,
+			tokenUrl: deps.docsOauth.tokenUrl,
+		}, userId),
 		resolveUserId: (c: Context) => resolveUser(c, deps),
 		resolveUserToken: async (c: Context) => {
 			const userId = await resolveUser(c, deps);

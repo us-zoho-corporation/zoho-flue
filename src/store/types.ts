@@ -53,6 +53,24 @@ export interface TokenStore {
 	delete(userId: string): Promise<void>;
 }
 
+/**
+ * Per-user OAuth grant for the docs knowledge-base MCP server's own
+ * authorization server (help-docs.zoho-forge.com — not accounts.zoho.com).
+ * A single fixed scope grant, so unlike `StoredToken` there's no `scopes` or
+ * DC-aware `accountsServer` to track.
+ */
+export interface DocsToken {
+	userId: string;
+	refreshTokenEnc: string; // AES-256-GCM envelope (see src/auth/crypto.ts)
+	updatedAt: number; // epoch ms
+}
+
+export interface DocsTokenStore {
+	put(token: DocsToken): Promise<void>;
+	get(userId: string): Promise<DocsToken | null>;
+	delete(userId: string): Promise<void>;
+}
+
 export interface SessionStore {
 	create(session: Session): Promise<void>;
 	get(sessionId: string): Promise<Session | null>;
@@ -124,6 +142,7 @@ export interface ConversationOwnerStore {
 export interface Stores {
 	users: UserStore;
 	tokens: TokenStore;
+	docsTokens: DocsTokenStore;
 	sessions: SessionStore;
 	preferences: PreferenceStore;
 	mcpServers: McpServerStore;

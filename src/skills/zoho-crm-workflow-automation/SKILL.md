@@ -1,13 +1,13 @@
 ---
 name: zoho-crm-workflow-automation
-description: Create and manage Zoho CRM Workflow Rules and their associative actions (field updates, tasks, webhooks) — the process automation normally built by hand in Setup > Automation. Use when an agent needs to set up or inspect trigger-based automation on CRM records, e.g. "create a workflow rule that emails me when a deal closes", "list workflow rules for Deals", "add a field-update action to this rule". Does not cover Blueprint (unsupported) or Deluge function authoring (UI-only).
+description: Create and manage Zoho CRM Workflow Rules and their associative actions (field updates, tasks, webhooks) — the process automation normally built by hand in Setup > Automation. Use when an agent needs to set up or inspect trigger-based automation on CRM records, e.g. "create a workflow rule that emails me when a deal closes", "list workflow rules for Deals", "add a field-update action to this rule". Does not cover Blueprint (see zoho-crm-blueprints) or Deluge function authoring (UI-only).
 ---
 
 Workflow Rules fire instant or scheduled actions when records in a module are created, edited, or match criteria — process automation an admin would otherwise build by hand in Setup > Automation. This skill covers creating/listing/reordering rules, creating the associative actions a rule can fire (field updates, tasks, webhooks), and attaching an existing action to a rule.
 
 Deluge function *code* authoring has no public API (Setup > Developer Hub is UI-only) — these operations can only reference an existing function by ID, never create one. Email Notification actions are the same: no create endpoint exists; create them in the Zoho UI, then attach by ID.
 
-**Blueprint is not supported.** A Blueprint requires a multi-step states/transitions/connections flow — `/settings/blueprints`, `/settings/blueprints/{id}/states`, and `/settings/blueprints/transitions` calls, the last requiring the `ZohoCRM.settings.blueprint.states.ALL` scope — that Zoho's API does not expose as a single create operation. Manage Blueprints from Setup > Automation > Blueprint in the Zoho CRM UI instead.
+**Blueprint is a separate skill.** A Blueprint is a distinct multi-step states/transitions/connections flow — see `zoho-crm-blueprints` for reading a record's next transition, advancing it, and configuring Blueprint states/transitions.
 
 ## Operations
 

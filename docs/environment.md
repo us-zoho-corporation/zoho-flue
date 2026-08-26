@@ -22,6 +22,9 @@ Stored in `.env` at the repo root.
 | `ENV` | *(Optional)* Deployment environment. Set to `local` or `CI` **only** to enable the `/api/auth/dev-login` test seam (mints a session for a fake empty-state user, no Zoho — used by the [e2e-chat](skills.md) harness). Any other value (or unset) keeps it disabled (`404`). Never set to `local`/`CI` in production. |
 | `SESSION_TTL_SECONDS` | *(Optional)* Session lifetime in seconds — a sliding idle timeout (each throttled touch re-extends it) and the Cache entry TTL. Default 2 hours; must stay within Cache's 48h cap. |
 | `ANTHROPIC_API_KEY` | API key for the built-in `anthropic` provider — required for the default `claude` model option (`anthropic/claude-sonnet-5`). |
-| `ZOHO_DOCS_BEARER_TOKEN` | *(Optional)* Bearer token from `help-docs.zoho-forge.com`; enables KB MCP tools. Short-lived (~7 days) — re-issue via browser OAuth when KB tools start failing. |
+| `ZOHO_DOCS_ENDPOINT` | *(Optional)* Zoho-Documentation MCP server URL. Default `https://help-docs.zoho-forge.com/mcp`. |
+| `DOCS_OAUTH_CLIENT_ID` | *(Optional)* Client ID for the docs knowledge-base MCP server's own OAuth 2.1 authorization server (`help-docs.zoho-forge.com` — NOT accounts.zoho.com), from a one-time dynamic client registration (RFC 7591) against its `/register` endpoint. Enables the docs connection/KB tools; unset disables them entirely. See `docs/auth.md`. |
+| `DOCS_OAUTH_CLIENT_SECRET` | *(Optional)* Client secret from that same registration. |
+| `DOCS_OAUTH_REDIRECT_URI` | *(Optional)* Per-user docs OAuth callback URL, must exactly match the redirect URI given at client registration (e.g. `http://localhost:3583/api/auth/docs/callback`). Only needed when `DOCS_OAUTH_CLIENT_ID` is set. |
 | `FLUE_API_SECRET` | *(Optional)* Shared secret required on `/api/*` requests via the `x-flue-secret` header. Unset = unauthenticated (dev only). |
 | `FLUE_CORS_ORIGINS` | *(Optional)* Comma-separated allowed CORS origins. Defaults to localhost dev origins. |

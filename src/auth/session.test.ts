@@ -46,6 +46,12 @@ describe('getUserToken', () => {
 			secureCookies: false,
 			devAuth: false,
 			oauth: { clientId: 'cid', clientSecret: 'csecret', redirectUri: 'http://x/callback', loginScopes: '' },
+			docsOauth: {
+				clientId: 'docs-cid', clientSecret: 'docs-csecret',
+				authorizeUrl: 'https://help-docs.zoho-forge.com/authorize',
+				tokenUrl: 'https://help-docs.zoho-forge.com/token',
+				redirectUri: 'http://x/docs/callback', scopes: 'openid profile email',
+			},
 			products: [],
 		};
 	}

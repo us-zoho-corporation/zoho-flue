@@ -3,42 +3,11 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { config } from '../config';
-
-const MCP_URL = 'https://help-docs.zoho-forge.com/mcp';
+import { DocsReauthRequiredError } from '../auth/docs-oauth';
+import { throwConnectionRequired } from '../tools/connection-required';
 
 // Allowlist of MCP tool names this client is permitted to call.
 const ALLOWED_MCP_TOOLS = new Set(['search_docs', 'get_page', 'list_products']);
-
-let _client: Client | null = null;
-
-/**
- * Returns the cached MCP client connection to the Zoho docs server, creating
- * and connecting a new one over Streamable HTTP (authenticated with the
- * configured bearer token) if none exists yet.
- * @returns A connected MCP `Client` for the Zoho docs server.
- * @throws {Error} If the connection to the MCP server fails.
- */
-async function getClient(): Promise<Client> {
-    if (_client) return _client;
-    const client = new Client({ name: 'zoho-flue', version: '1.0.0' });
-    await client.connect(
-        new StreamableHTTPClientTransport(new URL(MCP_URL), {
-            requestInit: { headers: { Authorization: `Bearer ${config.zohoDocsBearerToken}` } },
-        }),
-    );
-    _client = client;
-    return client;
-}
-
-/**
- * Closes and discards the cached MCP client connection so the next call to
- * `getClient` establishes a fresh one. Any error while closing the stale
- * connection is swallowed, since the connection is being discarded anyway.
- */
-async function resetClient(): Promise<void> {
-    try { await _client?.close(); } catch { /* ignore */ }
-    _client = null;
-}
 
 // Single overall cap on tool output. Compaction handles longer conversations,
 // but one unbounded blob still wastes the model's context, so cap it once.
@@ -105,66 +74,105 @@ export function extractText(content: unknown): string {
     return joined.length <= MAX_RESULT_CHARS ? joined : joined.slice(0, MAX_RESULT_CHARS) + '\n[truncated]';
 }
 
+/** What the knowledge-base tools need to resolve the calling turn's own docs connection. */
+export interface ZohoKbDeps {
+    /** The logged-in user's id, or `undefined` outside a real request (e.g. `flue run` from the CLI). */
+    userId?: string;
+    /** Resolves a live docs MCP access token for a user, refreshing as needed. */
+    getDocsToken: (userId: string) => Promise<string>;
+}
+
 /**
- * Invokes an allowlisted MCP tool on the Zoho docs server, transparently
- * resetting the client connection and retrying once if the first attempt
- * fails (e.g. due to a stale connection).
+ * Invokes an allowlisted MCP tool on the Zoho docs server, using the calling
+ * user's own per-user OAuth access token (see `src/auth/docs-oauth.ts` — the
+ * docs MCP server runs its own authorization server, not accounts.zoho.com).
+ * A short-lived MCP client is opened for just this one call and closed
+ * afterward — there is no shared, process-wide client, since the token is
+ * per user.
+ * @param deps - The calling turn's user id and docs-token resolver.
  * @param name - The MCP tool name to call; must be in `ALLOWED_MCP_TOOLS`.
  * @param args - The arguments to pass to the tool.
  * @returns A single-element text content array with the formatted tool output.
- * @throws {Error} If `name` is not in `ALLOWED_MCP_TOOLS`, or if the retried call to the MCP server also fails.
+ * @throws {Error} If `name` is not in `ALLOWED_MCP_TOOLS`, or a `ConnectionRequiredPayload`-encoded
+ * error (see `connection-required.ts`) if the user hasn't connected the knowledge base, or the call
+ * to the MCP server itself fails.
  */
-async function call(name: string, args: Record<string, unknown>): Promise<unknown> {
+async function call(deps: ZohoKbDeps, name: string, args: Record<string, unknown>): Promise<unknown> {
     if (!ALLOWED_MCP_TOOLS.has(name)) {
         throw new Error(`MCP tool call blocked: '${name}' is not an allowed tool.`);
     }
-    let client = await getClient();
-    let result;
+
+    const userId = deps.userId;
+    if (!userId) throwConnectionRequired({ kind: 'docs', mode: 'connect', label: 'Zoho Knowledge Base' });
+
+    let accessToken: string;
     try {
-        result = await client.callTool({ name, arguments: args });
-    } catch {
-        await resetClient();
-        client = await getClient();
-        result = await client.callTool({ name, arguments: args });
+        accessToken = await deps.getDocsToken(userId);
+    } catch (err) {
+        throwConnectionRequired({
+            kind: 'docs',
+            mode: err instanceof DocsReauthRequiredError ? 'reconnect' : 'connect',
+            label: 'Zoho Knowledge Base',
+        });
     }
-    return [{ type: 'text', text: extractText(result.content) }];
+
+    const client = new Client({ name: 'zoho-flue', version: '1.0.0' });
+    await client.connect(
+        new StreamableHTTPClientTransport(new URL(config.zohoDocsMcpUrl), {
+            requestInit: { headers: { Authorization: `Bearer ${accessToken}` } },
+        }),
+    );
+    try {
+        const result = await client.callTool({ name, arguments: args });
+        return [{ type: 'text', text: extractText(result.content) }];
+    } finally {
+        try { await client.close(); } catch { /* ignore — connection is being discarded anyway */ }
+    }
 }
 
-const searchDocs = defineTool({
-    name: 'zoho_kb_search',
-    description: 'Search the Zoho knowledge base. Use this before answering any question about Zoho product features, configuration, APIs, or troubleshooting — prefer sourced answers over memory.',
-    input: v.object({
-        query: v.string(),
-        products: v.optional(v.pipe(v.string(), v.description('Comma-separated product slugs, e.g. "zoho-crm,zoho-desk"'))),
-        top_k: v.optional(v.pipe(v.number(), v.description('Results to return (1–20, default 5)'))),
-    }),
-    output: v.any(),
-    async run({ input }) {
-        return call('search_docs', input as Record<string, unknown>);
-    },
-});
+/**
+ * Builds the knowledge-base tools bound to one turn's calling user, so each
+ * tool call authenticates as that user (see {@link call}).
+ * @param deps - The calling turn's user id and docs-token resolver.
+ * @returns The `zoho_kb_search`, `zoho_kb_get_page`, and `zoho_kb_list_products` tools.
+ */
+export function defineZohoKbTools(deps: ZohoKbDeps) {
+    const searchDocs = defineTool({
+        name: 'zoho_kb_search',
+        description: 'Search the Zoho knowledge base. Use this before answering any question about Zoho product features, configuration, APIs, or troubleshooting — prefer sourced answers over memory.',
+        input: v.object({
+            query: v.string(),
+            products: v.optional(v.pipe(v.string(), v.description('Comma-separated product slugs, e.g. "zoho-crm,zoho-desk"'))),
+            top_k: v.optional(v.pipe(v.number(), v.description('Results to return (1–20, default 5)'))),
+        }),
+        output: v.any(),
+        async run({ input }) {
+            return call(deps, 'search_docs', input as Record<string, unknown>);
+        },
+    });
 
-const getPage = defineTool({
-    name: 'zoho_kb_get_page',
-    description: 'Fetch the full text of a Zoho documentation page. Use when a zoho_kb_search result is truncated or a complete code example or procedure is needed.',
-    input: v.object({
-        url: v.pipe(v.string(), v.description('Exact page URL from a zoho_kb_search result')),
-        max_chars: v.optional(v.pipe(v.number(), v.description('Max chars to return (default 6000, max 20000)'))),
-    }),
-    output: v.any(),
-    async run({ input }) {
-        return call('get_page', input as Record<string, unknown>);
-    },
-});
+    const getPage = defineTool({
+        name: 'zoho_kb_get_page',
+        description: 'Fetch the full text of a Zoho documentation page. Use when a zoho_kb_search result is truncated or a complete code example or procedure is needed.',
+        input: v.object({
+            url: v.pipe(v.string(), v.description('Exact page URL from a zoho_kb_search result')),
+            max_chars: v.optional(v.pipe(v.number(), v.description('Max chars to return (default 6000, max 20000)'))),
+        }),
+        output: v.any(),
+        async run({ input }) {
+            return call(deps, 'get_page', input as Record<string, unknown>);
+        },
+    });
 
-const listProducts = defineTool({
-    name: 'zoho_kb_list_products',
-    description: 'List available Zoho documentation products with article counts and their slugs.',
-    input: v.object({}),
-    output: v.any(),
-    async run() {
-        return call('list_products', {});
-    },
-});
+    const listProducts = defineTool({
+        name: 'zoho_kb_list_products',
+        description: 'List available Zoho documentation products with article counts and their slugs.',
+        input: v.object({}),
+        output: v.any(),
+        async run() {
+            return call(deps, 'list_products', {});
+        },
+    });
 
-export const zohoKbTools = [searchDocs, getPage, listProducts];
+    return [searchDocs, getPage, listProducts] as const;
+}

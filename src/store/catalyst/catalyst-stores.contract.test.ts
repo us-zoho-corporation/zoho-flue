@@ -28,6 +28,7 @@ const opts = {
 const nosqlSchema = {
 	Users: { partitionAttr: 'UserId' },
 	UserTokens: { partitionAttr: 'UserId' },
+	DocsTokens: { partitionAttr: 'UserId' },
 	Preferences: { partitionAttr: 'UserId' },
 	McpServers: { partitionAttr: 'UserId', sortAttr: 'Id' },
 };

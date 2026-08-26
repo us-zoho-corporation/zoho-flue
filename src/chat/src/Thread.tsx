@@ -876,9 +876,11 @@ function MutationSequenceCard({ steps }: { steps: { action: string; fields: { la
  * Renders a Connect/Reconnect prompt for a tool call that needed a connection
  * the user doesn't have (or has outdated scopes for), anchored above the
  * composer like the mutation approval card. Zoho products redirect straight
- * to the OAuth consent screen for the missing scopes; an MCP server can't be
- * fixed with a single click (it may need a new URL or token), so its button
- * instead opens the MCP servers settings view.
+ * to the OAuth consent screen for the missing scopes; the docs knowledge
+ * base redirects to its own (non-Zoho) authorization server the same way,
+ * just via a different route; an MCP server can't be fixed with a single
+ * click (it may need a new URL or token), so its button instead opens the
+ * MCP servers settings view.
  * @param payload - The parsed connection-required details from the failing tool step.
  * @param onConnectMcp - Called when the button is clicked for an MCP-kind payload, to open the MCP servers view.
  * @param retryText - The original message that triggered this connection requirement, if known, so it can be resent once connected without the user retyping it.
@@ -960,7 +962,11 @@ function ConnectionRequiredCard({ payload, onConnectMcp, retryText, onRetry }: {
         <button
           className={`action-badge-btn ${nowConnected ? 'action-badge-connected' : 'action-badge-approve'}`}
           disabled={nowConnected}
-          onClick={() => (payload.kind === 'zoho' ? connectZohoScopes(payload.scopes ?? [], '/') : onConnectMcp())}
+          onClick={() => {
+            if (payload.kind === 'zoho') connectZohoScopes(payload.scopes ?? [], '/');
+            else if (payload.kind === 'docs') window.location.assign(`/api/auth/docs/connect?returnTo=${encodeURIComponent('/')}`);
+            else onConnectMcp();
+          }}
         >
           {nowConnected
             ? <><Check size={13} weight="bold" /> Connected</>

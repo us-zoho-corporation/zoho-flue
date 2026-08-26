@@ -21,6 +21,7 @@ const ALLOWED_SKILLS = [
 	'zoho-crm-emails',
 	'zoho-crm-users-and-org',
 	'zoho-crm-workflow-automation',
+	'zoho-crm-blueprints',
 	'zoho-desk-tickets',
 	'zoho-desk-accounts',
 	'zoho-desk-contacts',

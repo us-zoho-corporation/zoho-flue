@@ -8,18 +8,22 @@ admin token.
 ## Layers
 
 - **`src/store/`** — Catalyst-agnostic repository interfaces (`types.ts`): `UserStore`,
-  `TokenStore`, `SessionStore`, `PreferenceStore`, `McpServerStore`, `SecretsStore`, composed
-  as `Stores`. Two backends: `store/catalyst/` (the four durable user stores on **NoSQL**,
-  `sessions` on **Cache**, `secrets` on **Data Store**, all over REST with the admin service
-  token) and `store/memory/` (in-memory, for tests/local dev). `getStores()` picks one via
-  `STORE_BACKEND`. Each store runs on the service best fit to its access pattern — see the
-  schema below.
+  `TokenStore`, `DocsTokenStore`, `SessionStore`, `PreferenceStore`, `McpServerStore`,
+  `SecretsStore`, composed as `Stores`. Two backends: `store/catalyst/` (the durable user
+  stores on **NoSQL**, `sessions` on **Cache**, `secrets` on **Data Store**, all over REST
+  with the admin service token) and `store/memory/` (in-memory, for tests/local dev).
+  `getStores()` picks one via `STORE_BACKEND`. Each store runs on the service best fit to
+  its access pattern — see the schema below.
 - **`src/auth/zoho-oauth.ts`** — the authorization-code flow (PKCE + `state`): build
   the consent URL, exchange the code, fetch the user profile.
 - **`src/auth/session.ts`** — signed-cookie sessions, `optionalUser`/`requireUser`
   middleware, `getUserToken(userId)`, `hasScope`.
 - **`src/auth/routes.ts`** — the `/api/auth` sub-app + `createAuth()` bundler.
 - **`src/auth/crypto.ts`** — AES-256-GCM for refresh tokens at rest.
+- **`src/auth/docs-oauth.ts`** — a second, self-contained OAuth 2.1 + PKCE client for
+  the docs knowledge-base MCP server's own authorization server (see "Docs
+  knowledge-base connection" below) — not a Zoho product, so it doesn't use any of
+  the layers above.
 
 ## Login flow
 
@@ -91,6 +95,34 @@ for an MCP server — the user may need a new URL or token). A server that's dis
 fails **discovery** (at turn start) simply contributes no tools at all — the model never
 attempts to call one, so there's no tool-call error to react to for that case.
 
+## Docs knowledge-base connection
+
+The docs knowledge-base MCP server (`help-docs.zoho-forge.com`, used by
+`src/mcp/zoho-kb.ts`) is **not a Zoho product** — it runs its own OAuth 2.1
+authorization server (PKCE required, discoverable at
+`/.well-known/oauth-authorization-server`), entirely separate from
+`accounts.zoho.com`. `DOCS_OAUTH_CLIENT_ID`/`DOCS_OAUTH_CLIENT_SECRET` come
+from a one-time dynamic client registration (RFC 7591) against that server's
+`/register` endpoint. It's kept self-contained in `src/auth/docs-oauth.ts`
+(own PKCE/state, own `DocsTokenStore` row, own access-token cache/refresh)
+rather than folded into the Zoho-shaped modules above.
+
+It still rides the same generic Connections list and UI as the Zoho
+products, just as one more entry: `GET /api/auth/connections` appends a
+`{ key: 'docs', kind: 'docs', scopes: [], connected }` row whenever
+`DOCS_OAUTH_CLIENT_ID` is set (`connected` is just "has a stored token" — a
+single fixed scope grant, no per-tool scope diffing). `GET
+/api/auth/docs/connect` (requires an existing session) and `GET
+/api/auth/docs/callback` mirror the PKCE + signed-cookie shape of
+`/api/auth/login`/`/callback`, but against the docs server's own
+authorize/token endpoints. `POST /api/auth/connections/:key/disconnect`
+with `key: 'docs'` just drops the stored token outright (no scope bundle to
+diff). `src/mcp/zoho-kb.ts`'s tools throw the same
+`ConnectionRequiredPayload` (`kind: 'docs'`) as `zoho_api` does for Zoho
+products when the calling user has no token or a dead refresh token, opening
+a short-lived per-call MCP client with that user's own access token — there
+is no shared, process-wide client, since the token is per user.
+
 ## Per-user tokens
 
 `getUserToken(userId)` decrypts the stored refresh token and calls the shared
@@ -132,6 +164,7 @@ NoSQL tables:
 
 - **Users** — partition `UserId`. Attributes: `Email`, `DisplayName`, `FirstName`, `LastName`, `PhotoId`, `CreatedAt`, `LastLoginAt`.
 - **UserTokens** — partition `UserId`. Attributes: `RefreshTokenEnc`, `Scopes`(list), `AccountsServer`, `UpdatedAt`.
+- **DocsTokens** — partition `UserId`. Attributes: `RefreshTokenEnc`, `UpdatedAt`. The docs knowledge-base connection's own token row (see "Docs knowledge-base connection" above) — no `Scopes`/`AccountsServer`, since it's a single fixed grant against a non-Zoho authorization server.
 - **Preferences** — partition `UserId`. Attributes: `PreferredModelKey`, `Data`(map), `UpdatedAt`.
 - **McpServers** — partition `UserId`, sort `Id`. Attributes: `Name`, `Url`, `Transport`, `AuthTokenEnc`, `Enabled`(boolean), `CreatedAt`, `UpdatedAt`.
 
@@ -150,7 +183,7 @@ Data Store tables:
 
 1. Register `ZOHO_OAUTH_REDIRECT_URI` as an Authorized Redirect URI on the Zoho OAuth client.
 2. Ensure the **service-account** refresh token carries `ZohoCatalyst.nosql.item.{CREATE,READ,UPDATE}` (NoSQL stores), `ZohoCatalyst.cache.{CREATE,READ,DELETE}` (Cache sessions), and `ZohoCatalyst.tables.rows.{CREATE,READ,UPDATE,DELETE}` + `ZohoCatalyst.zcql.CREATE` (the `AppSecrets`/`ConversationOwners` Data Store tables).
-3. Create the NoSQL tables above and the `AppSecrets`/`ConversationOwners` Data Store tables, and note the Cache segment id (the default segment works). Set `STORE_BACKEND=catalyst` and `CATALYST_CACHE_SEGMENT` to that segment id.
+3. Create the NoSQL tables above (including `DocsTokens`, only needed if the docs knowledge-base connection is enabled) and the `AppSecrets`/`ConversationOwners` Data Store tables, and note the Cache segment id (the default segment works). Set `STORE_BACKEND=catalyst` and `CATALYST_CACHE_SEGMENT` to that segment id.
 4. Nothing else to configure: the signed-cookie secret and the refresh-token encryption key are bootstrapped automatically into `AppSecrets` on first boot.
 
 Config keys: [environment.md](environment.md). Smoke test: `tests/smoke/` (live Development).

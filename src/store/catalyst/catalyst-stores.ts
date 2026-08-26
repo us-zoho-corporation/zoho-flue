@@ -4,6 +4,7 @@ import { CatalystCacheClient } from './cache-client';
 import { CatalystDataStoreClient } from './data-store-client';
 import { CatalystNoSqlClient } from './nosql-client';
 import { CatalystConversationOwnerStore } from './conversation-owner-repo';
+import { CatalystDocsTokenStore } from './docs-token-repo';
 import { CatalystMcpServerStore } from './mcp-server-repo';
 import { CatalystPreferenceStore } from './preference-repo';
 import { CatalystSecretsStore } from './secrets-repo';
@@ -43,6 +44,7 @@ export function createCatalystStores(opts: CatalystStoresOptions): Stores {
 	return {
 		users: new CatalystUserStore(nosql),
 		tokens: new CatalystTokenStore(nosql),
+		docsTokens: new CatalystDocsTokenStore(nosql),
 		sessions: new CatalystSessionStore(cache),
 		preferences: new CatalystPreferenceStore(nosql),
 		mcpServers: new CatalystMcpServerStore(nosql),

@@ -1,8 +1,32 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
-vi.mock('../config', () => ({ config: { zohoDocsBearerToken: '' } }));
+vi.mock('../config', () => ({ config: { zohoDocsMcpUrl: 'https://help-docs.zoho-forge.com/mcp' } }));
 
-import { extractText } from './zoho-kb';
+// Mocked MCP SDK client, mirroring src/mcp/connect.test.ts's pattern.
+const ctl = vi.hoisted(() => ({
+	connect: vi.fn(async () => {}),
+	callTool: vi.fn(async () => ({ content: [{ type: 'text', text: '{"title":"T"}' }] })),
+	closed: false,
+}));
+vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
+	Client: class {
+		connect() { return ctl.connect(); }
+		callTool() { return ctl.callTool(); }
+		async close() { ctl.closed = true; }
+	},
+}));
+vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({ StreamableHTTPClientTransport: class {} }));
+
+const { extractText, defineZohoKbTools } = await import('./zoho-kb');
+const { DocsReauthRequiredError } = await import('../auth/docs-oauth');
+const { parseConnectionRequired } = await import('../tools/connection-required');
+
+beforeEach(() => {
+	ctl.connect.mockReset().mockResolvedValue(undefined);
+	ctl.callTool.mockReset().mockResolvedValue({ content: [{ type: 'text', text: '{"title":"T"}' }] });
+	ctl.closed = false;
+});
+afterEach(() => vi.restoreAllMocks());
 
 describe('extractText', () => {
     it('formats a JSON search result as readable lines', () => {
@@ -90,5 +114,57 @@ describe('extractText', () => {
     it('falls back to raw JSON for a result with no recognized field (e.g. list_products)', () => {
         const content = [{ type: 'text', text: JSON.stringify({ name: 'crm', article_count: 1234 }) }];
         expect(extractText(content)).toBe('{"name":"crm","article_count":1234}');
+    });
+});
+
+/**
+ * Runs a tool call expected to throw and returns the caught error.
+ * @param run - A thunk returning the tool's `run()` promise (sync or async).
+ * @returns The rejected value, expected to be an `Error`.
+ */
+async function catchError(run: () => unknown): Promise<Error> {
+    return Promise.resolve(run()).then(
+        () => { throw new Error('expected run() to throw, but it resolved'); },
+        (e: unknown) => e as Error,
+    );
+}
+
+describe('defineZohoKbTools', () => {
+    it('throws a docs connection-required payload (mode: connect) when there is no logged-in user', async () => {
+        const [searchDocs] = defineZohoKbTools({ userId: undefined, getDocsToken: async () => 'tok' });
+        const err = await catchError(() => searchDocs.run({ input: { query: 'x' } }));
+        expect(parseConnectionRequired(err.message)).toMatchObject({ kind: 'docs', mode: 'connect', label: 'Zoho Knowledge Base' });
+        expect(ctl.connect).not.toHaveBeenCalled();
+    });
+
+    it('throws mode: connect when the user has never connected the docs knowledge base', async () => {
+        const [searchDocs] = defineZohoKbTools({ userId: 'u1', getDocsToken: async () => { throw new Error('not connected'); } });
+        const err = await catchError(() => searchDocs.run({ input: { query: 'x' } }));
+        expect(parseConnectionRequired(err.message)).toMatchObject({ kind: 'docs', mode: 'connect' });
+    });
+
+    it('throws mode: reconnect when the stored refresh token was rejected', async () => {
+        const [searchDocs] = defineZohoKbTools({ userId: 'u1', getDocsToken: async () => { throw new DocsReauthRequiredError(); } });
+        const err = await catchError(() => searchDocs.run({ input: { query: 'x' } }));
+        expect(parseConnectionRequired(err.message)).toMatchObject({ kind: 'docs', mode: 'reconnect' });
+    });
+
+    it('opens a short-lived client per call with the user\'s own access token, and closes it afterward', async () => {
+        const getDocsToken = vi.fn(async () => 'user-access-token');
+        const [searchDocs] = defineZohoKbTools({ userId: 'u1', getDocsToken });
+        await searchDocs.run({ input: { query: 'x' } });
+        expect(getDocsToken).toHaveBeenCalledWith('u1');
+        expect(ctl.connect).toHaveBeenCalledTimes(1);
+        expect(ctl.callTool).toHaveBeenCalledTimes(1);
+        expect(ctl.closed).toBe(true);
+    });
+
+    it('get_page and list_products also authenticate with the user\'s own token', async () => {
+        const getDocsToken = vi.fn(async () => 'user-access-token');
+        const [, getPage, listProducts] = defineZohoKbTools({ userId: 'u1', getDocsToken });
+        await getPage.run({ input: { url: 'https://help.zoho.com/x' } });
+        await listProducts.run({ input: {} });
+        expect(getDocsToken).toHaveBeenCalledTimes(2);
+        expect(ctl.callTool).toHaveBeenCalledTimes(2);
     });
 });

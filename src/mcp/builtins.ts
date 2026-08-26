@@ -22,12 +22,15 @@ export interface BuiltinMcpServer {
  */
 export function builtinMcpServers(): BuiltinMcpServer[] {
 	const list: BuiltinMcpServer[] = [];
-	// The Zoho KB client (src/mcp/zoho-kb.ts) is only wired in when its token is set.
-	if (config.zohoDocsBearerToken) {
+	// The Zoho KB client (src/mcp/zoho-kb.ts) is only wired in when the docs
+	// OAuth client is configured. Auth itself is per-user (see
+	// src/auth/docs-oauth.ts), not a single app-wide credential — `hasAuth`
+	// here just reflects "the feature is enabled at all".
+	if (config.docsOauthClientId) {
 		list.push({
 			id: 'builtin:zoho-kb',
 			name: 'Zoho Knowledge Base',
-			url: 'https://help-docs.zoho-forge.com/mcp',
+			url: config.zohoDocsMcpUrl,
 			transport: 'http',
 			hasAuth: true,
 		});

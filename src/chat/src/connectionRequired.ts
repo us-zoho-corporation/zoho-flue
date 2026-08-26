@@ -5,7 +5,7 @@
 // sentinel prefix and payload shape must match exactly.
 
 export interface ConnectionRequiredPayload {
-  kind: 'zoho' | 'mcp';
+  kind: 'zoho' | 'mcp' | 'docs';
   mode: 'connect' | 'reconnect';
   label: string;
   product?: 'crm' | 'desk';

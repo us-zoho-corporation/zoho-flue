@@ -15,6 +15,7 @@ declare module 'hono' {
 
 export const SESSION_COOKIE = 'flue_sid';
 export const LOGIN_COOKIE = 'flue_login';
+export const DOCS_LOGIN_COOKIE = 'flue_docs_login';
 
 /** OAuth client settings the auth flow needs (supplied from config by app.ts). */
 export interface AuthOAuthConfig {
@@ -23,6 +24,20 @@ export interface AuthOAuthConfig {
 	redirectUri: string;
 	loginScopes: string;
 	accountsBase?: string;
+}
+
+/**
+ * Docs knowledge-base OAuth client settings — a separate, non-Zoho
+ * authorization server (see `docs-oauth.ts`). An empty `clientId` disables
+ * the connection entirely (no `docs` row on the Connections list).
+ */
+export interface DocsOAuthConfig {
+	clientId: string;
+	clientSecret: string;
+	authorizeUrl: string;
+	tokenUrl: string;
+	redirectUri: string;
+	scopes: string;
 }
 
 export interface AuthDeps {
@@ -35,6 +50,7 @@ export interface AuthDeps {
 	/** Dev/CI only: enable /api/auth/dev-login (fake user, no Zoho). Never in prod. */
 	devAuth: boolean;
 	oauth: AuthOAuthConfig;
+	docsOauth: DocsOAuthConfig;
 	/** Per-product scope bundles the settings "Connections" panel offers. */
 	products: readonly ZohoProduct[];
 }

@@ -1,4 +1,4 @@
-import { ArrowLeft, Briefcase, CheckCircle, Headset, type Icon } from '@phosphor-icons/react';
+import { ArrowLeft, BookOpen, Briefcase, CheckCircle, Headset, type Icon } from '@phosphor-icons/react';
 import { Button, Loader, Select, Switch } from '@cloudflare/kumo';
 import { useCallback, useEffect, useState } from 'react';
 import type { ModelOption, UserProfile } from './App.tsx';
@@ -19,16 +19,21 @@ interface SettingsProps {
   onBack: () => void;
 }
 
-/** A Zoho product's connection status, as reported by `GET /api/auth/connections`. */
+/**
+ * A connection's status, as reported by `GET /api/auth/connections` — either
+ * a Zoho product's scope bundle, or (when `kind === 'docs'`) the docs
+ * knowledge base's separate, non-Zoho OAuth connection.
+ */
 interface Connection {
   key: string;
   label: string;
   description: string;
   scopes: string[];
   connected: boolean;
+  kind?: 'docs';
 }
 
-const PRODUCT_ICONS: Record<string, Icon> = { crm: Briefcase, desk: Headset };
+const PRODUCT_ICONS: Record<string, Icon> = { crm: Briefcase, desk: Headset, docs: BookOpen };
 
 /**
  * Sends the user to the Zoho consent screen requesting a product's full scope
@@ -38,6 +43,26 @@ const PRODUCT_ICONS: Record<string, Icon> = { crm: Briefcase, desk: Headset };
  */
 function connectProduct(scopes: string[]) {
   connectZohoScopes(scopes, '/?view=settings');
+}
+
+/**
+ * Sends the user to the docs knowledge base's own (non-Zoho) authorization
+ * server, redirecting back to `/?view=settings` on success.
+ */
+function connectDocs() {
+  window.location.assign(`/api/auth/docs/connect?returnTo=${encodeURIComponent('/?view=settings')}`);
+}
+
+/**
+ * Sends the user to the Zoho consent screen requesting every listed Zoho
+ * product's full scope bundle in one round trip, so they don't have to click
+ * Connect once per product. Already-granted scopes are a no-op server-side
+ * (union). The docs connection is excluded — it's a separate OAuth server
+ * that can't share this one navigation, so it's still connected via its own row.
+ * @param connections - The full connection list, connected or not.
+ */
+function connectAllProducts(connections: Connection[]) {
+  connectZohoScopes(connections.filter((c) => c.kind !== 'docs').flatMap((c) => c.scopes), '/?view=settings');
 }
 
 /**
@@ -151,9 +176,16 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
             <div className="settings-sep" />
 
             <section className="settings-section">
-              <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle mb-3">Connections</h2>
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <h2 className="text-xs font-semibold tracking-widest uppercase text-kumo-subtle">Connections</h2>
+                {!connectionsLoading && connections.some((c) => !c.connected) && (
+                  <Button variant="secondary" size="sm" onClick={() => connectAllProducts(connections)}>
+                    Connect all
+                  </Button>
+                )}
+              </div>
               <p className="text-xs text-kumo-subtle mb-3">
-                Connect each Zoho product the assistant should be able to use. Connecting grants that product's full set of scopes in one step.
+                Connect each product or service the assistant should be able to use. Connecting a Zoho product grants its full set of scopes in one step.
               </p>
               {connectionsLoading ? (
                 <Loader size="sm" />
@@ -190,7 +222,11 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                           size="sm"
                           className="shrink-0"
                           loading={disconnectingKey === c.key}
-                          onClick={() => (c.connected ? disconnectProduct(c.key) : connectProduct(c.scopes))}
+                          onClick={() => {
+                            if (c.connected) disconnectProduct(c.key);
+                            else if (c.kind === 'docs') connectDocs();
+                            else connectProduct(c.scopes);
+                          }}
                         >
                           {c.connected ? 'Disconnect' : 'Connect'}
                         </Button>

@@ -83,6 +83,7 @@ for another Zoho product or operation kind would go here too, added to `zoho-ski
 | `zoho-crm-emails` | Reading a CRM record's associated email history |
 | `zoho-crm-users-and-org` | Listing CRM users, org info, or the current user's profile |
 | `zoho-crm-workflow-automation` | Creating/inspecting CRM Workflow Rules and their actions |
+| `zoho-crm-blueprints` | Reading a record's next Blueprint transition(s), advancing it along its process, or configuring a Blueprint's states/transitions |
 | `zoho-desk-organizations` | Resolving the Desk `orgId` — bootstrap for every other Desk call |
 | `zoho-desk-tickets` | Listing, fetching, searching, or updating Desk tickets |
 | `zoho-desk-accounts` | Listing, fetching, or searching Desk customer accounts |

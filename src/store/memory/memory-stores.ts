@@ -1,5 +1,7 @@
 import type {
 	ConversationOwnerStore,
+	DocsToken,
+	DocsTokenStore,
 	McpServer,
 	McpServerStore,
 	Preferences,
@@ -82,6 +84,34 @@ class MemoryTokenStore implements TokenStore {
 	}
 	/**
 	 * Deletes a user's stored OAuth token, if any.
+	 * @param userId - User id (ZUID) whose token should be removed.
+	 */
+	async delete(userId: string): Promise<void> {
+		this.rows.delete(userId);
+	}
+}
+
+class MemoryDocsTokenStore implements DocsTokenStore {
+	private readonly rows = new Map<string, DocsToken>();
+
+	/**
+	 * Inserts or replaces a user's stored docs-connection OAuth token.
+	 * @param token - The token record to store, keyed by `token.userId`.
+	 */
+	async put(token: DocsToken): Promise<void> {
+		this.rows.set(token.userId, clone(token));
+	}
+	/**
+	 * Fetches a user's stored docs-connection OAuth token.
+	 * @param userId - User id (ZUID) to look up.
+	 * @returns A clone of the stored token, or `null` if none exists.
+	 */
+	async get(userId: string): Promise<DocsToken | null> {
+		const row = this.rows.get(userId);
+		return row ? clone(row) : null;
+	}
+	/**
+	 * Deletes a user's stored docs-connection OAuth token, if any.
 	 * @param userId - User id (ZUID) whose token should be removed.
 	 */
 	async delete(userId: string): Promise<void> {
@@ -261,6 +291,7 @@ export function createMemoryStores(): Stores {
 	return {
 		users: new MemoryUserStore(),
 		tokens: new MemoryTokenStore(),
+		docsTokens: new MemoryDocsTokenStore(),
 		sessions: new MemorySessionStore(),
 		preferences: new MemoryPreferenceStore(),
 		mcpServers: new MemoryMcpServerStore(),

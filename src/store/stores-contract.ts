@@ -83,6 +83,31 @@ export function runStoresContract(name: string, makeStores: () => Stores): void 
 			});
 		});
 
+		describe('docsTokens', () => {
+			const docsToken = {
+				userId: 'zuid-1',
+				refreshTokenEnc: 'enc:docs-abc',
+				updatedAt: 2000,
+			};
+
+			it('puts, gets, and deletes', async () => {
+				await stores.docsTokens.put(docsToken);
+				expect(await stores.docsTokens.get('zuid-1')).toEqual(docsToken);
+				await stores.docsTokens.delete('zuid-1');
+				expect(await stores.docsTokens.get('zuid-1')).toBeNull();
+			});
+
+			it('returns null for a user with no stored docs token', async () => {
+				expect(await stores.docsTokens.get('nope')).toBeNull();
+			});
+
+			it('overwrites on repeated put', async () => {
+				await stores.docsTokens.put(docsToken);
+				await stores.docsTokens.put({ ...docsToken, refreshTokenEnc: 'enc:docs-def', updatedAt: 3000 });
+				expect(await stores.docsTokens.get('zuid-1')).toEqual({ ...docsToken, refreshTokenEnc: 'enc:docs-def', updatedAt: 3000 });
+			});
+		});
+
 		describe('sessions', () => {
 			const session = {
 				sessionId: 'sid-1',

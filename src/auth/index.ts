@@ -29,6 +29,14 @@ export function getAuth(): Auth {
 			loginScopes: config.zohoLoginScopes,
 			accountsBase: config.zohoAccountsBase,
 		},
+		docsOauth: {
+			clientId: config.docsOauthClientId,
+			clientSecret: config.docsOauthClientSecret,
+			authorizeUrl: config.docsOauthAuthorizeUrl,
+			tokenUrl: config.docsOauthTokenUrl,
+			redirectUri: config.docsOauthRedirectUri,
+			scopes: config.docsOauthScopes,
+		},
 		products: config.zohoProducts,
 	});
 	g.__flueAuth = auth;
