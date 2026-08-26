@@ -142,7 +142,7 @@ export class ConversationsStore {
 
   /** Closes every observation and clears all state (e.g. on logout). */
   reset() {
-    for (const convId of [...this.entries.keys()]) this.close(convId);
+    for (const convId of this.entries.keys()) this.close(convId);
     this.activeId = undefined;
     this.views.clear();
     this.clients.clear();

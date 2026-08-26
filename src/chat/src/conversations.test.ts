@@ -38,7 +38,7 @@ class FakeObservation {
    * test helper: update snapshot + notify subscribers
    * @param snap - Partial snapshot fields to merge into the current snapshot.
    */
-  set(snap: Partial<Snap>) { this.snap = { ...this.snap, ...snap }; for (const fn of [...this.listeners]) fn(); }
+  set(snap: Partial<Snap>) { this.snap = { ...this.snap, ...snap }; for (const fn of this.listeners) fn(); }
 }
 
 /**
