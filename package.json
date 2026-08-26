@@ -10,6 +10,8 @@
     "test:watch": "vitest --project unit",
     "test:smoke": "vitest run --project smoke",
     "test:browser": "vitest run --project browser",
+    "lint": "oxlint src/",
+    "typecheck": "tsc --noEmit",
     "chat": "vite --config src/chat/vite.config.ts src/chat/",
     "chat:build": "vite build --config src/chat/vite.config.ts src/chat/"
   },

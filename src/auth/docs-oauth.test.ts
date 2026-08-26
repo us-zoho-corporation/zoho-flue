@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
-import { createPkcePair, createState } from './zoho-oauth';
+import { createPkcePair } from './zoho-oauth';
 import { encryptSecret, parseKeyring } from './crypto';
 import {
 	buildDocsAuthorizeUrl,
