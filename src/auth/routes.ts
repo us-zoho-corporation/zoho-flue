@@ -285,7 +285,7 @@ export function createAuthRoutes(deps: AuthDeps): Hono {
 			userId,
 			// Placeholder — can't be refreshed against Zoho; fine for Claude + empty-state UX.
 			refreshTokenEnc: encryptSecret('dev-refresh-token-not-usable', deps.keyring),
-			scopes: unionScopes(['AaaServer.profile.READ', 'QuickML.deployment.READ'], extraScopes ? extraScopes.split(/[\s,]+/) : []),
+			scopes: unionScopes(['AaaServer.profile.READ'], extraScopes ? extraScopes.split(/[\s,]+/) : []),
 			accountsServer: 'https://accounts.zoho.com',
 			updatedAt: now,
 		});

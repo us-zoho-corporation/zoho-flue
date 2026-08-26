@@ -1,11 +1,10 @@
 # Flue persistence on Catalyst (`src/db.ts`)
 
-Flue keeps its own runtime state — canonical agent-conversation streams, workflow
-runs, observable event streams, durable submission lifecycle, and attachment
-payloads — behind a `PersistenceAdapter` it discovers at `src/db.ts`. Without one,
-the Node target uses in-memory SQLite and loses all of it on exit. This project
-default-exports a **Catalyst-backed adapter** so that state survives AppSail
-restarts and redeploys.
+Flue keeps its own runtime state — canonical agent-conversation streams, durable
+submission lifecycle, and attachment payloads — behind a `PersistenceAdapter` it
+discovers at `src/db.ts`. Without one, the Node target uses in-memory SQLite and
+loses all of it on exit. This project default-exports a **Catalyst-backed
+adapter** so that state survives AppSail restarts and redeploys.
 
 This is separate from the per-user auth stores in [auth.md](auth.md): that is
 *our* application data; this is *Flue's* engine state.
@@ -20,16 +19,16 @@ This is separate from the per-user auth stores in [auth.md](auth.md): that is
 
 ## Service mapping
 
-Flue's five stores map onto Catalyst by access pattern:
+Flue's three stores map onto Catalyst by access pattern (`RunStore` and
+`EventStreamStore` were removed from the persistence contract in Flue 2 along
+with workflows — this app never re-created their tables):
 
 | Flue store | Catalyst service | Why |
 |---|---|---|
 | `conversationStreamStore` | NoSQL (`FlueConvStreams` meta + `FlueConvBatches`) | append-only stream; each batch is one indivisible item under one offset; producer epoch fences a replaced coordinator |
-| `executionStore.submissions` | NoSQL (`FlueSubmissions`) | durable submission lifecycle; state transitions are conditional-update compare-and-set |
-| `eventStreamStore` | NoSQL (`FlueEventStreams` meta + `FlueEvents`) | monotonic offsets via CAS sequence allocation |
-| `runStore` | NoSQL (`FlueRuns`) | one item per run; newest-first cursor listing |
+| `submissionStore` | NoSQL (`FlueSubmissions`) | durable submission lifecycle (including turn-boundary joins and settlement leases); state transitions are conditional-update compare-and-set |
 | `attachmentStore` | **Stratus** (bytes) + NoSQL (`FlueAttachments` metadata) | immutable payloads belong in object storage; metadata/conflict checks in NoSQL |
-| schema version | NoSQL (`FlueMeta`) | one-row format marker; boot fails loudly on an unsupported version |
+| format version | NoSQL (`FlueMeta`) | one-row format marker; boot fails loudly on an unsupported version |
 
 Data Store is deliberately **not** used here: Flue's own SQL adapters rely on
 transactions + row locking, which Catalyst Data Store has none of, and its
@@ -53,14 +52,11 @@ the CLI/SDK cannot make them). Partition/sort keys are **String** unless noted.
 
 | Table | Partition key | Sort key | Notes |
 |---|---|---|---|
-| `FlueRuns` | `Scope` | `RunId` | — |
-| `FlueEventStreams` | `Path` | — | — |
-| `FlueEvents` | `Path` | `Seq` (Number) | — |
 | `FlueConvStreams` | `Path` | — | — |
 | `FlueConvBatches` | `Path` | `Seq` (Number) | — |
 | `FlueSubmissions` | `Scope` | `Id` | holds submissions, attempt markers, and a sequence counter under distinct `Scope` values |
 | `FlueAttachments` | `StreamPath` | `AttachmentId` | metadata only; bytes live in Stratus |
-| `FlueMeta` | `Key` | — | schema-version marker |
+| `FlueMeta` | `Key` | — | format-version marker |
 
 Plus one **Stratus bucket** (globally-unique name) for attachment bytes. Set
 `CATALYST_STRATUS_BUCKET` to its name and `CATALYST_STRATUS_OBJECT_URL` to the

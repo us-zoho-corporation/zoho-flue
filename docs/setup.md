@@ -4,7 +4,6 @@
 
 - An Anthropic API key — required for the default `claude-sonnet-5` model (startup fails without it)
 - A Zoho OAuth client (Self Client) registered at [api-console.zoho.com](https://api-console.zoho.com/)
-- A Catalyst project with QuickML GLM enabled — for the selectable `glm` model
 
 ## One-time: obtain a refresh token
 
@@ -36,7 +35,6 @@ ANTHROPIC_API_KEY=
 ZOHO_OAUTH_CLIENT_ID=
 ZOHO_OAUTH_CLIENT_SECRET=
 ZOHO_OAUTH_REFRESH_TOKEN=
-CATALYST_ENDPOINT=
 CATALYST_ORG_ID=
 ```
 
@@ -56,14 +54,14 @@ The token is short-lived (~7 days); re-issue it when KB tools start failing with
 
 ## Adding a sandbox
 
-By default agents use Flue's in-memory virtual sandbox (just-bash) — no configuration needed. For a provider-backed remote sandbox, run `flue add sandbox <provider>` to get the blueprint, write the generated file to `src/sandboxes/<provider>.ts` verbatim, and wire it in with `sandbox: <provider>(instance)` in `defineAgent`.
+Flue v2 gives an agent **no sandbox unless you attach one** — the assistant agent doesn't use one today. For a provider-backed remote sandbox, run `flue add sandbox <provider>` to fetch the blueprint (a Markdown implementation guide your coding agent applies, not a package installer), write the resulting file to `src/sandboxes/<provider>.ts`, and attach it inside the agent function with `useSandbox(<provider>(instance))`.
 
 ## Adding agents, providers, and skills
 
 These task workflows are owned by skills — activate the relevant one rather than copying steps here:
 
 - **New agent** → `add-agent` skill. (Providers live in `src/providers/`, never in the agent module.)
-- **New provider** → `add-provider` skill. (Wire it into `registerProviders()` in `src/providers/index.ts`; set `contextWindow` for compaction.)
+- **New provider** → `add-provider` skill. (Wire it into `registerProviders()` in `src/providers/index.ts`; set `contextWindow` on the `Model` objects for compaction.)
 - **New skill** → `add-skill` skill. (agentskills.io spec + four-tier context conventions.)
 
 ## Deploying

@@ -118,7 +118,7 @@ export function defineZohoApiTool(deps: ZohoApiDeps, gate: MutationGateContext) 
 		 * `propose_mutation`. The (allowed) URL — and any redirect hops — is
 		 * validated against `config.zohoAllowedHostnames` before attaching the
 		 * bearer token.
-		 * @param input - The requested method, target URL, optional request body, optional
+		 * @param data - The requested method, target URL, optional request body, optional
 		 * extra headers (e.g. Zoho Desk's `orgId`), and — for mutating methods — the
 		 * confirmation `mutationId`.
 		 * @param signal - Abort signal forwarded to the underlying `fetch` call.
@@ -129,21 +129,21 @@ export function defineZohoApiTool(deps: ZohoApiDeps, gate: MutationGateContext) 
 		 * valid `mutationId`; if the URL (or a redirect target) is not under an allowed Zoho
 		 * domain; or if the number of redirect hops exceeds `config.zohoApiMaxRedirects`.
 		 */
-		async run({ input, signal }) {
-			if (!isAllowedUrl(input.url)) {
+		async run({ data, signal }) {
+			if (!isAllowedUrl(data.url)) {
 				throw new Error(
-					`Request blocked: ${input.url} is not under an allowed Zoho domain (${config.zohoAllowedHostnames.join(', ')}).`,
+					`Request blocked: ${data.url} is not under an allowed Zoho domain (${config.zohoAllowedHostnames.join(', ')}).`,
 				);
 			}
 
-			const product = productForUrl(input.url);
+			const product = productForUrl(data.url);
 			if (product) await requireZohoConnection(deps, product);
 
-			if (isMutatingMethod(input.method) && !gate.autoApprove) {
-				const valid = !!input.mutationId && consumeMutation(gate.conversationId, input.mutationId, gate.requestId);
+			if (isMutatingMethod(data.method) && !gate.autoApprove) {
+				const valid = !!data.mutationId && consumeMutation(gate.conversationId, data.mutationId, gate.requestId);
 				if (!valid) {
 					throw new Error(
-						`Mutating call blocked: ${input.method} requires a valid mutationId from propose_mutation, `
+						`Mutating call blocked: ${data.method} requires a valid mutationId from propose_mutation, `
 						+ 'confirmed by the user in an earlier turn. Call propose_mutation first with a summary of '
 						+ 'this action, tell the user, and end your turn — do not call zoho_api again until their '
 						+ 'next message, then retry with the returned mutationId.',
@@ -156,12 +156,12 @@ export function defineZohoApiTool(deps: ZohoApiDeps, gate: MutationGateContext) 
 			}
 			const token = await deps.getUserToken(deps.userId);
 			const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-			if (input.body !== undefined) {
+			if (data.body !== undefined) {
 				headers['Content-Type'] = 'application/json';
 			}
 			// Merge caller-supplied headers (e.g. Zoho Desk's `orgId`) last, but never
 			// let them override the bearer token or content type set above.
-			for (const [key, value] of Object.entries(input.headers ?? {})) {
+			for (const [key, value] of Object.entries(data.headers ?? {})) {
 				const lower = key.toLowerCase();
 				if (lower === 'authorization' || lower === 'content-type') continue;
 				headers[key] = value;
@@ -169,12 +169,12 @@ export function defineZohoApiTool(deps: ZohoApiDeps, gate: MutationGateContext) 
 
 			// Follow redirects manually so each hop is validated against the
 			// allowlist before the Authorization header is forwarded.
-			let currentUrl = input.url;
+			let currentUrl = data.url;
 			for (let hops = 0; hops <= config.zohoApiMaxRedirects; hops++) {
 				const res = await fetch(currentUrl, {
-					method: input.method,
+					method: data.method,
 					headers,
-					body: input.body,
+					body: data.body,
 					signal,
 					redirect: 'manual',
 				});
@@ -182,7 +182,7 @@ export function defineZohoApiTool(deps: ZohoApiDeps, gate: MutationGateContext) 
 				if (res.status >= 300 && res.status < 400) {
 					const location = res.headers.get('location');
 					if (!location) {
-						return { status: res.status, body: '' };
+						return { output: { status: res.status, body: '' } };
 					}
 					// Resolve relative Location values against the current URL.
 					const redirectUrl = new URL(location, currentUrl).toString();
@@ -195,7 +195,7 @@ export function defineZohoApiTool(deps: ZohoApiDeps, gate: MutationGateContext) 
 					continue;
 				}
 
-				return { status: res.status, body: truncateResponseBody(await res.text()) };
+				return { output: { status: res.status, body: truncateResponseBody(await res.text()) } };
 			}
 
 			throw new Error(`Too many redirects (max ${config.zohoApiMaxRedirects}).`);

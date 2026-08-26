@@ -1,5 +1,4 @@
-import { listAgents, listRuns } from '@flue/runtime';
-import { flue } from '@flue/runtime/routing';
+import { createAgentRouter } from '@flue/runtime/routing';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
@@ -7,6 +6,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { config } from './config';
 import { registerProviders } from './providers';
+import { Assistant, assistantMiddleware, ASSISTANT_MOUNT_PATH } from './agents/assistant';
 import { getAuth } from './auth';
 import { parseKeyring } from './auth/crypto';
 import { zohoDomainFor } from './auth/zoho-oauth';
@@ -17,7 +17,7 @@ import { getStores } from './store';
 
 // Requests under these prefixes are owned by API/agent routing, never the
 // static chat UI — checked by the static-file fallback below.
-const APP_ROUTE_PREFIXES = ['/api/', '/agents/', '/workflows/', '/runs/', '/health'];
+const APP_ROUTE_PREFIXES = ['/api/', '/agents/', '/health'];
 const CHAT_DIST_DIR = resolve('src/chat/dist');
 
 if (config._devWarnings.noApiSecret) {
@@ -65,6 +65,13 @@ app.use('/api/*', cors(corsOptions));
 // drive them, so transcripts aren't reachable by conversation id when logged out.
 app.use('/agents/*', auth.requireUser);
 
+// Conversation-ownership claim + request-context population (per-turn user id,
+// Auto mode, MCP tools) — see assistant.ts's `assistantMiddleware` doc comment.
+// Registered ahead of the agent router mount below, per Flue v2's explicit-
+// routing model (the beta's per-agent-module `export const route` convention
+// is gone; this is now ordinary Hono middleware).
+app.use(`${ASSISTANT_MOUNT_PATH}/*`, assistantMiddleware);
+
 // Attach the logged-in user (if any) to every /api/* request.
 app.use('/api/*', auth.optionalUser);
 
@@ -108,8 +115,6 @@ app.put('/api/preferences', auth.requireUser, async (c) => {
 	return c.json({ ok: true });
 });
 
-app.get('/api/agents', async (c) => c.json(await listAgents()));
-
 // Provider-models the chat offers as a selectable option (single source of truth
 // with the `assistant` agent's model resolution). The client carries the chosen
 // `key` in the conversation id; the agent maps it back to a model spec.
@@ -141,23 +146,6 @@ app.get('/api/skills', async (c) => {
 		return { name, description, allowedTools, compatibility };
 	}));
 	return c.json(skills.filter(s => s.description));
-});
-
-app.get('/api/runs', async (c) => {
-	const result = await listRuns({ limit: 100 }).catch(() => ({ runs: [] }));
-	return c.json(result.runs);
-});
-
-app.get('/api/workflows', async (c) => {
-	const workflowsDir = resolve('src/workflows');
-	let names: string[] = [];
-	try {
-		const entries = await readdir(workflowsDir);
-		names = entries.filter(f => f.endsWith('.ts')).map(f => f.replace(/\.ts$/, ''));
-	} catch {}
-
-	const { runs } = await listRuns({ limit: 50 }).catch(() => ({ runs: [] }));
-	return c.json({ workflows: names, runs });
 });
 
 // Register all model/auth providers once at startup. Their setup lives in
@@ -267,9 +255,10 @@ const STATIC_MIME_TYPES: Record<string, string> = {
 // Serves the built chat UI (static assets + SPA fallback) same-origin, so the
 // browser never needs cross-origin calls to the API — sidesteps the
 // documented Slate<->AppSail CORS/auth-layer issue. Registered as middleware
-// (not a terminal route) so it falls through via `next()` to the `flue()`
-// mount below for anything it doesn't own — GET /agents/:name/:id (event
-// streaming), /runs/:runId, etc. — instead of shadowing them.
+// (not a terminal route) so it falls through via `next()` to the assistant
+// agent router mount below for anything it doesn't own — GET /agents/assistant/:id
+// (event streaming), POST /agents/assistant/:id/abort, etc. — instead of
+// shadowing them.
 app.use('*', async (c, next) => {
 	if (c.req.method !== 'GET' && c.req.method !== 'HEAD') return next();
 
@@ -294,6 +283,6 @@ app.use('*', async (c, next) => {
 	}
 });
 
-app.route('/', flue());
+app.route(ASSISTANT_MOUNT_PATH, createAgentRouter(Assistant));
 
 export default app;

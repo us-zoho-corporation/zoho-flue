@@ -76,7 +76,7 @@ export const renderChart = defineTool({
 	 * Acknowledges that the model's chart spec (carried in the tool input) was rendered.
 	 * @returns An acknowledgement instructing the model to add a written takeaway.
 	 */
-	run: async () => rendered('a chart'),
+	run: async () => ({ output: rendered('a chart') }),
 });
 
 // ─── Comparison table ─────────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ export const renderComparisonTable = defineTool({
 	 * Acknowledges that the model's comparison-table spec (carried in the tool input) was rendered.
 	 * @returns An acknowledgement instructing the model to add a written takeaway.
 	 */
-	run: async () => rendered('a comparison table'),
+	run: async () => ({ output: rendered('a comparison table') }),
 });
 
 // ─── Stat cards ─────────────────────────────────────────────────────────────────
@@ -138,7 +138,7 @@ export const renderStatCards = defineTool({
 	 * Acknowledges that the model's stat-card spec (carried in the tool input) was rendered.
 	 * @returns An acknowledgement instructing the model to add a written takeaway.
 	 */
-	run: async () => rendered('metric cards'),
+	run: async () => ({ output: rendered('metric cards') }),
 });
 
 // ─── Record card ────────────────────────────────────────────────────────────────
@@ -171,7 +171,7 @@ export const renderRecordCard = defineTool({
 	 * Acknowledges that the model's record-card spec (carried in the tool input) was rendered.
 	 * @returns An acknowledgement instructing the model to add a short written takeaway.
 	 */
-	run: async () => rendered('a record card'),
+	run: async () => ({ output: rendered('a record card') }),
 });
 
 /** All a2ui presentation tools, ready to spread into an agent's `tools`. */

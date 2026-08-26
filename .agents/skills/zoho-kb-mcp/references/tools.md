@@ -31,4 +31,4 @@ Wraps MCP tool `list_products`. No inputs. Returns all Zoho documentation produc
 
 ## Output schema note
 
-All three tools use `v.any()` as output schema. The KB server returns varied JSON shapes that would require complex Valibot schemas to type fully. Catalyst GLM accepts `v.any()` without issues.
+All three tools use `v.any()` as output schema. The KB server returns varied JSON shapes that would require complex Valibot schemas to type fully, so this project keeps the output schema permissive rather than modeling every shape.

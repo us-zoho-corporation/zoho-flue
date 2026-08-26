@@ -30,7 +30,7 @@ import { connectZohoScopes, parseConnectionRequired } from './connectionRequired
 import { parseFormRequest, matchFormSubmission, type FormRequestSpec } from './formRequest.ts';
 import { A2uiRecordCard } from './a2ui/A2uiRecordCard.tsx';
 import type { RecordCardSpec } from './a2ui/spec.ts';
-import type { FlueConversationMessage, FlueConversationPart } from '@flue/react';
+import type { FlueConversationMessage, FlueConversationPart } from '@flue/sdk';
 
 interface ThreadProps {
   modelLabel: string;
@@ -1069,7 +1069,7 @@ interface ComposerProps {
 }
 
 // The SDK caps base64 image data at 14 MiB of characters per image (see
-// @flue/sdk's AgentPromptImage docs) — checked client-side so an oversized
+// @flue/sdk's DeliveredAttachment docs) — checked client-side so an oversized
 // file is rejected immediately instead of failing after a round trip.
 const MAX_ATTACHMENT_BASE64_CHARS = 14 * 1024 * 1024;
 

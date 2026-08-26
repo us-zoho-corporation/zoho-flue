@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import type { FlueConversationMessage, FlueConversationPart } from '@flue/react';
+import type { FlueConversationMessage, FlueConversationPart } from '@flue/sdk';
 import { collapseTurns, isAssistantMessage, type AssistantMessage } from './flue-model.ts';
 
 // ─── builders ────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ const id = () => `m${n++}`;
  * @returns A `FlueConversationMessage` with role `'user'`.
  */
 function user(t: string): FlueConversationMessage {
-	return { id: id(), role: 'user', parts: [text(t)] };
+	return { id: id(), role: 'user', purpose: 'user', display: 'visible', parts: [text(t)] };
 }
 /**
  * Builds an assistant message from the given parts, for test fixtures.
@@ -25,7 +25,7 @@ function user(t: string): FlueConversationMessage {
  * @returns A `FlueConversationMessage` with role `'assistant'`.
  */
 function assistant(...parts: FlueConversationPart[]): FlueConversationMessage {
-	return { id: id(), role: 'assistant', parts };
+	return { id: id(), role: 'assistant', purpose: 'assistant', display: 'visible', parts };
 }
 /**
  * Builds a completed text message part, for test fixtures.

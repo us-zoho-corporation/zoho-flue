@@ -32,14 +32,14 @@ export function defineCheckZohoConnectionTool(deps: ZohoConnectionDeps) {
 			connected: v.boolean(),
 		}),
 		/**
-		 * Checks the user's connection for `input.product`.
-		 * @param input - The Zoho product to check.
+		 * Checks the user's connection for `data.product`.
+		 * @param data - The Zoho product to check.
 		 * @returns `{ connected: true }` if the product's full scope bundle is granted.
 		 * @throws {Error} A `ConnectionRequiredPayload`-encoded error (see `connection-required.ts`) if not.
 		 */
-		async run({ input }) {
-			await requireZohoConnection(deps, input.product);
-			return { connected: true };
+		async run({ data }) {
+			await requireZohoConnection(deps, data.product);
+			return { output: { connected: true } };
 		},
 	});
 }

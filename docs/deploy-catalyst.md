@@ -24,7 +24,7 @@ Console-only (confirmed: `catalyst-config.json` env vars are ignored for AppSail
 1. **Create the AppSail service** — Console → AppSail → New:
    - Stack: Node.js (`node20`)
    - Start command: `node scripts/catalyst-start.mjs`
-   - Build command: `pnpm install --frozen-lockfile && pnpm run chat:build && pnpm exec flue build --target node`
+   - Build command: `pnpm install --frozen-lockfile && pnpm run chat:build && pnpm run build`
    - Instances: **min = max = 1**
    - Memory: 512MB+ (raise if it OOMs)
 2. **Set environment variables** — Console → AppSail → your service → Configuration →

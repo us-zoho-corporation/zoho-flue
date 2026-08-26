@@ -61,11 +61,11 @@ export function defineRequestInputTool() {
 		 * @returns A note instructing the model to stop and wait for the user's answers.
 		 */
 		run() {
-			return {
+			return { output: {
 				note:
 					'Rendered as a form. End your turn now — do not guess the values yourself; the user\'s '
 					+ 'filled-in answers will arrive as their next message.',
-			};
+			} };
 		},
 	});
 }

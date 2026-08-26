@@ -1,12 +1,12 @@
 ---
 name: zoho-kb-mcp
-description: Work with the Zoho Knowledge Base MCP client in this project. Use when adding or debugging KB tools in src/mcp/zoho-kb.ts, understanding why defineTool wrappers are used instead of connectMcpServer, or inspecting zoho_kb_search / zoho_kb_get_page / zoho_kb_list_products tool definitions.
+description: Work with the Zoho Knowledge Base MCP client in this project. Use when adding or debugging KB tools in src/mcp/zoho-kb.ts, understanding why defineTool wrappers are used instead of useMcpConnection, or inspecting zoho_kb_search / zoho_kb_get_page / zoho_kb_list_products tool definitions.
 allowed-tools: Read
 ---
 
-## Why direct SDK, not connectMcpServer
+## Why direct SDK, not useMcpConnection
 
-Flue's `connectMcpServer` passes raw MCP tool schemas (including `outputSchema`, `$defs`, `anyOf`, `$ref`) directly to the LLM. Catalyst GLM rejects these with `PATTERN_NOT_MATCHED`.
+Flue's `useMcpConnection` mounts a remote MCP server's raw tool schemas (including `outputSchema`, `$defs`, `anyOf`, `$ref`) straight through to the model. This project instead wraps each KB tool manually, so the schema the model sees stays simple and predictable regardless of which model is selected.
 
 `src/mcp/zoho-kb.ts` instead:
 1. Holds a singleton `@modelcontextprotocol/sdk` `Client` instance (lazy, one retry on failure)
@@ -28,7 +28,7 @@ The bearer token (`config.zohoDocsBearerToken`) is sent as-is — the client doe
 
 ## Result truncation
 
-Results are truncated at 12,000 characters to stay within Catalyst GLM's input limit.
+Results are truncated at 12,000 characters — compaction handles longer conversations, but one unbounded blob still wastes the model's context in a single tool call, so it's capped once here.
 
 ## Adding a new KB tool
 

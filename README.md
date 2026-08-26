@@ -1,6 +1,6 @@
 # zoho-flue
 
-Exploratory repository for building LLM agents on the [Flue](https://flueframework.com/) framework backed by Zoho's AI infrastructure (Catalyst QuickML GLM).
+Exploratory repository for building LLM agents on the [Flue](https://flueframework.com/) framework for Zoho CRM/Desk implementation work.
 
 ## Quick start
 
@@ -13,14 +13,14 @@ Populate `.env` — see [Setup](docs/setup.md) for credentials and OAuth.
 Run the assistant agent from the CLI:
 
 ```bash
-pnpm exec flue run assistant --input '{"message":"hello"}'
+pnpm exec flue run src/agents/assistant.ts --message "hello"
 ```
 
 Or use the browser chat UI (two terminals):
 
 ```bash
-pnpm exec flue dev   # agent server on :3583
-pnpm chat            # chat UI on :5173 (proxies to :3583)
+pnpm dev    # agent server on :3583
+pnpm chat   # chat UI on :5173 (proxies to :3583)
 ```
 
 ## Docs

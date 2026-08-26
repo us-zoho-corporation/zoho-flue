@@ -25,7 +25,7 @@ catch things numbers don't, like color, contrast, or something reading as
 ## Boot the app
 
 ```bash
-bash .agents/skills/layout-check/scripts/boot.sh   # starts flue dev (:3583) + vite chat (:5173)
+bash .agents/skills/layout-check/scripts/boot.sh   # starts the agent server (:3583) + vite chat (:5173)
 bash .agents/skills/layout-check/scripts/teardown.sh   # stop them when done
 ```
 
@@ -33,6 +33,13 @@ This reuses `e2e-chat`'s dev-login seam (`ENV=local`, `STORE_BACKEND=memory`) �
 see `.agents/skills/e2e-chat/SKILL.md` for how that works. `boot.sh` refuses to
 start if `:3583`/`:5173` are already busy; a stale server from an earlier
 session is the most common source of confusing, flaky measurements.
+
+**Known issue post-Flue-v2-migration:** `boot.sh` currently starts the agent
+server with `pnpm exec flue dev`, which no longer exists in Flue v2 (the CLI
+dropped `flue dev`/`flue build` in favor of `vite dev`/`vite build`, i.e. this
+repo's `pnpm dev`). Until the script is updated, run `pnpm dev` manually
+instead of `boot.sh` for the agent server, and `boot.sh`'s own dev-login/env
+setup as reference for the env vars to set (`ENV=local STORE_BACKEND=memory`).
 
 **Known gotcha:** the first Playwright action (a click, a `waitForSelector`)
 in a script's first run often times out — this happens even against an
@@ -61,10 +68,11 @@ Prefer resizing one browser context's viewport over juggling multiple browser
 instances when checking several widths in one script.
 
 **Don't edit the script again once it's copied into `scripts/` and running.**
-`flue dev` watches that whole directory too, and a file change mid-conversation
-can kill the in-flight turn or wedge the server outright — see the `e2e-chat`
-skill's Gotchas for what that looks like and how to recover. Fix the
-scratchpad copy and re-copy fresh instead of patching the live one.
+The dev server's file watcher (`vite dev`) watches that whole directory too,
+and a file change mid-conversation can kill the in-flight turn or wedge the
+server outright — see the `e2e-chat` skill's Gotchas for what that looks like
+and how to recover. Fix the scratchpad copy and re-copy fresh instead of
+patching the live one.
 
 **Never call `process.exit()` right after your final `console.log`s.** When
 stdout is piped (not a TTY — true whenever a tool runs the script for you),

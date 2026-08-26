@@ -1,26 +1,15 @@
 import { SidebarProvider } from '@cloudflare/kumo';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Agents } from './Agents.tsx';
 import { ActiveConversation, useConversationsStore } from './conversations.tsx';
-import { Runs } from './Runs.tsx';
 import { Settings } from './Settings.tsx';
 import { McpServers } from './McpServers.tsx';
 import { Sidebar } from './Sidebar.tsx';
 import { Skills } from './Skills.tsx';
 import { Thread } from './Thread.tsx';
 import { Welcome } from './Welcome.tsx';
-import { Workflows } from './Workflows.tsx';
 import { applyTheme, loadTheme, saveTheme, type Theme } from './theme.ts';
 import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode.ts';
 import { loadAuthFingerprint, saveAuthFingerprint } from './authFingerprint.ts';
-
-// Used by the Agents admin view (the deployed-agent manifest), not the chat picker.
-export type AgentEntry = {
-  name: string;
-  description?: string;
-  transports: { http?: true };
-  defined: boolean;
-};
 
 // A selectable provider-model (from /api/models). The chat runs one `assistant`
 // agent; the chosen model is carried per conversation in the instance id.
@@ -60,8 +49,8 @@ const ACTIVE_KEY = 'flue:active-session:v1';
 // Used before /api/models resolves, and if it fails. Matches config.defaultChatModelKey.
 const FALLBACK_MODEL: ModelOption = { key: 'claude', label: 'Claude Sonnet 5', requiresAuth: false };
 
-type View = 'chat' | 'settings' | 'workflows' | 'skills' | 'agents' | 'runs' | 'mcp';
-const VIEWS: readonly View[] = ['chat', 'settings', 'workflows', 'skills', 'agents', 'runs', 'mcp'];
+type View = 'chat' | 'settings' | 'skills' | 'mcp';
+const VIEWS: readonly View[] = ['chat', 'settings', 'skills', 'mcp'];
 
 /**
  * Resolves the view to land on at startup from a `?view=` query param (set by
@@ -135,7 +124,7 @@ function makeSession(model: ModelOption): Session {
 /**
  * Top-level chat application component. Owns session/model state (persisted to
  * localStorage), tracks auth status and profile, drives theme, and routes between
- * the chat thread and the settings/workflows/skills/agents/runs/mcp admin views.
+ * the chat thread and the settings/skills/mcp admin views.
  * @returns A loading screen while the auth check is pending; the Welcome sign-in
  * screen if the user isn't authenticated; otherwise the sidebar plus the active
  * view (chat thread or one of the admin panels).
@@ -355,10 +344,7 @@ export function App() {
         onNew={() => { setView('chat'); handleNewSession(); }}
         onDelete={handleDeleteSession}
         onSettings={() => setView('settings')}
-        onWorkflows={() => setView('workflows')}
         onSkills={() => setView('skills')}
-        onAgents={() => setView('agents')}
-        onRuns={() => setView('runs')}
         onMcp={() => setView('mcp')}
       />
 
@@ -376,14 +362,8 @@ export function App() {
             onSignOut={handleSignOut}
             onBack={() => setView('chat')}
           />
-        : view === 'workflows'
-        ? <Workflows onBack={() => setView('chat')} />
         : view === 'skills'
         ? <Skills onBack={() => setView('chat')} />
-        : view === 'agents'
-        ? <Agents onBack={() => setView('chat')} />
-        : view === 'runs'
-        ? <Runs onBack={() => setView('chat')} />
         : view === 'mcp'
         ? <McpServers onBack={() => setView('chat')} onSignIn={handleSignIn} />
         : null}

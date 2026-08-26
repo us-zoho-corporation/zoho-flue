@@ -8,24 +8,27 @@ allowed-tools: Bash Read
 ## Running an agent
 
 ```bash
-pnpm exec flue run <agent> --input '{"message":"your prompt"}'
-pnpm exec flue build            # compile to dist/
-pnpm exec flue dev              # watch-mode dev server on :3583
+pnpm exec flue run <path-to-agent-module.ts> --message "your prompt"
+pnpm build                      # compile to dist/ (vite build)
+pnpm dev                        # watch-mode dev server on :3583 (vite dev)
 ```
 
-The single agent is `assistant`; the provider-model is selected per conversation (see the chat UI, or pass `--id '<modelKey>__<id>'` to `flue run`; default is `claude`). Example inputs:
+The single agent is `Assistant` (`src/agents/assistant.ts`, storage identity pinned to
+`assistant` via `Assistant.agentName`); the provider-model is selected per conversation
+(see the chat UI, or pass `--id '<modelKey>__<id>'` to `flue run`; default is `claude`,
+currently the only option — `anthropic/claude-sonnet-5`). Example inputs:
 
 ```bash
-pnpm exec flue run assistant --input '{"message":"fetch all open leads from Zoho CRM and summarize them"}'
-pnpm exec flue run assistant --input '{"message":"get the first page of contacts from Zoho CRM and count them"}'
-pnpm exec flue run assistant --input '{"message":"what is 12 * 34?"}'
+pnpm exec flue run src/agents/assistant.ts --message "fetch all open leads from Zoho CRM and summarize them"
+pnpm exec flue run src/agents/assistant.ts --message "get the first page of contacts from Zoho CRM and count them"
+pnpm exec flue run src/agents/assistant.ts --message "what is 12 * 34?"
 ```
 
 KB search tools (`zoho_kb_search`, `zoho_kb_get_page`, `zoho_kb_list_products`) are only available when `ZOHO_DOCS_BEARER_TOKEN` is set in `.env`:
 
 ```bash
-pnpm exec flue run assistant --input '{"message":"search zoho docs for how to create a CRM custom function"}'
-pnpm exec flue run assistant --input '{"message":"list all available zoho documentation products"}'
+pnpm exec flue run src/agents/assistant.ts --message "search zoho docs for how to create a CRM custom function"
+pnpm exec flue run src/agents/assistant.ts --message "list all available zoho documentation products"
 ```
 
 ## Quality checks
@@ -46,11 +49,13 @@ headless Chromium), and `smoke` (live credentials). One-time for browser:
 
 ## Chat UI (browser interface)
 
-The agent exposes an HTTP API via `src/app.ts`. Run the dev server and the Vite chat app in two separate terminals:
+The agent exposes an HTTP API via `src/app.ts`, which explicitly mounts it with
+`app.route(ASSISTANT_MOUNT_PATH, createAgentRouter(Assistant))`. Run the dev server and
+the Vite chat app in two separate terminals:
 
 ```bash
-# Terminal 1 — Flue dev server (port 3583)
-pnpm exec flue dev
+# Terminal 1 — agent server (port 3583, vite dev via the flue() plugin)
+pnpm dev
 
 # Terminal 2 — Vite chat UI (port 5173, proxies /agents → :3583)
 pnpm chat
@@ -58,7 +63,10 @@ pnpm chat
 
 Open `http://localhost:5173` in the browser. The chat UI talks to the `assistant` agent; the composer's model picker selects the provider-model, carried on the conversation id as `<modelKey>__<uuid>`.
 
-**Requirement:** `src/agents/assistant.ts` must export `route` for the HTTP API to be reachable. It currently does — `export const route: AgentRouteHandler = async (_c, next) => next();`.
+**Requirement:** the agent's HTTP surface depends on `src/app.ts` explicitly mounting it
+(`createAgentRouter(Assistant)`) — there's no automatic mounting in Flue v2. It currently
+does, ahead of which `assistantMiddleware` runs (conversation-ownership claim + per-turn
+request-context population) — see `src/agents/assistant.ts`.
 
 ## Common startup errors
 

@@ -2,7 +2,7 @@
 
 Per-user Zoho OAuth login plus a Catalyst-backed store for user identity, OAuth
 tokens, granted API scopes, and preferences. Distinct from the **service account**
-(`src/auth/zoho-auth.ts`), which still powers the GLM provider and the Data Store
+(`src/auth/zoho-auth.ts`), which powers the Catalyst NoSQL/Data Store/Stratus
 admin token.
 
 ## Layers
@@ -56,8 +56,7 @@ Granted scopes are stored on `UserTokens.Scopes` and merged (union) on every log
 `GET /api/auth/login?scopes=<extra>` performs **incremental authorization** (comma- or
 space-separated; sent to Zoho comma-delimited). Gate scope-dependent features with
 `hasScope(deps, userId, scope)`. Default login scopes are `AaaServer.profile.READ`
-(identity), `QuickML.deployment.READ` (so the user's token can reach the Zoho GLM 4.7
-Flash endpoint), and `ZohoCRM.org.READ` (so `GET /api/org` can show the user's Zoho CRM
+(identity) and `ZohoCRM.org.READ` (so `GET /api/org` can show the user's Zoho CRM
 organization name in the profile popup right after login, with no separate CRM connection needed).
 
 ## Connecting products (Settings) — and why the `zoho_api` tool depends on it

@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-react';
 import { ToolCallRow, NoReplyNotice, AssistantTurn } from './Thread.tsx';
 import { collapseTurns } from './flue-model.ts';
 import type { AssistantMessage, ChatMessage } from './FlueRuntime.tsx';
-import type { FlueConversationMessage, FlueConversationPart } from '@flue/react';
+import type { FlueConversationMessage, FlueConversationPart } from '@flue/sdk';
 
 /**
  * Builds a minimal `AssistantMessage` fixture for `AssistantTurn` tests,
@@ -15,6 +15,8 @@ function turn(over: Partial<AssistantMessage> = {}): AssistantMessage {
 	return {
 		id: 't1',
 		role: 'assistant',
+		purpose: 'assistant',
+		display: 'visible',
 		parts: [],
 		toolSteps: [],
 		uiParts: [],
@@ -128,7 +130,7 @@ describe('AssistantTurn (browser) — unified tool-call flow', () => {
 // stream grows, we rerender and assert the turn morphs in place — steps build
 // live, then collapse to a chip beside the answer. No floating card, no teleport.
 describe('AssistantTurn streaming transition (browser)', () => {
-	const userMsg: FlueConversationMessage = { id: 'u', role: 'user', parts: [{ type: 'text', text: 'compare editions', state: 'done' }] };
+	const userMsg: FlueConversationMessage = { id: 'u', role: 'user', purpose: 'user', display: 'visible', parts: [{ type: 'text', text: 'compare editions', state: 'done' }] };
 	let k = 0;
 	/**
 	 * Builds an assistant `FlueConversationMessage` fixture with an
@@ -136,7 +138,7 @@ describe('AssistantTurn streaming transition (browser)', () => {
 	 * @param parts - The conversation parts to attach to the message.
 	 * @returns The assembled assistant message fixture.
 	 */
-	const asst = (...parts: FlueConversationPart[]): FlueConversationMessage => ({ id: `a${k++}`, role: 'assistant', parts });
+	const asst = (...parts: FlueConversationPart[]): FlueConversationMessage => ({ id: `a${k++}`, role: 'assistant', purpose: 'assistant', display: 'visible', parts });
 	/**
 	 * Builds a `dynamic-tool` conversation part fixture, shaped as either an
 	 * in-flight call (no output) or a completed call (with a stub `{ ok: true }` output).

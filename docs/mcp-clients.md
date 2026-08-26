@@ -1,6 +1,6 @@
 # MCP Clients
 
-Programmatic MCP server connections in `src/mcp/`. Use `@modelcontextprotocol/sdk` v1 `Client` directly rather than Flue's `connectMcpServer`. Reason: `connectMcpServer` passes raw MCP tool schemas (including `outputSchema`, `$defs`, `anyOf`, `$ref`) to the LLM — Catalyst GLM rejects these with `PATTERN_NOT_MATCHED`. Manual `defineTool` wrappers with simplified Valibot schemas are required instead.
+Programmatic MCP server connections in `src/mcp/`. Use `@modelcontextprotocol/sdk` v1 `Client` directly rather than Flue's `useMcpConnection`. Reason: raw MCP tool schemas (including `outputSchema`, `$defs`, `anyOf`, `$ref`) are more than the app wants to pass straight through to the model — manual `defineTool` wrappers with simplified Valibot schemas keep the shape predictable and small.
 
 ## Clients
 
@@ -18,4 +18,4 @@ Signed-in users can connect their own external MCP servers (managed under **Work
 
 - CRUD + test API: `src/mcp/routes.ts` (`/api/mcp-servers`, behind `requireUser`).
 - Connect/probe helper: `src/mcp/connect.ts` — `probeMcpServer` (list tools) and `callMcpTool` (invoke a tool) connect via Streamable HTTP or SSE. Both go through `openClient`, which enforces the SSRF guard: `validateMcpUrl` (https-only, internal names, literal private IPs) **and** DNS resolution rejecting any address that is loopback/private/link-local/ULA/IPv4-mapped-private, plus `redirect: 'error'` transports.
-- **Live tool injection.** The assistant `route` (`src/agents/assistant.ts`) loads the logged-in user's *enabled* servers via `loadUserMcpTools` (`src/mcp/live.ts`, tool discovery cached ~5 min) and stashes the built tools in the request-context ALS; the `defineAgent` factory appends them to the profile for that conversation. `src/mcp/tools.ts` wraps each remote tool with `defineTool`, converting its JSON Schema to a **shallow** Valibot schema (top-level primitives; complex shapes flattened to `any`) so the schema stays simple enough for Catalyst GLM (which rejects `$ref`/`$defs`/`anyOf`/`outputSchema`).
+- **Live tool injection.** `assistantMiddleware` (`src/agents/assistant.ts`) loads the logged-in user's *enabled* servers via `loadUserMcpTools` (`src/mcp/live.ts`, tool discovery cached ~5 min) and records the built tools in the per-conversation `TurnContext` (`src/auth/request-context.ts`); `Assistant`'s render reads them back out via `currentTurnContext` and mounts each with `useTool` for that turn. `src/mcp/tools.ts` wraps each remote tool with `defineTool`, converting its JSON Schema to a **shallow** Valibot schema (top-level primitives; complex shapes flattened to `any`) so the schema the model sees stays simple — no `$ref`/`$defs`/`anyOf`/`outputSchema`.

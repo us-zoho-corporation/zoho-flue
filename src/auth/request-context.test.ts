@@ -1,30 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentTurnContext, currentUserToken, runWithRequestContext, setTurnContext } from './request-context';
-
-describe('request-context: userToken (AsyncLocalStorage)', () => {
-	it('returns undefined outside any context', () => {
-		expect(currentUserToken()).toBeUndefined();
-	});
-
-	it('exposes the user token within run()', () => {
-		runWithRequestContext({ userToken: 'tok' }, () => {
-			expect(currentUserToken()).toBe('tok');
-		});
-	});
-
-	it('propagates across async continuations', async () => {
-		await runWithRequestContext({ userToken: 'tok' }, async () => {
-			await Promise.resolve();
-			await new Promise((r) => setTimeout(r, 0));
-			expect(currentUserToken()).toBe('tok');
-		});
-	});
-
-	it('does not leak outside the run', () => {
-		runWithRequestContext({ userToken: 'tok' }, () => {});
-		expect(currentUserToken()).toBeUndefined();
-	});
-});
+import { currentTurnContext, setTurnContext } from './request-context';
 
 describe('request-context: turn context (per-conversation map)', () => {
 	it('returns undefined for a conversation that has never had a turn recorded', () => {
@@ -45,14 +20,13 @@ describe('request-context: turn context (per-conversation map)', () => {
 
 	it('a later turn overwrites an earlier one for the same conversation, read as a plain synchronous lookup', () => {
 		// Regression test for the reproduced bug this module's map-based design
-		// replaced AsyncLocalStorage to fix: `defineAgent`'s initializer can be
-		// invoked from a stale async continuation of an earlier, already-
-		// completed request, which — under ALS — read that earlier request's
-		// requestId instead of the current one, permanently defeating the
-		// mutation confirmation gate. A plain Map.get() has no such notion of
-		// "which async chain is this" to get stale — it always returns whatever
-		// was last written for that conversation id, regardless of who reads it
-		// or from what continuation.
+		// replaced AsyncLocalStorage to fix: an agent render can be invoked from
+		// a stale async continuation of an earlier, already-completed request,
+		// which — under ALS — read that earlier request's requestId instead of
+		// the current one, permanently defeating the mutation confirmation gate.
+		// A plain Map.get() has no such notion of "which async chain is this" to
+		// get stale — it always returns whatever was last written for that
+		// conversation id, regardless of who reads it or from what continuation.
 		setTurnContext('conv-4', { requestId: 'turn-A' });
 		const readDuringTurnA = () => currentTurnContext('conv-4');
 		expect(readDuringTurnA()?.requestId).toBe('turn-A');

@@ -10,7 +10,6 @@ allowed-tools: Bash Read
 ZOHO_OAUTH_CLIENT_ID=
 ZOHO_OAUTH_CLIENT_SECRET=
 ZOHO_OAUTH_REFRESH_TOKEN=
-CATALYST_ENDPOINT=
 CATALYST_ORG_ID=
 ```
 
@@ -59,8 +58,10 @@ Copy the value into `.env` as `ZOHO_OAUTH_REFRESH_TOKEN`. It is long-lived.
 ## How auth works at runtime
 
 Token exchange lives in `src/auth/zoho-auth.ts` (`getZohoAccessToken`, cached + auto-refreshed) —
-it is an auth helper, not a Flue model provider. At startup `registerProviders()`
-(`src/providers/index.ts`, invoked from `app.ts`) fetches a live access token and hands it to
-the Catalyst GLM provider. On a 401, `src/providers/catalyst-glm.ts` refreshes the token once
-via `getZohoAccessToken` and retries automatically. `ZOHO_DOCS_BEARER_TOKEN` is used directly by
-the KB MCP client (`src/mcp/zoho-kb.ts`) and is not refreshed automatically.
+it is an auth helper, not a Flue model provider. It backs the shared service-account credential
+used by the Catalyst NoSQL/Cache/Data Store/Stratus clients (`src/store/catalyst/`) and, keyed
+per user, `getUserToken` — never a model provider (the only registered provider is the built-in
+`anthropic` one, credential-only via `ANTHROPIC_API_KEY`; see `docs/providers.md`). On a 401,
+each Catalyst client refreshes the token once via `getZohoAccessToken` and retries automatically.
+`ZOHO_DOCS_BEARER_TOKEN` is used directly by the KB MCP client (`src/mcp/zoho-kb.ts`) and is not
+refreshed automatically.

@@ -20,6 +20,9 @@ import { defineZohoApiTool, type MutationGateContext, type ZohoApiDeps } from '.
 import { proposeMutation } from './mutation-gate';
 import { parseConnectionRequired } from './connection-required';
 
+// Minimal stub context fields every tool's `run()` now requires (toolCallId, log).
+const noopLog = { info() {}, warn() {}, error() {} };
+
 const TOKEN = 'test-token';
 const CRM_SCOPES = ['ZohoCRM.modules.ALL', 'ZohoCRM.settings.ALL'];
 const DESK_SCOPES = ['Desk.basic.READ', 'Desk.tickets.READ'];
@@ -82,23 +85,23 @@ async function catchError(run: () => unknown): Promise<Error> {
 describe('zoho_api SSRF protection', () => {
     it('allows requests to zoho.com subdomains', async () => {
         mockFetch([{ status: 200, body: '{}' }]);
-        await expect(tool().run({ input: { method: 'GET', url: 'https://api.zoho.com/crm/v8/test' } }))
-            .resolves.toMatchObject({ status: 200 });
+        await expect(tool().run({ data: { method: 'GET', url: 'https://api.zoho.com/crm/v8/test' } , toolCallId: 'test-call', log: noopLog}))
+            .resolves.toMatchObject({ output: { status: 200 } });
     });
 
     it('allows requests to zohoapis.com subdomains', async () => {
         mockFetch([{ status: 200, body: '{}' }]);
-        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }))
-            .resolves.toMatchObject({ status: 200 });
+        await expect(tool().run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } , toolCallId: 'test-call', log: noopLog}))
+            .resolves.toMatchObject({ output: { status: 200 } });
     });
 
     it('blocks requests to disallowed domains', async () => {
-        await expect(tool().run({ input: { method: 'GET', url: 'https://evil.com/steal' } }))
+        await expect(tool().run({ data: { method: 'GET', url: 'https://evil.com/steal' } , toolCallId: 'test-call', log: noopLog}))
             .rejects.toThrow('Request blocked');
     });
 
     it('blocks subdomain-spoofing attempts', async () => {
-        await expect(tool().run({ input: { method: 'GET', url: 'https://zohoapis.com.evil.com/' } }))
+        await expect(tool().run({ data: { method: 'GET', url: 'https://zohoapis.com.evil.com/' } , toolCallId: 'test-call', log: noopLog}))
             .rejects.toThrow('Request blocked');
     });
 
@@ -109,13 +112,13 @@ describe('zoho_api SSRF protection', () => {
             text: async () => '{}',
         });
         vi.stubGlobal('fetch', fetchMock);
-        await tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } });
+        await tool().run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } , toolCallId: 'test-call', log: noopLog});
         expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${TOKEN}`);
     });
 
     it('blocks redirects to disallowed domains', async () => {
         mockFetch([{ status: 302, location: 'https://evil.com/exfil' }]);
-        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/redirect' } }))
+        await expect(tool().run({ data: { method: 'GET', url: 'https://www.zohoapis.com/redirect' } , toolCallId: 'test-call', log: noopLog}))
             .rejects.toThrow('Redirect blocked');
     });
 
@@ -124,13 +127,13 @@ describe('zoho_api SSRF protection', () => {
             { status: 302, location: 'https://api.zohoapis.com/crm/v8/leads' },
             { status: 200, body: '{"data":[]}' },
         ]);
-        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }))
-            .resolves.toMatchObject({ status: 200, body: '{"data":[]}' });
+        await expect(tool().run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } , toolCallId: 'test-call', log: noopLog}))
+            .resolves.toMatchObject({ output: { status: 200, body: '{"data":[]}' } });
     });
 
     it('throws after exceeding the redirect limit', async () => {
         mockFetch([{ status: 302, location: 'https://www.zohoapis.com/next' }]);
-        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/start' } }))
+        await expect(tool().run({ data: { method: 'GET', url: 'https://www.zohoapis.com/start' } , toolCallId: 'test-call', log: noopLog}))
             .rejects.toThrow('Too many redirects');
     });
 });
@@ -139,24 +142,24 @@ describe('zoho_api response truncation', () => {
     it('passes a response under the limit through unchanged', async () => {
         const body = '{"data":[]}';
         mockFetch([{ status: 200, body }]);
-        await expect(tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }))
-            .resolves.toEqual({ status: 200, body });
+        await expect(tool().run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } , toolCallId: 'test-call', log: noopLog}))
+            .resolves.toEqual({ output: { status: 200, body } });
     });
 
     it('truncates a response over the limit and notes it, instead of blowing the model\'s context budget', async () => {
         const huge = 'x'.repeat(150_000);
         mockFetch([{ status: 200, body: huge }]);
-        const result = await tool().run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } });
-        expect(result.body.length).toBeLessThan(huge.length);
-        expect(result.body).toContain('x'.repeat(100_000));
-        expect(result.body).toMatch(/truncated: response was 150000 characters/);
+        const result = await tool().run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } , toolCallId: 'test-call', log: noopLog});
+        expect(result.output.body.length).toBeLessThan(huge.length);
+        expect(result.output.body).toContain('x'.repeat(100_000));
+        expect(result.output.body).toMatch(/truncated: response was 150000 characters/);
     });
 });
 
 describe('zoho_api connection/scope gate', () => {
     it('throws a connect payload when the user has none of the product scopes', async () => {
         const err = await catchError(() => tool({}, { getGrantedScopes: async () => ['AaaServer.profile.READ'] })
-            .run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }));
+            .run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } , toolCallId: 'test-call', log: noopLog}));
         const payload = parseConnectionRequired(err.message);
         expect(payload).toMatchObject({ kind: 'zoho', mode: 'connect', product: 'crm' });
     });
@@ -167,13 +170,13 @@ describe('zoho_api connection/scope gate', () => {
         const err = await catchError(() => tool({}, {
             getGrantedScopes: async () => ['ZohoCRM.org.READ'],
             products: [{ key: 'crm', label: 'Zoho CRM', description: '', scopes: [...CRM_SCOPES, 'ZohoCRM.org.READ'] }],
-        }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }));
+        }).run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } , toolCallId: 'test-call', log: noopLog}));
         expect(parseConnectionRequired(err.message)?.mode).toBe('connect');
     });
 
     it('throws a reconnect payload when some but not all product scopes are granted', async () => {
         const err = await catchError(() => tool({}, { getGrantedScopes: async () => [CRM_SCOPES[0]] })
-            .run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }));
+            .run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } , toolCallId: 'test-call', log: noopLog}));
         const payload = parseConnectionRequired(err.message);
         expect(payload).toMatchObject({ kind: 'zoho', mode: 'reconnect', product: 'crm' });
     });
@@ -181,13 +184,13 @@ describe('zoho_api connection/scope gate', () => {
     it('proceeds normally once all required scopes are granted', async () => {
         mockFetch([{ status: 200, body: '{}' }]);
         await expect(
-            tool({}, { getGrantedScopes: async () => CRM_SCOPES }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } }),
-        ).resolves.toMatchObject({ status: 200 });
+            tool({}, { getGrantedScopes: async () => CRM_SCOPES }).run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/leads' } , toolCallId: 'test-call', log: noopLog}),
+        ).resolves.toMatchObject({ output: { status: 200 } });
     });
 
     it('gates Desk calls independently from CRM', async () => {
         const err = await catchError(() => tool({}, { getGrantedScopes: async () => CRM_SCOPES })
-            .run({ input: { method: 'GET', url: 'https://desk.zoho.com/api/v1/tickets' } }));
+            .run({ data: { method: 'GET', url: 'https://desk.zoho.com/api/v1/tickets' } , toolCallId: 'test-call', log: noopLog}));
         const payload = parseConnectionRequired(err.message);
         expect(payload).toMatchObject({ kind: 'zoho', mode: 'connect', product: 'desk' });
     });
@@ -195,8 +198,8 @@ describe('zoho_api connection/scope gate', () => {
     it('does not gate a URL that is not a known product', async () => {
         mockFetch([{ status: 200, body: '{}' }]);
         await expect(
-            tool({}, { getGrantedScopes: async () => [] }).run({ input: { method: 'GET', url: 'https://api.zoho.com/oauth/user/info' } }),
-        ).resolves.toMatchObject({ status: 200 });
+            tool({}, { getGrantedScopes: async () => [] }).run({ data: { method: 'GET', url: 'https://api.zoho.com/oauth/user/info' } , toolCallId: 'test-call', log: noopLog}),
+        ).resolves.toMatchObject({ output: { status: 200 } });
     });
 
     it('checks the connection gate before the mutation gate', async () => {
@@ -204,7 +207,7 @@ describe('zoho_api connection/scope gate', () => {
         // not a confusing "missing mutationId" for an action that can't
         // succeed anyway.
         const err = await catchError(() => tool({ autoApprove: false }, { getGrantedScopes: async () => [] })
-            .run({ input: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}' } }));
+            .run({ data: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}' } , toolCallId: 'test-call', log: noopLog}));
         expect(parseConnectionRequired(err.message)?.kind).toBe('zoho');
     });
 });
@@ -212,15 +215,15 @@ describe('zoho_api connection/scope gate', () => {
 describe('zoho_api mutation confirmation gate', () => {
     it('blocks a mutating call with no mutationId, regardless of what the model claims', async () => {
         await expect(
-            tool({ autoApprove: false }).run({ input: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}' } }),
+            tool({ autoApprove: false }).run({ data: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}' } , toolCallId: 'test-call', log: noopLog}),
         ).rejects.toThrow('Mutating call blocked');
     });
 
     it('blocks a mutating call with a made-up mutationId', async () => {
         await expect(
             tool({ autoApprove: false }).run({
-                input: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}', mutationId: 'not-a-real-id' },
-            }),
+                data: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}', mutationId: 'not-a-real-id' },
+            toolCallId: 'test-call', log: noopLog}),
         ).rejects.toThrow('Mutating call blocked');
     });
 
@@ -228,8 +231,8 @@ describe('zoho_api mutation confirmation gate', () => {
         const mutationId = proposeMutation('c1', 'update the deal', 'turn-1');
         await expect(
             tool({ conversationId: 'c1', requestId: 'turn-1', autoApprove: false }).run({
-                input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
-            }),
+                data: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+            toolCallId: 'test-call', log: noopLog}),
         ).rejects.toThrow('Mutating call blocked');
     });
 
@@ -239,21 +242,21 @@ describe('zoho_api mutation confirmation gate', () => {
         const mutationId = proposeMutation('c1', 'update the deal', 'turn-1');
         await expect(
             tool({ conversationId: 'c1', requestId: 'turn-2', autoApprove: false }).run({
-                input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
-            }),
-        ).resolves.toMatchObject({ status: 200 });
+                data: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+            toolCallId: 'test-call', log: noopLog}),
+        ).resolves.toMatchObject({ output: { status: 200 } });
     });
 
     it('is one-time use: a second attempt with the same (already-consumed) mutationId is blocked', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200, headers: { get: () => null }, text: async () => '{}' }));
         const mutationId = proposeMutation('c1', 'update the deal', 'turn-1');
         await tool({ conversationId: 'c1', requestId: 'turn-2', autoApprove: false }).run({
-            input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
-        });
+            data: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+        toolCallId: 'test-call', log: noopLog});
         await expect(
             tool({ conversationId: 'c1', requestId: 'turn-3', autoApprove: false }).run({
-                input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
-            }),
+                data: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+            toolCallId: 'test-call', log: noopLog}),
         ).rejects.toThrow('Mutating call blocked');
     });
 
@@ -261,23 +264,23 @@ describe('zoho_api mutation confirmation gate', () => {
         const mutationId = proposeMutation('conversation-A', 'update the deal', 'turn-1');
         await expect(
             tool({ conversationId: 'conversation-B', requestId: 'turn-2', autoApprove: false }).run({
-                input: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
-            }),
+                data: { method: 'PUT', url: 'https://www.zohoapis.com/crm/v8/Deals/1', body: '{}', mutationId },
+            toolCallId: 'test-call', log: noopLog}),
         ).rejects.toThrow('Mutating call blocked');
     });
 
     it('bypasses the gate entirely when Auto mode is on, even with no mutationId', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200, headers: { get: () => null }, text: async () => '{}' }));
         await expect(
-            tool({ autoApprove: true }).run({ input: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}' } }),
-        ).resolves.toMatchObject({ status: 200 });
+            tool({ autoApprove: true }).run({ data: { method: 'POST', url: 'https://www.zohoapis.com/crm/v8/Deals', body: '{}' } , toolCallId: 'test-call', log: noopLog}),
+        ).resolves.toMatchObject({ output: { status: 200 } });
     });
 
     it('never gates non-mutating (GET) calls', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200, headers: { get: () => null }, text: async () => '{}' }));
         await expect(
-            tool({ autoApprove: false }).run({ input: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/Deals/1' } }),
-        ).resolves.toMatchObject({ status: 200 });
+            tool({ autoApprove: false }).run({ data: { method: 'GET', url: 'https://www.zohoapis.com/crm/v8/Deals/1' } , toolCallId: 'test-call', log: noopLog}),
+        ).resolves.toMatchObject({ output: { status: 200 } });
     });
 });
 
@@ -290,8 +293,8 @@ describe('zoho_api extra headers', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
         await tool().run({
-            input: { method: 'GET', url: 'https://desk.zoho.com/api/v1/tickets', headers: { orgId: '123' } },
-        });
+            data: { method: 'GET', url: 'https://desk.zoho.com/api/v1/tickets', headers: { orgId: '123' } },
+        toolCallId: 'test-call', log: noopLog});
         expect(fetchMock.mock.calls[0][1].headers.orgId).toBe('123');
     });
 
@@ -303,13 +306,13 @@ describe('zoho_api extra headers', () => {
         });
         vi.stubGlobal('fetch', fetchMock);
         await tool().run({
-            input: {
+            data: {
                 method: 'POST',
                 url: 'https://www.zohoapis.com/crm/v8/Leads',
                 body: '{}',
                 headers: { Authorization: 'Bearer evil', 'Content-Type': 'text/plain' },
             },
-        });
+        toolCallId: 'test-call', log: noopLog});
         const sentHeaders = fetchMock.mock.calls[0][1].headers;
         expect(sentHeaders.Authorization).toBe(`Bearer ${TOKEN}`);
         expect(sentHeaders['Content-Type']).toBe('application/json');

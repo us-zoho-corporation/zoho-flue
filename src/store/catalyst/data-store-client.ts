@@ -16,7 +16,7 @@ export interface CatalystClientOptions {
  * Thin REST client over the Catalyst Data Store, authenticated with the
  * service-account admin token. Centralizes header injection and the
  * evict-and-retry-once-on-401 behavior so repositories stay declarative.
- * Mirrors the token-refresh pattern in `src/providers/catalyst-glm.ts`.
+ * Mirrors the token-refresh pattern in `src/store/catalyst/nosql-client.ts`.
  */
 export class CatalystDataStoreClient {
 	/**

@@ -39,20 +39,20 @@ export function defineProposeMutationTool(conversationId: string, requestId: str
 		}),
 		/**
 		 * Registers the proposed mutation and returns its id.
-		 * @param input - The action description and field list to register.
+		 * @param data - The action description and field list to register.
 		 * @returns The minted `mutationId` and a note instructing the model to stop and wait.
 		 */
-		async run({ input }) {
-			const description = [input.action, ...input.fields.map((f) => `${f.label}: ${f.value}`)].join('\n');
+		async run({ data }) {
+			const description = [data.action, ...data.fields.map((f) => `${f.label}: ${f.value}`)].join('\n');
 			const mutationId = proposeMutation(conversationId, description, requestId);
-			return {
+			return { output: {
 				mutationId,
 				note:
 					'Registered. Reply with one short line saying what this will do — the confirmation card '
 					+ 'already shows the field values, so do not repeat them — then end your turn now, do not '
 					+ 'call zoho_api yet, it will be rejected. Once the user responds (in their next message), '
 					+ 'retry zoho_api with this exact mutationId if they approved.',
-			};
+			} };
 		},
 	});
 }
@@ -108,15 +108,15 @@ export function defineProposeMutationBatchTool(conversationId: string, requestId
 		}),
 		/**
 		 * Registers every action in the batch and returns their ids, in order.
-		 * @param input - The ordered list of actions (each with its own field list) to register.
-		 * @returns The minted `mutationIds` (same order as `input.actions`) and a note instructing the model to stop and wait.
+		 * @param data - The ordered list of actions (each with its own field list) to register.
+		 * @returns The minted `mutationIds` (same order as `data.actions`) and a note instructing the model to stop and wait.
 		 */
-		async run({ input }) {
-			const mutationIds = input.actions.map((a) => {
+		async run({ data }) {
+			const mutationIds = data.actions.map((a) => {
 				const description = [a.action, ...a.fields.map((f) => `${f.label}: ${f.value}`)].join('\n');
 				return proposeMutation(conversationId, description, requestId);
 			});
-			return {
+			return { output: {
 				mutationIds,
 				note:
 					'Registered. Reply with one short line saying what this batch will do — the confirmation '
@@ -125,7 +125,7 @@ export function defineProposeMutationBatchTool(conversationId: string, requestId
 					+ 'their next message), if they approved, retry zoho_api once per action IN THE SAME '
 					+ 'ORDER, each with its matching mutationId from this same batch (mutationIds[0] for '
 					+ 'actions[0], mutationIds[1] for actions[1], and so on).',
-			};
+			} };
 		},
 	});
 }

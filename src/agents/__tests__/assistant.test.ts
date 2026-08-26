@@ -11,13 +11,13 @@ vi.mock('../../config', () => ({
 		zohoApiMaxRedirects: 5,
 		chatModels: [
 			{ key: 'claude', label: 'Claude Sonnet 5', spec: 'anthropic/claude-sonnet-5', requiresAuth: false },
-			{ key: 'glm', label: 'Zoho GLM 4.7 Flash', spec: 'catalyst-glm/crm-di-glm47b_30b_it', requiresAuth: true },
+			{ key: 'other', label: 'Other Model', spec: 'other-provider/other-model', requiresAuth: true },
 		],
 		defaultChatModelKey: 'claude',
 	},
 }));
 
-// route() only needs resolveUserId/getUserToken; resolveUserId reads a plain
+// assistantMiddleware only needs resolveUserId/getUserToken; resolveUserId reads a plain
 // test header instead of a real signed session cookie — session-cookie parsing
 // itself is covered by src/auth/session.test.ts, not this file's concern.
 vi.mock('../../auth', () => ({
@@ -40,17 +40,18 @@ vi.mock('../../store', async () => {
 	return { getStores: () => stores };
 });
 
-import { modelForConversation, resolveHitlAutoApprove, route } from '../assistant';
+import { modelForConversation, resolveHitlAutoApprove, assistantMiddleware } from '../assistant';
 
 /**
- * Builds a minimal Hono app that mounts `route` under test, terminating with a
- * probe handler standing in for Flue's own downstream agent handler.
+ * Builds a minimal Hono app that mounts `assistantMiddleware` under test,
+ * terminating with a probe handler standing in for the real `createAgentRouter`
+ * mount.
  * @returns The configured Hono app.
  */
 function makeApp() {
 	const app = new Hono();
-	app.use('/agents/:name/:id', route);
-	app.all('/agents/:name/:id', (c) => c.json({ ok: true }));
+	app.use('/agents/assistant/:id', assistantMiddleware);
+	app.all('/agents/assistant/:id', (c) => c.json({ ok: true }));
 	return app;
 }
 
@@ -70,7 +71,7 @@ function requestAs(app: Hono, userId: string | undefined, id: string) {
 
 describe('modelForConversation', () => {
 	it('resolves the model from a `<modelKey>__<uuid>` prefix', () => {
-		expect(modelForConversation('glm__abc')).toBe('catalyst-glm/crm-di-glm47b_30b_it');
+		expect(modelForConversation('other__abc')).toBe('other-provider/other-model');
 	});
 
 	it('falls back to the default model for an unknown key', () => {
@@ -102,7 +103,7 @@ describe('resolveHitlAutoApprove', () => {
 	});
 });
 
-describe('route (conversation ownership enforcement)', () => {
+describe('assistantMiddleware (conversation ownership enforcement)', () => {
 	it('lets the first user to touch a conversation id through', async () => {
 		const res = await requestAs(makeApp(), 'user-a', 'claude__conv-1');
 		expect(res.status).toBe(200);

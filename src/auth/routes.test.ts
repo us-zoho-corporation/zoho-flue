@@ -347,7 +347,7 @@ describe('GET /dev-login (test seam)', () => {
 		// The minted cookie authenticates /me and the requireUser-gated /protected.
 		const me = await (await app.request('/me', { headers: { Cookie: session } })).json();
 		expect(me).toMatchObject({ authenticated: true, user: { userId: 'dev-user', email: 'dev@example.com' } });
-		expect(me.scopes).toContain('QuickML.deployment.READ');
+		expect(me.scopes).toContain('AaaServer.profile.READ');
 		expect((await app.request('/protected', { headers: { Cookie: session } })).status).toBe(200);
 
 		// Fake user + placeholder token were persisted.

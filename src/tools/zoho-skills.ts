@@ -69,22 +69,22 @@ export function defineZohoSkillTool() {
 		output: v.string(),
 		/**
 		 * Reads the requested skill doc from disk.
-		 * @param input - The skill name, and optionally a reference filename within its `references/` directory.
+		 * @param data - The skill name, and optionally a reference filename within its `references/` directory.
 		 * @returns The requested doc's text content.
 		 * @throws {Error} If `reference` is given but does not match a file in that skill's `references/` directory.
 		 */
-		async run({ input }) {
-			const skillDir = join(SKILLS_DIR, input.skill);
-			if (!input.reference) {
+		async run({ data }) {
+			const skillDir = join(SKILLS_DIR, data.skill);
+			if (!data.reference) {
 				return readSkillDoc(join(skillDir, 'SKILL.md'));
 			}
 
 			const refDir = join(skillDir, 'references');
 			const available = await readdir(refDir).catch(() => [] as string[]);
-			const filename = input.reference.endsWith('.md') ? input.reference : `${input.reference}.md`;
+			const filename = data.reference.endsWith('.md') ? data.reference : `${data.reference}.md`;
 			if (!available.includes(filename)) {
 				throw new Error(
-					`Unknown reference '${input.reference}' for skill '${input.skill}'. `
+					`Unknown reference '${data.reference}' for skill '${data.skill}'. `
 					+ `Available: ${available.length ? available.join(', ') : 'none'}.`,
 				);
 			}

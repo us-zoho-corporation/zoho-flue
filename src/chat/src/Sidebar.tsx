@@ -1,15 +1,12 @@
 import {
   CaretDown,
   ChatText,
-  ClockCounterClockwise,
   GearSix,
   Lightning,
   MagnifyingGlass,
   Plugs,
   Plus,
-  Robot,
   Trash,
-  TreeStructure,
 } from '@phosphor-icons/react';
 import { useSidebar } from '@cloudflare/kumo';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -40,19 +37,13 @@ interface SidebarProps {
   onNew: () => void;
   onDelete: (id: string) => void;
   onSettings: () => void;
-  onWorkflows: () => void;
   onSkills: () => void;
-  onAgents: () => void;
-  onRuns: () => void;
   onMcp: () => void;
 }
 
-const WORKSPACE: { key: string; label: string; icon: typeof Robot }[] = [
-  { key: 'agents', label: 'Agents', icon: Robot },
+const WORKSPACE: { key: string; label: string; icon: typeof Lightning }[] = [
   { key: 'skills', label: 'Skills', icon: Lightning },
-  { key: 'workflows', label: 'Workflows', icon: TreeStructure },
   { key: 'mcp', label: 'MCP servers', icon: Plugs },
-  { key: 'runs', label: 'Runs', icon: ClockCounterClockwise },
   { key: 'settings', label: 'Settings', icon: GearSix },
 ];
 
@@ -66,14 +57,11 @@ const WORKSPACE: { key: string; label: string; icon: typeof Robot }[] = [
  * @param onNew - Called when "New chat" is clicked.
  * @param onDelete - Called with a session id once its delete animation finishes and it should be removed.
  * @param onSettings - Called when the "Settings" workspace item is clicked.
- * @param onWorkflows - Called when the "Workflows" workspace item is clicked.
  * @param onSkills - Called when the "Skills" workspace item is clicked.
- * @param onAgents - Called when the "Agents" workspace item is clicked.
- * @param onRuns - Called when the "Runs" workspace item is clicked.
  * @param onMcp - Called when the "MCP servers" workspace item is clicked.
  * @returns The sidebar `<aside>` plus a portal-rendered context menu overlay when one is open.
  */
-export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSettings, onWorkflows, onSkills, onAgents, onRuns, onMcp }: SidebarProps) {
+export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSettings, onSkills, onMcp }: SidebarProps) {
   const { open, isMobile, openMobile, setOpenMobile } = useSidebar();
   const visible = isMobile ? openMobile : open;
   const [search, setSearch] = useState('');
@@ -84,7 +72,7 @@ export function Sidebar({ sessions, activeId, onSelect, onNew, onDelete, onSetti
   // shell, so the chosen view is actually visible underneath.
   const closeOnMobile = useCallback(() => { if (isMobile) setOpenMobile(false); }, [isMobile, setOpenMobile]);
   const handlers: Record<string, () => void> = {
-    agents: onAgents, skills: onSkills, workflows: onWorkflows, mcp: onMcp, runs: onRuns, settings: onSettings,
+    skills: onSkills, mcp: onMcp, settings: onSettings,
   };
 
   const running = useRunningIds();

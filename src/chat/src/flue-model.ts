@@ -1,7 +1,7 @@
 // Pure view-model helpers that turn Flue's flat message list into the shape the
 // chat UI renders. Kept free of React so the turn-collapsing rules — the source
 // of several chat-experience bugs — can be unit-tested directly.
-import type { FlueConversationMessage } from '@flue/react';
+import type { FlueConversationMessage } from '@flue/sdk';
 import { isA2uiTool, type A2uiToolPart } from './a2ui/index.ts';
 
 export interface ToolCallInfo {

@@ -8,6 +8,9 @@ const { buildMcpTools, jsonSchemaToValibot } = await import('./tools');
 import type { McpServer } from '../store/types';
 import { parseConnectionRequired } from '../tools/connection-required';
 
+// Minimal stub context fields every tool's `run()` now requires (toolCallId, log).
+const noopLog = { info() {}, warn() {}, error() {} };
+
 /**
  * Builds a minimal `McpServer` fixture for tests, with sensible defaults for
  * every field, allowing individual fields to be overridden per test case.
@@ -42,11 +45,11 @@ describe('buildMcpTools', () => {
 		expect(tools).toHaveLength(1);
 		expect(tools[0].name).toMatch(/^mcp_my_server_search/);
 
-		const res = await tools[0].run({ input: { q: 'hello' } });
+		const res = await tools[0].run({ data: { q: 'hello' } , toolCallId: 'test-call', log: noopLog});
 		expect(conn.callMcpTool).toHaveBeenCalledWith(
 			{ url: 'https://a.example.com/mcp', transport: 'http', authToken: 'tok' }, 'search', { q: 'hello' },
 		);
-		expect(res).toEqual([{ type: 'text', text: 'TOOL OUTPUT' }]);
+		expect(res).toEqual({ output: [{ type: 'text', text: 'TOOL OUTPUT' }] });
 	});
 
 	it('throws a connection-required (reconnect) payload instead of a fake-successful text result when a tool call fails', async () => {
@@ -55,7 +58,7 @@ describe('buildMcpTools', () => {
 		// input error — see connection-required.ts.
 		conn.callMcpTool.mockRejectedValueOnce(new Error('boom'));
 		const tools = buildMcpTools([{ server: server(), authToken: null, tools: [{ name: 'x', description: '' }] }]);
-		const err = await Promise.resolve(tools[0].run({ input: {} })).then(
+		const err = await Promise.resolve(tools[0].run({ data: {} , toolCallId: 'test-call', log: noopLog})).then(
 			() => { throw new Error('expected run() to throw'); },
 			(e: unknown) => e as Error,
 		);

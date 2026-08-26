@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
+// Minimal stub context fields every tool's `run()` now requires (toolCallId, log).
+const noopLog = { info() {}, warn() {}, error() {} };
+
 vi.mock('../config', () => ({ config: { zohoDocsMcpUrl: 'https://help-docs.zoho-forge.com/mcp' } }));
 
 // Mocked MCP SDK client, mirroring src/mcp/connect.test.ts's pattern.
@@ -132,27 +135,27 @@ async function catchError(run: () => unknown): Promise<Error> {
 describe('defineZohoKbTools', () => {
     it('throws a docs connection-required payload (mode: connect) when there is no logged-in user', async () => {
         const [searchDocs] = defineZohoKbTools({ userId: undefined, getDocsToken: async () => 'tok' });
-        const err = await catchError(() => searchDocs.run({ input: { query: 'x' } }));
+        const err = await catchError(() => searchDocs.run({ data: { query: 'x' } , toolCallId: 'test-call', log: noopLog}));
         expect(parseConnectionRequired(err.message)).toMatchObject({ kind: 'docs', mode: 'connect', label: 'Zoho Knowledge Base' });
         expect(ctl.connect).not.toHaveBeenCalled();
     });
 
     it('throws mode: connect when the user has never connected the docs knowledge base', async () => {
         const [searchDocs] = defineZohoKbTools({ userId: 'u1', getDocsToken: async () => { throw new Error('not connected'); } });
-        const err = await catchError(() => searchDocs.run({ input: { query: 'x' } }));
+        const err = await catchError(() => searchDocs.run({ data: { query: 'x' } , toolCallId: 'test-call', log: noopLog}));
         expect(parseConnectionRequired(err.message)).toMatchObject({ kind: 'docs', mode: 'connect' });
     });
 
     it('throws mode: reconnect when the stored refresh token was rejected', async () => {
         const [searchDocs] = defineZohoKbTools({ userId: 'u1', getDocsToken: async () => { throw new DocsReauthRequiredError(); } });
-        const err = await catchError(() => searchDocs.run({ input: { query: 'x' } }));
+        const err = await catchError(() => searchDocs.run({ data: { query: 'x' } , toolCallId: 'test-call', log: noopLog}));
         expect(parseConnectionRequired(err.message)).toMatchObject({ kind: 'docs', mode: 'reconnect' });
     });
 
     it('opens a short-lived client per call with the user\'s own access token, and closes it afterward', async () => {
         const getDocsToken = vi.fn(async () => 'user-access-token');
         const [searchDocs] = defineZohoKbTools({ userId: 'u1', getDocsToken });
-        await searchDocs.run({ input: { query: 'x' } });
+        await searchDocs.run({ data: { query: 'x' } , toolCallId: 'test-call', log: noopLog});
         expect(getDocsToken).toHaveBeenCalledWith('u1');
         expect(ctl.connect).toHaveBeenCalledTimes(1);
         expect(ctl.callTool).toHaveBeenCalledTimes(1);
@@ -162,8 +165,8 @@ describe('defineZohoKbTools', () => {
     it('get_page and list_products also authenticate with the user\'s own token', async () => {
         const getDocsToken = vi.fn(async () => 'user-access-token');
         const [, getPage, listProducts] = defineZohoKbTools({ userId: 'u1', getDocsToken });
-        await getPage.run({ input: { url: 'https://help.zoho.com/x' } });
-        await listProducts.run({ input: {} });
+        await getPage.run({ data: { url: 'https://help.zoho.com/x' } , toolCallId: 'test-call', log: noopLog});
+        await listProducts.run({ data: {} , toolCallId: 'test-call', log: noopLog});
         expect(getDocsToken).toHaveBeenCalledTimes(2);
         expect(ctl.callTool).toHaveBeenCalledTimes(2);
     });

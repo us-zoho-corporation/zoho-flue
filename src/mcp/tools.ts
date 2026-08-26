@@ -28,7 +28,7 @@ function slug(s: string): string {
  * Maps a single JSON Schema property definition to a Valibot schema, covering
  * the primitive types (`string`, `number`/`integer`, `boolean`, `array`) and
  * falling back to a permissive `v.any()` for objects, unions, `$ref`s, or any
- * other shape too complex for Catalyst GLM's tool-calling. Preserves the
+ * other shape too complex to map simply. Preserves the
  * property's `description`, if present, on the resulting schema.
  * @param prop - The JSON Schema property value (untyped, since it comes from an external MCP tool's schema).
  * @returns A Valibot schema matching the property's declared type.
@@ -42,7 +42,7 @@ function propToValibot(prop: unknown): v.GenericSchema {
 		case 'number': case 'integer': base = v.number(); break;
 		case 'boolean': base = v.boolean(); break;
 		case 'array': base = v.array(v.any()); break;
-		default: base = v.any(); // objects / unions / $ref → permissive (kept simple for GLM)
+		default: base = v.any(); // objects / unions / $ref → permissive (kept simple)
 	}
 	return desc ? v.pipe(base, v.description(desc)) : base;
 }
@@ -51,7 +51,7 @@ function propToValibot(prop: unknown): v.GenericSchema {
  * Converts an MCP tool's JSON Schema into a *shallow* Valibot object schema:
  * top-level properties mapped to primitive/permissive types, complex shapes
  * flattened to `any`. This keeps the schema the model sees simple — no `$ref`,
- * `$defs`, `anyOf`, or `outputSchema` that Catalyst GLM rejects.
+ * `$defs`, `anyOf`, or `outputSchema`.
  * @param schema - The MCP tool's input JSON Schema, or `undefined` if it declared none.
  * @returns A Valibot object schema whose properties are required/optional per the input schema's `required` list, or an empty permissive object schema if `schema` isn't a top-level object schema.
  */
@@ -103,13 +103,13 @@ export function buildMcpTools(loaded: LoadedServer[]): McpTool[] {
 				 * `ConnectionRequiredPayload` instead of returning a fake-successful
 				 * text result, so the chat surfaces a Reconnect affordance instead
 				 * of the model silently absorbing (and maybe hiding) the failure.
-				 * @param input - The tool's arguments, as the model supplied them.
+				 * @param data - The tool's arguments, as the model supplied them.
 				 * @returns The remote tool's text output.
 				 * @throws {Error} A `ConnectionRequiredPayload`-encoded error if the call fails.
 				 */
-				async run({ input }) {
+				async run({ data }) {
 					try {
-						return [{ type: 'text', text: await callMcpTool(target, t.name, (input ?? {}) as Record<string, unknown>) }];
+						return { output: [{ type: 'text', text: await callMcpTool(target, t.name, (data ?? {}) as Record<string, unknown>) }] };
 					} catch {
 						throwConnectionRequired({ kind: 'mcp', mode: 'reconnect', label: server.name, serverId: server.id });
 					}

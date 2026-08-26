@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FLUE_SCHEMA_VERSION } from '@flue/runtime/adapter';
+import { FLUE_FORMAT_VERSION } from '@flue/runtime/adapter';
 import { CatalystNoSqlClient, encodeValue } from '../nosql-client';
 import { createNoSqlState, handleNoSql, type NoSqlState } from '../nosql-fake';
 import { createStratusState, handleStratus, type StratusState } from './stratus-fake';
 import { NOSQL_OPTS } from './nosql-harness';
 import { CatalystStratusClient } from './stratus-client';
 import { createCatalystPersistenceAdapter, FLUE_META_TABLE } from './adapter';
-import { RUNS_TABLE } from './run-store';
+import { SUBMISSIONS_TABLE } from './agent-submission-store';
 
 const SCHEMA = {
 	[FLUE_META_TABLE]: { partitionAttr: 'Key' },
-	[RUNS_TABLE]: { partitionAttr: 'Scope', sortAttr: 'RunId' },
+	[SUBMISSIONS_TABLE]: { partitionAttr: 'Scope', sortAttr: 'Id' },
 };
 const STRATUS_OPTS = {
 	objectBaseUrl: 'https://testbucket-development.zohostratus.com',
@@ -49,29 +49,35 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('CatalystPersistenceAdapter', () => {
-	it('records the schema version on first migrate and is idempotent', async () => {
+	it('records the format version on first migrate and is idempotent', async () => {
 		const adapter = makeAdapter();
 		await adapter.migrate?.();
 		await adapter.migrate?.();
 		expect(nosql.tables.get(FLUE_META_TABLE)?.size).toBe(1);
 	});
 
-	it('rejects an unsupported stored schema version', async () => {
+	it('rejects an unsupported stored format version', async () => {
 		nosql.tables.set(FLUE_META_TABLE, new Map([
-			['schema', { Key: encodeValue('schema'), Version: encodeValue(String(FLUE_SCHEMA_VERSION + 1)) }],
+			['format', { Key: encodeValue('format'), Version: encodeValue(String(FLUE_FORMAT_VERSION + 1)) }],
 		]));
 		await expect(makeAdapter().migrate?.()).rejects.toThrow();
 	});
 
-	it('connect() returns all five stores that round-trip', async () => {
+	it('connect() returns all three stores that round-trip', async () => {
 		const adapter = makeAdapter();
 		await adapter.migrate?.();
 		const stores = await adapter.connect();
-		expect(stores.executionStore).toBeDefined();
-		expect(stores.eventStreamStore).toBeDefined();
+		expect(stores.submissionStore).toBeDefined();
 		expect(stores.conversationStreamStore).toBeDefined();
 		expect(stores.attachmentStore).toBeDefined();
-		await stores.runStore.createRun({ runId: 'r1', workflowName: 'wf', startedAt: '2026-06-01T00:00:00.000Z', input: {} });
-		expect(await stores.runStore.getRun('r1')).toMatchObject({ runId: 'r1', workflowName: 'wf', status: 'active' });
+
+		const admission = await stores.submissionStore.admitDispatch({
+			submissionId: 's1',
+			agent: 'agent-a',
+			id: 'instance-1',
+			message: { kind: 'user', body: 'hi' },
+			acceptedAt: '2026-06-01T00:00:00.000Z',
+		});
+		expect(admission).toMatchObject({ kind: 'submission', submission: { submissionId: 's1', status: 'queued' } });
 	});
 });

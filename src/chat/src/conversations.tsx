@@ -1,5 +1,5 @@
-import { useFlueClient } from '@flue/react';
-import type { AgentConversationObservation, FlueClient, FlueConversationMessage, FlueConversationPart, FlueConversationState } from '@flue/sdk';
+import { createFlueClient } from '@flue/sdk';
+import type { AgentConversationObservation, FlueClient, FlueConversationMessage, FlueConversationPart, FlueConversationState, RequestHeaders } from '@flue/sdk';
 import { createContext, useContext, useMemo, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { collapseTurns } from './flue-model.ts';
@@ -37,14 +37,16 @@ interface Entry {
 }
 
 /**
- * App-level store over `client.agents.observe()`. Each conversation's durable
- * observation lives here — decoupled from React component/view lifetime — so a
- * response keeps streaming in its own thread regardless of what's on screen. Only
- * the active conversation plus any still-running ones hold a live connection.
+ * App-level store over each conversation's own `FlueClient.observe()`. Each
+ * conversation's durable observation lives here — decoupled from React
+ * component/view lifetime — so a response keeps streaming in its own thread
+ * regardless of what's on screen. Only the active conversation plus any
+ * still-running ones hold a live connection.
  */
 export class ConversationsStore {
   private entries = new Map<string, Entry>();
   private views = new Map<string, FlueChat>();
+  private clients = new Map<string, FlueClient>();
   private senders = new Map<string, (text: string, images?: ChatAttachment[]) => Promise<void>>();
   private stoppers = new Map<string, () => Promise<void>>();
   private listeners = new Set<() => void>();
@@ -52,11 +54,28 @@ export class ConversationsStore {
   private running: Set<string> = new Set(); // stable ref; replaced only when membership changes
 
   /**
-   * Creates a store bound to a single agent, backed by the given Flue client.
-   * @param client - The Flue client used to observe/send/abort agent conversations.
-   * @param agentName - The name of the agent whose conversations this store manages.
+   * Creates a store bound to a single agent's HTTP mount path. Flue v2 has no
+   * deployment-wide client — each conversation gets its own `FlueClient`,
+   * lazily created and cached by {@link clientFor}.
+   * @param mountUrl - The agent's HTTP mount path (e.g. `/agents/assistant`), relative
+   * to which each conversation's own client URL (`${mountUrl}/${convId}`) is built.
+   * @param headers - Headers merged into every request of every conversation's client
+   * (static, or a function re-evaluated per request/reconnect).
    */
-  constructor(private readonly client: FlueClient, private readonly agentName: string) {}
+  constructor(private readonly mountUrl: string, private readonly headers?: RequestHeaders) {}
+
+  /**
+   * Returns the `FlueClient` for a conversation, creating and caching it on
+   * first use — one client per conversation URL, since Flue v2 has no
+   * deployment-wide, name-addressed client to share.
+   * @param convId - The conversation id to get a client for.
+   * @returns The (possibly newly created) client addressing that conversation.
+   */
+  private clientFor(convId: string): FlueClient {
+    let c = this.clients.get(convId);
+    if (!c) { c = createFlueClient({ url: `${this.mountUrl}/${convId}`, headers: this.headers }); this.clients.set(convId, c); }
+    return c;
+  }
 
   /**
    * Registers a listener to be notified whenever the store's state changes.
@@ -118,7 +137,7 @@ export class ConversationsStore {
    * @param convId - The conversation id to abort.
    */
   async abort(convId: string): Promise<void> {
-    try { await this.client.agents.abort(this.agentName, convId); } catch { /* ignore */ }
+    try { await this.clientFor(convId).abort(); } catch { /* ignore */ }
   }
 
   /** Closes every observation and clears all state (e.g. on logout). */
@@ -126,6 +145,7 @@ export class ConversationsStore {
     for (const convId of [...this.entries.keys()]) this.close(convId);
     this.activeId = undefined;
     this.views.clear();
+    this.clients.clear();
     this.senders.clear();
     this.stoppers.clear();
     this.running = new Set();
@@ -141,7 +161,7 @@ export class ConversationsStore {
   private ensureOpen(convId: string): Entry {
     const existing = this.entries.get(convId);
     if (existing) return existing;
-    const observation = this.client.agents.observe(this.agentName, convId, { live: 'sse' });
+    const observation = this.clientFor(convId).observe({ live: 'sse' });
     const entry: Entry = { observation, unsub: () => {} };
     this.entries.set(convId, entry);
     entry.unsub = observation.subscribe(() => this.recompute(convId));
@@ -162,6 +182,7 @@ export class ConversationsStore {
     try { entry.observation.close(); } catch { /* ignore */ }
     this.entries.delete(convId);
     this.views.delete(convId);
+    this.clients.delete(convId);
     this.setRunning(convId, false);
     this.emit();
   }
@@ -240,7 +261,7 @@ export class ConversationsStore {
    * @param convId - The conversation id to send to.
    * @param text - The message text to send. May be empty when `images` carries the whole message.
    * @param images - Image attachments to send alongside `text`.
-   * @throws {Error} If `client.agents.send` rejects (e.g. network failure); rethrown after the optimistic echo is rolled back.
+   * @throws {Error} If the conversation's `FlueClient.send` rejects (e.g. network failure); rethrown after the optimistic echo is rolled back.
    */
   async send(convId: string, text: string, images?: ChatAttachment[]): Promise<void> {
     const entry = this.ensureOpen(convId);
@@ -253,14 +274,19 @@ export class ConversationsStore {
     entry.overlay = {
       id: `optimistic-${Date.now()}`,
       role: 'user',
+      purpose: 'user',
+      display: 'visible',
       parts: text ? [...fileParts, { type: 'text', text, state: 'done' }] : fileParts,
       metadata: { timestamp: new Date().toISOString() },
     } as FlueConversationMessage;
     this.recompute(convId); // reflect the echo immediately
     try {
-      await this.client.agents.send(this.agentName, convId, {
-        message: text,
-        images: images?.length ? images.map((img) => ({ type: 'image', data: img.data, mimeType: img.mimeType, filename: img.filename })) : undefined,
+      await this.clientFor(convId).send({
+        message: {
+          kind: 'user',
+          body: text,
+          ...(images?.length ? { attachments: images.map((img) => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType, filename: img.filename })) } : {}),
+        },
       });
       // The instance may have been `absent` when we started observing (a brand-new
       // conversation). `send` just created it, so refresh the observation to catch
@@ -294,15 +320,16 @@ export class ConversationsStore {
 const StoreContext = createContext<ConversationsStore | null>(null);
 
 /**
- * Creates (and memoizes) a `ConversationsStore` for the given agent and makes
- * it available to descendants via context.
- * @param agentName - The name of the agent whose conversations are managed.
+ * Creates (and memoizes) a `ConversationsStore` for the given agent mount path
+ * and makes it available to descendants via context.
+ * @param mountUrl - The agent's HTTP mount path (e.g. `/agents/assistant`), passed
+ * through to `ConversationsStore` to build each conversation's own client URL.
+ * @param headers - Headers merged into every request of every conversation's client.
  * @param children - The subtree that can access the store via {@link useConversationsStore}.
  * @returns The context provider element wrapping `children`.
  */
-export function ConversationsProvider({ agentName, children }: { agentName: string; children: ReactNode }) {
-  const client = useFlueClient();
-  const store = useMemo(() => new ConversationsStore(client, agentName), [client, agentName]);
+export function ConversationsProvider({ mountUrl, headers, children }: { mountUrl: string; headers?: RequestHeaders; children: ReactNode }) {
+  const store = useMemo(() => new ConversationsStore(mountUrl, headers), [mountUrl, headers]);
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
 }
 

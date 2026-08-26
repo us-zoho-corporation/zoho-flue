@@ -1,10 +1,13 @@
-import { registerProvider } from '@flue/runtime';
+import { createProvider } from '@earendil-works/pi-ai';
+import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messages.lazy';
+import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
+import { setProvider } from '@flue/runtime';
 import { config } from '../config';
 
 /**
  * Anthropic is one of Flue's built-in catalog providers — reachable with only
- * `ANTHROPIC_API_KEY` in the environment. We still register it explicitly here,
- * the declared home for the provider (mirroring `catalyst-glm.ts`), so its
+ * `ANTHROPIC_API_KEY` in the environment. We still register it explicitly here
+ * (the declared home for provider setup — see `src/providers/index.ts`), so its
  * credential is wired from `config` rather than an implicit env lookup, and so
  * startup fails fast when an `anthropic/*` model is offered without a key.
  * @throws {Error} If an `anthropic/*` model is configured in `config.chatModels`
@@ -19,7 +22,18 @@ export function registerAnthropic(): void {
 			+ 'Set it in .env or remove the anthropic model.',
 		);
 	}
-	// Layers our key onto the catalog `anthropic` provider (keeps its model catalog,
-	// cost, context-window, and wire protocol); no baseUrl/api override needed.
-	registerProvider('anthropic', { apiKey: config.anthropicApiKey });
+	// Re-registers the built-in `anthropic` id, reusing its catalog models (cost,
+	// context-window, wire protocol) unchanged, but resolving the key from
+	// `config` rather than Pi's own `ANTHROPIC_API_KEY` env lookup.
+	setProvider(createProvider({
+		id: 'anthropic',
+		auth: {
+			apiKey: {
+				name: 'Anthropic',
+				resolve: async () => ({ auth: { apiKey: config.anthropicApiKey } }),
+			},
+		},
+		models: anthropicProvider().getModels(),
+		api: anthropicMessagesApi(),
+	}));
 }

@@ -5,21 +5,22 @@ Run from the repo root.
 ## Development
 
 ```bash
-pnpm exec flue dev    # agent server on :3583 (watch mode)
-pnpm chat             # chat UI on :5173, proxies to :3583 — run alongside flue dev
+pnpm dev              # agent server on :3583 (vite dev, watch mode)
+pnpm chat             # chat UI on :5173, proxies to :3583 — run alongside pnpm dev
 ```
 
 ## Build
 
 ```bash
-pnpm exec flue build  # compile agent server to dist/
+pnpm build            # compile agent server to dist/ (vite build)
 pnpm chat:build       # compile chat UI to src/chat/dist/
 ```
 
 ## Agent CLI
 
 ```bash
-pnpm exec flue run <agent> --input '{"message":"your prompt"}'
+pnpm exec flue run src/agents/assistant.ts --message "your prompt"
+pnpm exec flue run src/agents/assistant.ts --message "your prompt" --id <conversation-id>  # continue a conversation
 ```
 
 ## Quality

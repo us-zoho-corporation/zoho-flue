@@ -34,10 +34,10 @@ trap cleanup EXIT INT TERM
 
 fail() { echo "[e2e] $*" >&2; exit 1; }
 
-# Refuse to run if the ports are already taken — a stale flue dev on :3583 causes
+# Refuse to run if the ports are already taken — a stale dev server on :3583 causes
 # flaky, misleading results. Ask the operator to stop it rather than killing it.
 port_busy() { lsof -ti tcp:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
-port_busy "$FLUE_PORT" && fail "port $FLUE_PORT is in use — stop the running flue dev server first."
+port_busy "$FLUE_PORT" && fail "port $FLUE_PORT is in use — stop the running dev server first."
 port_busy "$CHAT_PORT" && fail "port $CHAT_PORT is in use — stop the running Vite server first."
 
 if ! grep -q '^ANTHROPIC_API_KEY=.\+' .env 2>/dev/null && [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
@@ -56,10 +56,10 @@ wait_for() { # url, name, tries
 echo "[e2e] repo: $REPO_ROOT (ENV=$ENV, STORE_BACKEND=$STORE_BACKEND)"
 echo "[e2e] logs: $LOG_DIR"
 
-echo "[e2e] starting flue dev on :$FLUE_PORT …"
-pnpm exec flue dev >"$FLUE_LOG" 2>&1 &
+echo "[e2e] starting dev server on :$FLUE_PORT …"
+pnpm exec vite dev --port "$FLUE_PORT" --strictPort >"$FLUE_LOG" 2>&1 &
 FLUE_PID=$!
-wait_for "http://localhost:$FLUE_PORT/health" "flue dev" 90 || { tail -n 40 "$FLUE_LOG" >&2; fail "flue dev did not become ready"; }
+wait_for "http://localhost:$FLUE_PORT/health" "dev server" 90 || { tail -n 40 "$FLUE_LOG" >&2; fail "dev server did not become ready"; }
 
 echo "[e2e] starting chat UI on :$CHAT_PORT …"
 pnpm chat >"$CHAT_LOG" 2>&1 &

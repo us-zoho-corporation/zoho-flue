@@ -24,26 +24,22 @@ export const config = {
 	zohoClientSecret: required('ZOHO_OAUTH_CLIENT_SECRET'),
 	zohoRefreshToken: required('ZOHO_OAUTH_REFRESH_TOKEN'),
 	// Data-center domain suffix for the shared service account (com | eu | in |
-	// com.au | com.cn | jp — see https://www.zoho.com/crm/developer/docs/api/v8/multi-dc.html),
-	// used only for the Catalyst GLM warm token (providers/index.ts) — zoho_api
-	// itself runs as the logged-in user, not this service account (see
-	// ZohoApiDeps in tools/zoho-api.ts). A refresh token only works against the
-	// SAME data center it was issued from; using the wrong one fails with
-	// "invalid_code" no matter how valid the token otherwise is. Per-user
-	// connections instead carry their own DC, captured at consent time (see
-	// StoredToken.accountsServer).
+	// com.au | com.cn | jp — see https://www.zoho.com/crm/developer/docs/api/v8/multi-dc.html).
+	// Used as the fallback accounts domain for /api/photo when a user's own
+	// stored connection predates capturing it (see StoredToken.accountsServer) —
+	// zoho_api itself runs as the logged-in user, not this service account (see
+	// ZohoApiDeps in tools/zoho-api.ts). Per-user connections carry their own DC,
+	// captured at consent time.
 	zohoAccountsBase: `https://accounts.zoho.${process.env['ZOHO_DOMAIN_SUFFIX'] ?? 'com'}`,
-	catalystEndpoint: required('CATALYST_ENDPOINT'),
 	catalystOrgId: required('CATALYST_ORG_ID'),
 
 	// Per-user Zoho OAuth login (authorization-code flow). Scopes may be comma- or
 	// space-separated; granted scopes are stored per user and can be expanded.
-	// Profile for identity, QuickML.deployment.READ so the user's token can reach
-	// the Catalyst GLM (Zoho GLM 4.7 Flash) endpoint, and ZohoCRM.org.READ so the
-	// top-bar profile popup can show the user's Zoho CRM organization name right
-	// after login, without requiring a separate "Connect CRM" step first.
+	// Profile for identity, and ZohoCRM.org.READ so the top-bar profile popup can
+	// show the user's Zoho CRM organization name right after login, without
+	// requiring a separate "Connect CRM" step first.
 	zohoOAuthRedirectUri: required('ZOHO_OAUTH_REDIRECT_URI'),
-	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ,QuickML.deployment.READ,ZohoCRM.org.READ',
+	zohoLoginScopes: process.env['ZOHO_LOGIN_SCOPES'] ?? 'AaaServer.profile.READ,ZohoCRM.org.READ',
 	// Per-product scope bundles the settings "Connections" panel offers, so a user
 	// can grant a product's full scope set in one incremental-authorization round
 	// trip (`GET /api/auth/login?scopes=...`) instead of hitting reauth errors
@@ -159,27 +155,15 @@ export const config = {
 	// prompt `images` field only accepts vision-capable models, and image support
 	// varies per model/provider, so this is a real capability check, not cosmetic.
 	// An empty list disables the button with an explanatory popover instead of
-	// letting the user attach something the model can't read. The Catalyst GLM
-	// model is assumed to support none (not verified against its actual wire
-	// protocol — treat as unsupported unless/until confirmed otherwise).
+	// letting the user attach something the model can't read.
 	// The default is `defaultChatModelKey`.
 	chatModels: [
 		{
 			key: 'claude', label: 'Claude Sonnet 5', spec: 'anthropic/claude-sonnet-5', requiresAuth: false,
 			attachmentMimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
 		},
-		{
-			key: 'glm', label: 'Zoho GLM 4.7 Flash', spec: 'catalyst-glm/crm-di-glm47b_30b_it', requiresAuth: true,
-			attachmentMimeTypes: [],
-		},
 	] as const,
 	defaultChatModelKey: 'claude',
-	// Catalyst GLM input context window (tokens). Drives Flue's built-in compaction.
-	catalystContextWindow: 200_000,
-	// Max output tokens per turn. The default of 2048 truncates turns that both
-	// emit a visualization spec (a large tool-call JSON) and a written answer,
-	// which surfaces as the reply cutting off mid-stream. 8192 leaves headroom.
-	catalystMaxTokens: 8_192,
 
 	// Zoho API tool — domains the zoho_api tool is permitted to reach. zoho_api
 	// runs as whichever user is logged in (see ZohoApiDeps in tools/zoho-api.ts),

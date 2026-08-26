@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boots flue dev (:3583) + the Vite chat (:5173) for live layout verification,
+# Boots the app dev server (:3583) + the Vite chat (:5173) for live layout verification,
 # using the same ENV=local / STORE_BACKEND=memory dev-login seam as e2e-chat
 # (see .agents/skills/e2e-chat/SKILL.md) — no real Zoho OAuth needed.
 set -euo pipefail
@@ -17,7 +17,7 @@ mkdir -p "$LOG_DIR"
 FLUE_LOG="$LOG_DIR/flue-dev.log"
 CHAT_LOG="$LOG_DIR/chat-dev.log"
 
-(STORE_BACKEND=memory ENV=local pnpm exec flue dev > "$FLUE_LOG" 2>&1 &)
+(STORE_BACKEND=memory ENV=local pnpm exec vite dev --port 3583 --strictPort > "$FLUE_LOG" 2>&1 &)
 (pnpm chat > "$CHAT_LOG" 2>&1 &)
 
 for _ in $(seq 1 30); do

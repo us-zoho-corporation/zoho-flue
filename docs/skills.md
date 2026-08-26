@@ -2,7 +2,7 @@
 
 Two distinct kinds of "skill" live in this repo, for two different consumers — don't mix them up:
 
-- **`.agents/skills/`** — dev-workflow skills for engineers (and Claude Code) working *on* this repo: adding an agent, running tests, debugging the GLM provider, and so on. Follows the [agentskills.io](https://agentskills.io/specification) open specification and the four-tier context loading design below. Never read by the deployed app at runtime.
+- **`.agents/skills/`** — dev-workflow skills for engineers (and Claude Code) working *on* this repo: adding an agent, running tests, setting up Zoho OAuth, and so on. Follows the [agentskills.io](https://agentskills.io/specification) open specification and the four-tier context loading design below. Never read by the deployed app at runtime.
 - **`src/skills/`** — the *deployed* `assistant` agent's own runtime skill catalog, read on demand via its `zoho_skill_get` tool (`src/tools/zoho-skills.ts`) to keep operation docs out of the always-loaded system prompt. Currently holds the Zoho CRM/Desk implementation skills below, but the directory and tool aren't inherently limited to those — future runtime skills (other Zoho products, other kinds of operations) belong here too, registered in `zoho-skills.ts`'s `ALLOWED_SKILLS`. Each is a `SKILL.md` (+ optional `references/`), loosely following the same file layout for consistency, but it is not part of the agentskills.io/Claude-Code skill catalog and the sections below (spec compliance, tiered loading) don't apply to it — see [Zoho CRM/Desk implementation skills](#zoho-crmdesk-implementation-skills).
 
 ## `.agents/skills/` specification compliance
@@ -59,7 +59,6 @@ allowed-tools: <...>  # Optional/experimental. Space-separated pre-approved tool
 | `layout-check` | Diagnosing/verifying spacing, overlap, alignment, or responsive layout bugs in `src/chat/` via measured DOM geometry, not just screenshots |
 | `add-agent` | Creating a new agent in `src/agents/` |
 | `add-provider` | Registering a new provider in `src/providers/` |
-| `catalyst-glm` | Debugging GLM responses, history format, EXTRA_KEY_FOUND_IN_JSON |
 | `zoho-kb-mcp` | Working with the KB MCP client in `src/mcp/` |
 | `zoho-oauth` | Setting up or refreshing Zoho OAuth credentials |
 

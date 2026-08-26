@@ -11,7 +11,7 @@ export type { ChatMessage, ToolCallInfo, AssistantMessage } from './flue-model.t
 // conversations.tsx) and consumed by `Thread`. Conversation subscriptions live in
 // the app-level `ConversationsStore`, decoupled from component/view lifetime.
 
-/** One image attachment to send with a message — mirrors Flue's `AgentPromptImage`. */
+/** One image attachment to send with a message — mirrors Flue's `DeliveredAttachment`. */
 export interface ChatAttachment {
   /** Base64-encoded image bytes (no `data:` prefix). */
   data: string;

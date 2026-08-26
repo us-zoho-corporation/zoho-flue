@@ -125,16 +125,41 @@ export class CatalystConversationStreamStore implements ConversationStreamStore 
 	}
 
 	/**
-	 * Authorizes a submission-owned append against the submission store.
+	 * Authorizes a submission-owned append against the submission store: the
+	 * submission must target the stream's own agent, every per-record stamped
+	 * `submissionId` must be either the authorizing submission or one of its
+	 * live (`joining`/`joined`) deliveries, and the submission itself must be
+	 * running (or terminalizing with exactly its reserved settlement).
+	 * @param streamAgentName - The stream identity's agent name.
 	 * @param submission - The `{ submissionId, attemptId }` claimed by the batch.
 	 * @param records - The records being appended.
-	 * @throws {Error} If the submission is unknown, the attempt is stale, or a
+	 * @throws {Error} If the submission is unknown, targets a different agent,
+	 * the attempt is stale, a record references an unjoined submission, or a
 	 * terminalizing attempt appends anything but its exact reserved settlement.
 	 */
-	private async authorize(submission: { submissionId: string; attemptId: string }, records: readonly ConversationRecord[]): Promise<void> {
+	private async authorize(
+		streamAgentName: string,
+		submission: { submissionId: string; attemptId: string },
+		records: readonly ConversationRecord[],
+	): Promise<void> {
 		const sub = await this.submissions.getSubmission(submission.submissionId);
 		if (!sub) throw new Error(`append references unknown submission ${submission.submissionId}`);
 		if (sub.attemptId !== submission.attemptId) throw new Error(`append from stale attempt for ${submission.submissionId}`);
+		if (sub.input.agent !== streamAgentName) {
+			throw new Error(`submission ${submission.submissionId} targets a different agent than stream`);
+		}
+
+		let joinedIds: Set<string> | null = null;
+		for (const record of records) {
+			const recordSubmissionId = (record as { submissionId?: string }).submissionId;
+			if (!recordSubmissionId || recordSubmissionId === submission.submissionId) continue;
+			joinedIds ??= new Set(
+				(await this.submissions.listJoinedSubmissions(submission.submissionId)).map((j) => j.submissionId));
+			if (!joinedIds.has(recordSubmissionId)) {
+				throw new Error(`record ${record.id} references unjoined submission ${recordSubmissionId}`);
+			}
+		}
+
 		if (sub.status === 'running') return;
 		if (sub.status === 'terminalizing') {
 			const ob = (await this.submissions.listPendingSubmissionSettlements())
@@ -164,7 +189,11 @@ export class CatalystConversationStreamStore implements ConversationStreamStore 
 		submission?: { submissionId: string; attemptId: string };
 		records: readonly ConversationRecord[];
 	}): Promise<{ offset: string }> {
-		if (input.submission) await this.authorize(input.submission, input.records);
+		if (input.submission) {
+			const identity = await this.readMeta(input.path);
+			if (!identity) throw new Error(`conversation stream ${input.path} does not exist`);
+			await this.authorize(identity.agentName, input.submission, input.records);
+		}
 		const recordsJson = JSON.stringify(input.records);
 		for (;;) {
 			const meta = await this.readMeta(input.path);

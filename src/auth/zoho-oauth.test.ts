@@ -83,9 +83,9 @@ describe('exchangeCodeForTokens', () => {
 	it('parses Zoho comma-delimited granted scopes into an array', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 			ok: true,
-			json: async () => ({ access_token: 'at', expires_in: 3600, scope: 'AaaServer.profile.READ,QuickML.deployment.READ' }),
+			json: async () => ({ access_token: 'at', expires_in: 3600, scope: 'AaaServer.profile.READ,ZohoCRM.org.READ' }),
 		}));
-		expect((await exchangeCodeForTokens(params)).scopes).toEqual(['AaaServer.profile.READ', 'QuickML.deployment.READ']);
+		expect((await exchangeCodeForTokens(params)).scopes).toEqual(['AaaServer.profile.READ', 'ZohoCRM.org.READ']);
 	});
 
 	it('throws when the token response carries an error', async () => {

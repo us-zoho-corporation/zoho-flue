@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConversationsStore } from './conversations.tsx';
 
+// `ConversationsStore` builds its own per-conversation client via `@flue/sdk`'s
+// `createFlueClient` (v2 has no deployment-wide client to inject), so the fake
+// is wired in by mocking the module. `hoisted` exists because `vi.mock`'s
+// factory (hoisted above every import, including the one above) runs before
+// this file's own top-level `const`s, but after `vi.hoisted`'s.
+const hoisted = vi.hoisted(() => ({ current: null as null | ReturnType<typeof makeClientFactory> }));
+vi.mock('@flue/sdk', () => ({
+  createFlueClient: (options: { url: string }) => hoisted.current!.createFlueClient(options),
+}));
+
 // ─── Fakes for the Flue client + observation ────────────────────────────────────
 
 type Snap = { conversation: unknown; offset: string | undefined; phase: string; error: Error | undefined };
@@ -32,38 +42,46 @@ class FakeObservation {
 }
 
 /**
- * Builds a fake Flue client whose `agents.observe`/`agents.send` are backed by
- * `FakeObservation` instances, for driving `ConversationsStore` in tests.
- * @returns The fake client plus the `observations` map and `sends` log used to inspect what the store did.
+ * Builds a fake `createFlueClient` (one per conversation id, matching Flue
+ * v2's conversation-scoped client shape) whose `observe`/`send` are backed by
+ * `FakeObservation` instances, for driving `ConversationsStore` in tests. The
+ * fake infers each conversation's id from its client URL (`<mountUrl>/<id>`),
+ * mirroring how `ConversationsStore.clientFor` builds it.
+ * @returns The fake `createFlueClient` implementation plus the `observations` map and `sends` log used to inspect what the store did.
  */
-function makeClient() {
+function makeClientFactory() {
   const observations = new Map<string, FakeObservation>();
   const sends: { id: string; message: string; images?: { type: 'image'; data: string; mimeType: string; filename?: string }[] }[] = [];
-  const client = {
-    agents: {
+  /**
+   * test helper: fake `createFlueClient` — builds one fake per-conversation client
+   * keyed by the conversation id at the end of its `url`.
+   * @param options - The client options, whose `url`'s last path segment is the conversation id.
+   * @returns A fake `FlueClient` backed by a `FakeObservation`.
+   */
+  const createFlueClient = (options: { url: string }) => {
+    const id = options.url.split('/').pop()!;
+    return {
       /**
-       * test helper: creates and registers a `FakeObservation` for a conversation id.
-       * @param _name - The agent name (unused by the fake).
-       * @param id - The conversation id to observe.
+       * test helper: creates and registers a `FakeObservation` for this client's conversation id.
        * @returns The newly created fake observation.
        */
-      observe: (_name: string, id: string) => {
+      observe: () => {
         const o = new FakeObservation();
         observations.set(id, o);
         return o;
       },
       /**
        * test helper: records a send call instead of making a real request.
-       * @param _name - The agent name (unused by the fake).
-       * @param id - The conversation id the message was sent to.
-       * @param opts - The send options containing the message text and optional image attachments.
+       * @param opts - The send options containing the delivered message.
        */
-      send: async (_name: string, id: string, opts: { message: string; images?: { type: 'image'; data: string; mimeType: string; filename?: string }[] }) => {
-        sends.push({ id, message: opts.message, images: opts.images });
+      send: async (opts: { message: { kind: 'user'; body: string; attachments?: { type: 'image'; data: string; mimeType: string; filename?: string }[] } }) => {
+        sends.push({ id, message: opts.message.body, images: opts.message.attachments });
       },
-    },
+      /** test helper: no-op stand-in for the real client's abort. */
+      abort: async () => ({ aborted: true }),
+    };
   };
-  return { client: client as never, observations, sends };
+  return { createFlueClient, observations, sends };
 }
 
 // Minimal materialized conversation.
@@ -89,9 +107,9 @@ const asstMsg = (text: string, submissionId?: string) => ({ id: `a-${text}`, rol
  */
 const conv = (messages: unknown[], settlements: { submissionId: string; outcome: string }[] = []) => ({ conversationId: 'c', messages, settlements });
 
-let ctx: ReturnType<typeof makeClient>;
+let ctx: ReturnType<typeof makeClientFactory>;
 let store: ConversationsStore;
-beforeEach(() => { ctx = makeClient(); store = new ConversationsStore(ctx.client, 'assistant'); });
+beforeEach(() => { ctx = makeClientFactory(); hoisted.current = ctx; store = new ConversationsStore('/agents/assistant'); });
 afterEach(() => vi.useRealTimers());
 
 describe('ConversationsStore', () => {

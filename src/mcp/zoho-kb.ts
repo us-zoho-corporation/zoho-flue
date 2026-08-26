@@ -146,8 +146,8 @@ export function defineZohoKbTools(deps: ZohoKbDeps) {
             top_k: v.optional(v.pipe(v.number(), v.description('Results to return (1–20, default 5)'))),
         }),
         output: v.any(),
-        async run({ input }) {
-            return call(deps, 'search_docs', input as Record<string, unknown>);
+        async run({ data }) {
+            return { output: await call(deps, 'search_docs', data as Record<string, unknown>) };
         },
     });
 
@@ -159,8 +159,8 @@ export function defineZohoKbTools(deps: ZohoKbDeps) {
             max_chars: v.optional(v.pipe(v.number(), v.description('Max chars to return (default 6000, max 20000)'))),
         }),
         output: v.any(),
-        async run({ input }) {
-            return call(deps, 'get_page', input as Record<string, unknown>);
+        async run({ data }) {
+            return { output: await call(deps, 'get_page', data as Record<string, unknown>) };
         },
     });
 
@@ -170,7 +170,7 @@ export function defineZohoKbTools(deps: ZohoKbDeps) {
         input: v.object({}),
         output: v.any(),
         async run() {
-            return call(deps, 'list_products', {});
+            return { output: await call(deps, 'list_products', {}) };
         },
     });
 
