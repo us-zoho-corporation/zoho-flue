@@ -6,11 +6,15 @@ Programmatic MCP server connections in `src/mcp/`. Use `@modelcontextprotocol/sd
 
 | Client | Server | Tools |
 |---|---|---|
-| zoho-kb | `help-docs.zoho-forge.com/mcp` | [tools](mcp/clients/zoho-kb/tools.md) |
+| zoho-kb | `help-docs.zoho-forge.com/mcp` | [tools](../.claude/skills/zoho-kb-mcp/references/tools.md) |
 
 ## Connection pattern
 
-Each client uses a singleton `Client` instance (lazily initialised) with a single retry on failure before propagating the error.
+Every client opens a short-lived `Client` per call and closes it afterward — no shared,
+process-wide connection. For zoho-kb this is because auth is per-user (see
+[tools](../.claude/skills/zoho-kb-mcp/references/tools.md) and
+[auth.md](auth.md#docs-knowledge-base-connection)); for user-connected servers (below) it's
+the same `openClient`/`probeMcpServer`/`callMcpTool` shape either way.
 
 ## User-connected MCP servers
 

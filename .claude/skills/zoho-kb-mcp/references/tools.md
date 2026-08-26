@@ -2,7 +2,9 @@
 
 Source: `src/mcp/zoho-kb.ts`
 MCP server: `https://help-docs.zoho-forge.com/mcp`
-Requires: `ZOHO_DOCS_BEARER_TOKEN` in `.env` (see `zoho-oauth` skill)
+Requires: `DOCS_OAUTH_CLIENT_ID`/`DOCS_OAUTH_CLIENT_SECRET` in `.env` (see `zoho-oauth` skill), and
+the calling user's own docs connection (Settings → Connections) — auth is per-user, not a
+shared app-wide token.
 
 ## zoho_kb_search
 

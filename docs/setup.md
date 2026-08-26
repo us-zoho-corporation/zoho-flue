@@ -42,15 +42,18 @@ See [Environment](environment.md) for what each variable does.
 
 ## Zoho Knowledge Base MCP (optional)
 
-The agent connects to `help-docs.zoho-forge.com/mcp` for documentation search. It requires a bearer token issued by that server, obtained once via browser OAuth.
+The agent's KB tools connect to `help-docs.zoho-forge.com/mcp`, which runs its own OAuth 2.1 authorization server (PKCE), separate from `accounts.zoho.com`. One-time setup per deployment:
 
-To get a token: complete the OAuth flow at `https://help-docs.zoho-forge.com/authorize` (see the server's setup page), then copy the `access_token` from the `/token` response into `.env`:
+1. Register a client via dynamic client registration (RFC 7591) against `https://help-docs.zoho-forge.com/register`.
+2. Add the returned credentials to `.env`:
 
 ```
-ZOHO_DOCS_BEARER_TOKEN=<token>
+DOCS_OAUTH_CLIENT_ID=<client_id>
+DOCS_OAUTH_CLIENT_SECRET=<client_secret>
+DOCS_OAUTH_REDIRECT_URI=<e.g. http://localhost:3583/api/auth/docs/callback>
 ```
 
-The token is short-lived (~7 days); re-issue it when KB tools start failing with auth errors. Without this variable the agent starts normally — KB tools are simply unavailable.
+With those set, each signed-in user connects the knowledge base individually from Settings → Connections — there's no shared, deployment-wide token. Without `DOCS_OAUTH_CLIENT_ID` the agent starts normally and the KB connection/tools are simply unavailable. See [auth.md](auth.md#docs-knowledge-base-connection) for the full per-user flow.
 
 ## Adding a sandbox
 

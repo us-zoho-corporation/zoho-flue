@@ -1,6 +1,6 @@
 ---
 name: zoho-oauth
-description: Set up or refresh Zoho OAuth credentials for this project. Use when obtaining a new refresh token for .env, filling in ZOHO_OAUTH_* variables, troubleshooting authentication failures at startup, or refreshing an expired ZOHO_DOCS_BEARER_TOKEN.
+description: Set up or refresh Zoho OAuth credentials for this project. Use when obtaining a new refresh token for .env, filling in ZOHO_OAUTH_* variables, troubleshooting authentication failures at startup, or registering the docs knowledge base's separate OAuth client (DOCS_OAUTH_*).
 allowed-tools: Bash Read
 ---
 
@@ -13,10 +13,12 @@ ZOHO_OAUTH_REFRESH_TOKEN=
 CATALYST_ORG_ID=
 ```
 
-Optional (enables KB MCP tools):
+Optional (enables the docs knowledge base connection/tools):
 
 ```
-ZOHO_DOCS_BEARER_TOKEN=
+DOCS_OAUTH_CLIENT_ID=
+DOCS_OAUTH_CLIENT_SECRET=
+DOCS_OAUTH_REDIRECT_URI=
 ```
 
 ## Step 1: create a Self Client
@@ -48,12 +50,20 @@ curl -s -X POST https://accounts.zoho.com/oauth/v2/token \
 
 Copy the value into `.env` as `ZOHO_OAUTH_REFRESH_TOKEN`. It is long-lived.
 
-## Step 3: obtain a Zoho Docs token (optional)
+## Step 3: register the docs knowledge base's OAuth client (optional)
 
-1. Complete the browser OAuth flow at `https://help-docs.zoho-forge.com/authorize`.
-2. Copy the `access_token` from the `/token` response into `.env` as `ZOHO_DOCS_BEARER_TOKEN`.
-3. This token is short-lived (~7 days). The app does not check or report its expiry — when
-   KB tools start failing with auth errors, repeat this step to get a fresh one.
+The docs KB MCP server (`help-docs.zoho-forge.com`) runs its own OAuth 2.1 authorization
+server (PKCE) — entirely separate from `accounts.zoho.com` and the steps above. One-time:
+
+1. Register a client via dynamic client registration (RFC 7591) against
+   `https://help-docs.zoho-forge.com/register`.
+2. Copy the returned `client_id`/`client_secret` into `.env` as `DOCS_OAUTH_CLIENT_ID`/
+   `DOCS_OAUTH_CLIENT_SECRET`, and set `DOCS_OAUTH_REDIRECT_URI` to match.
+
+This is a one-time app-level registration, not a per-user token — with it set, each signed-in
+user connects the knowledge base individually from Settings → Connections (`src/auth/docs-oauth.ts`
+handles the per-user PKCE flow and token refresh automatically). See
+[auth.md](../../../docs/auth.md#docs-knowledge-base-connection) for the full flow.
 
 ## How auth works at runtime
 
@@ -63,5 +73,5 @@ used by the Catalyst NoSQL/Cache/Data Store/Stratus clients (`src/store/catalyst
 per user, `getUserToken` — never a model provider (the only registered provider is the built-in
 `anthropic` one, credential-only via `ANTHROPIC_API_KEY`; see `docs/providers.md`). On a 401,
 each Catalyst client refreshes the token once via `getZohoAccessToken` and retries automatically.
-`ZOHO_DOCS_BEARER_TOKEN` is used directly by the KB MCP client (`src/mcp/zoho-kb.ts`) and is not
-refreshed automatically.
+The docs KB connection is separate: each user's own token is stored (encrypted) and refreshed
+automatically by `src/auth/docs-oauth.ts`, never a shared/static credential.

@@ -10,18 +10,18 @@ pnpm install
 
 Populate `.env` — see [Setup](docs/setup.md) for credentials and OAuth.
 
-Run the assistant agent from the CLI:
-
-```bash
-pnpm exec flue run src/agents/assistant.ts --message "hello"
-```
-
-Or use the browser chat UI (two terminals):
+Run the app (two terminals):
 
 ```bash
 pnpm dev    # agent server on :3583
 pnpm chat   # chat UI on :5173 (proxies to :3583)
 ```
+
+`pnpm exec flue run src/agents/assistant.ts --message "..."` does **not** work for
+this agent — its tools require a real signed-in session (`app.ts`'s secrets
+bootstrap, the user's Zoho connection), which only exists behind the real HTTP
+server above. `flue run` is fine for a from-scratch agent with no such
+dependency; see [Commands](docs/commands.md).
 
 ## Docs
 

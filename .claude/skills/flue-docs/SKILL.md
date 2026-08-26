@@ -9,7 +9,7 @@ compatibility: Requires @flue/cli installed (pnpm exec flue docs)
 
 The Flue documentation is bundled inside `@flue/cli` and requires no network access.
 
-**List all 97 pages:**
+**List every page (count varies by installed version):**
 ```sh
 pnpm exec flue docs
 ```
@@ -25,20 +25,19 @@ pnpm exec flue docs search "cors"
 ```sh
 pnpm exec flue docs read guide/react
 pnpm exec flue docs read guide/routing
-pnpm exec flue docs read api/agent-api
+pnpm exec flue docs read reference/agent-api
 ```
 
-## Key page paths
+## Key page paths (Flue 2.x)
 
 | Category | Paths |
 |---|---|
-| Guides | `guide/building-agents`, `guide/channels`, `guide/react`, `guide/routing`, `guide/tools`, `guide/workflows`, `guide/models`, `guide/sandboxes`, `guide/schedules`, `guide/skills`, `guide/subagents`, `guide/observability`, `guide/database` |
-| API reference | `api/agent-api`, `api/action-api`, `api/workflow-api`, `api/routing-api`, `api/provider-api`, `api/events-reference`, `api/errors-reference`, `api/streaming-protocol` |
-| SDK | `sdk/overview`, `sdk/client`, `sdk/agents`, `sdk/workflows`, `sdk/runs`, `sdk/events` |
-| CLI | `cli/dev`, `cli/run`, `cli/build`, `cli/add`, `cli/docs` |
-| Config | `reference/configuration` |
-| Getting started | `getting-started/quickstart` |
-| Ecosystem channels | `ecosystem/channels/slack`, `ecosystem/channels/discord`, `ecosystem/channels/github`, `ecosystem/channels/google-chat`, `ecosystem/channels/teams` |
+| Guides | `guide/building-agents`, `guide/agent-hooks`, `guide/channels`, `guide/react`, `guide/routing`, `guide/tools`, `guide/workflows`, `guide/models`, `guide/sandboxes`, `guide/schedules`, `guide/skills`, `guide/subagents`, `guide/observability`, `guide/database`, `guide/mcp`, `guide/durability`, `guide/migration` (v1 beta → v2) |
+| API reference | `reference/agent-api`, `reference/agent-hooks-api`, `reference/provider-api`, `reference/data-persistence-api`, `reference/sandbox-api`, `reference/events`, `reference/errors`, `reference/streaming-protocol`, `reference/agent-behavior`, `reference/configuration` |
+| SDK | `sdk/overview`, `sdk/flue-client`, `sdk/create-flue-client`, `sdk/events`, `sdk/errors` |
+| CLI | `cli/overview`, `cli/run`, `cli/add`, `cli/update`, `cli/init`, `cli/docs` (no `cli/dev`/`cli/build` — Vite owns both, see `guide/migration`) |
+| Getting started | `guide/getting-started`, `guide/why-flue` |
+| Ecosystem | `ecosystem/channels/*` (Slack, Discord, GitHub, Zendesk, WhatsApp, etc.), `ecosystem/databases/*`, `ecosystem/sandboxes/*`, `ecosystem/deploy/*`, `ecosystem/tooling/*` |
 
 ## When to use which command
 
@@ -46,4 +45,4 @@ pnpm exec flue docs read api/agent-api
 - **Known guide section** → `flue docs read <path>` directly.
 - **Full page list** → `flue docs` (no args).
 
-Never read `node_modules/@flue/runtime/docs/` directly — use the CLI instead, which is version-matched and always up to date.
+Never read Flue source/docs files under `node_modules/@flue/` directly — use the CLI instead, which is version-matched and always up to date.

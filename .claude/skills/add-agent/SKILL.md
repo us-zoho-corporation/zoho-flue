@@ -24,7 +24,10 @@ allowed-tools: Bash Read Edit Write
    makes it *reachable over HTTP*). `dispatch(...)` can still drive an agent that's registered
    but never mounted.
 6. Verify: `pnpm exec flue run src/agents/<name>.ts --message "hello"` (runs the agent module
-   directly, transport-free — no server, no `app.ts` involved).
+   directly, transport-free — no server, no `app.ts` involved). Only works if the agent has
+   no session dependency — `assistant` calls `getAuth()`, which needs secrets `app.ts` bootstraps
+   at startup, so this verification step doesn't apply to it (see the `run-agent` skill for how
+   to exercise it instead).
 
 ## Template
 

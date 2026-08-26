@@ -9,22 +9,28 @@ allowed-tools: Read
 Flue's `useMcpConnection` mounts a remote MCP server's raw tool schemas (including `outputSchema`, `$defs`, `anyOf`, `$ref`) straight through to the model. This project instead wraps each KB tool manually, so the schema the model sees stays simple and predictable regardless of which model is selected.
 
 `src/mcp/zoho-kb.ts` instead:
-1. Holds a singleton `@modelcontextprotocol/sdk` `Client` instance (lazy, one retry on failure)
-2. Wraps each MCP call with `defineTool` using simplified Valibot input schemas
-3. Enforces an allowlist (`ALLOWED_MCP_TOOLS`) — only `search_docs`, `get_page`, `list_products` are callable
+1. Wraps each MCP call with `defineTool` using simplified Valibot input schemas
+2. Enforces an allowlist (`ALLOWED_MCP_TOOLS`) — only `search_docs`, `get_page`, `list_products` are callable
+3. Authenticates per call as the calling user (see below) — no shared, app-wide credential
 
-## Connection pattern
+## Connection pattern — per-user OAuth, no shared client
 
-```typescript
-const client = new Client({ name: 'zoho-flue', version: '1.0.0' });
-await client.connect(
-    new StreamableHTTPClientTransport(new URL(MCP_URL), {
-        requestInit: { headers: { Authorization: `Bearer ${config.zohoDocsBearerToken}` } },
-    }),
-);
-```
+The docs MCP server (`help-docs.zoho-forge.com`) runs its own OAuth 2.1 authorization
+server (PKCE), separate from `accounts.zoho.com` — see `src/auth/docs-oauth.ts` and
+`docs/auth.md#docs-knowledge-base-connection`. `defineZohoKbTools({ userId, getDocsToken })`
+is called fresh per turn (in `Assistant`'s render, `src/agents/assistant.ts`), and each
+tool call:
 
-The bearer token (`config.zohoDocsBearerToken`) is sent as-is — the client does not validate or refresh it. On a failed call it retries once, then propagates the error; if the token has expired, re-issue it (see the `zoho-oauth` skill).
+1. Resolves the calling user's own access token via `getDocsToken(userId)` — throwing a
+   `ConnectionRequiredPayload` (`kind: 'docs'`, `mode: 'connect'` or `'reconnect'`) if the
+   user has no token or a dead refresh token, exactly like `zoho_api`'s Zoho connection gate.
+2. Opens a short-lived `@modelcontextprotocol/sdk` `Client` for just that one call, with
+   that user's bearer token, and closes it afterward — there is no shared, process-wide
+   client, since the token is per user.
+
+There's no bearer token to re-issue by hand: a stale/dead connection surfaces as a
+Connect/Reconnect card in the chat (same UX as a Zoho product connection), and the user
+reconnects from Settings.
 
 ## Result truncation
 
@@ -34,7 +40,7 @@ Results are truncated at 12,000 characters — compaction handles longer convers
 
 1. Add the MCP tool name to `ALLOWED_MCP_TOOLS`.
 2. Write a `defineTool` wrapper with simplified Valibot input/output schemas (`v.any()` output is fine).
-3. Export it in `zohoKbTools`.
+3. Return it from `defineZohoKbTools()`.
 
 ---
 

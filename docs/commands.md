@@ -19,9 +19,15 @@ pnpm chat:build       # compile chat UI to src/chat/dist/
 ## Agent CLI
 
 ```bash
-pnpm exec flue run src/agents/assistant.ts --message "your prompt"
-pnpm exec flue run src/agents/assistant.ts --message "your prompt" --id <conversation-id>  # continue a conversation
+pnpm exec flue run src/agents/<name>.ts --message "your prompt"
 ```
+
+Works for a from-scratch agent with no session dependency. It does **not** work
+for `assistant` — its tools require a real signed-in session (secrets `app.ts`
+bootstraps at startup, the user's Zoho connection), which `flue run` never
+provides (it loads only the target agent module, not `app.ts`). Exercise
+`assistant` via `pnpm dev` + `pnpm chat` (or a direct request against the
+running dev server) instead — see [Examples](examples.md).
 
 ## Quality
 
@@ -30,8 +36,8 @@ pnpm test             # unit tests (node)
 pnpm test:watch       # unit tests in watch mode
 pnpm test:smoke       # smoke tests (requires live API credentials)
 pnpm test:browser     # optional: React component tests in headless Chromium (Playwright)
-pnpm exec tsc --noEmit
-pnpm exec oxlint src/
+pnpm typecheck        # tsc --noEmit
+pnpm lint             # oxlint src/
 ```
 
 The three suites are Vitest `projects` in one `vitest.config.ts`, selected via `--project`:

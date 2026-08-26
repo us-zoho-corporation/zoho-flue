@@ -34,13 +34,6 @@ see `.claude/skills/e2e-chat/SKILL.md` for how that works. `boot.sh` refuses to
 start if `:3583`/`:5173` are already busy; a stale server from an earlier
 session is the most common source of confusing, flaky measurements.
 
-**Known issue post-Flue-v2-migration:** `boot.sh` currently starts the agent
-server with `pnpm exec flue dev`, which no longer exists in Flue v2 (the CLI
-dropped `flue dev`/`flue build` in favor of `vite dev`/`vite build`, i.e. this
-repo's `pnpm dev`). Until the script is updated, run `pnpm dev` manually
-instead of `boot.sh` for the agent server, and `boot.sh`'s own dev-login/env
-setup as reference for the env vars to set (`ENV=local STORE_BACKEND=memory`).
-
 **Known gotcha:** the first Playwright action (a click, a `waitForSelector`)
 in a script's first run often times out — this happens even against an
 already-warm server that answered a previous script just fine, so it isn't

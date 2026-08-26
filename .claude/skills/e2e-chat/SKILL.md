@@ -35,17 +35,10 @@ bash .claude/skills/e2e-chat/scripts/e2e.sh
 ```
 
 `e2e.sh` sets `ENV=local` + `STORE_BACKEND=memory` (a clean in-memory store for a
-true empty state), boots the agent server (:3583) and the Vite chat (:5173), waits for
-both, runs the Playwright driver, then tears the servers down and propagates the
-driver's exit code. It prints `PASS`/`FAIL` per check and a final failure count.
-
-**Known issue post-Flue-v2-migration:** the script currently starts the agent
-server with `pnpm exec flue dev`, which no longer exists — Flue v2's CLI dropped
-`flue dev`/`flue build` entirely in favor of plain `vite dev`/`vite build` (this
-repo's `pnpm dev` script). Until `scripts/e2e.sh` is updated to run `pnpm dev`
-instead, this skill's automated run will fail to bring the server up; drive the
-same flow manually with `pnpm dev` + `pnpm chat` if you need it before that fix
-lands.
+true empty state), boots the agent server (:3583, via `vite dev`) and the Vite chat
+(:5173), waits for both, runs the Playwright driver, then tears the servers down and
+propagates the driver's exit code. It prints `PASS`/`FAIL` per check and a final
+failure count.
 
 The driver (`scripts/run-e2e.mjs`) walks: dev-login → assert authenticated empty
 state (welcome + fake user, no chats) → send a prompt and assert a response
