@@ -151,3 +151,6 @@ vite.config.ts.timestamp-*
 
 # Vitest browser failure screenshots (debug artifacts, not snapshot baselines)
 **/__screenshots__/
+
+# macOS
+.DS_Store
