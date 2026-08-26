@@ -7,7 +7,7 @@ const SKILLS_DIR = resolve('src/skills');
 
 // Allowlist of Zoho CRM/Desk implementation skills this tool may serve, all
 // living under `src/skills/`. This project's own dev-workflow skills
-// (add-agent, run-agent, etc., under `.agents/skills/`) are for engineers
+// (add-agent, run-agent, etc., under `.claude/skills/`) are for engineers
 // working on this repo via Claude Code, not for the deployed chat agent, and
 // are never served by this tool.
 const ALLOWED_SKILLS = [

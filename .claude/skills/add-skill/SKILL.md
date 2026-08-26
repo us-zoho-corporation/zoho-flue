@@ -1,20 +1,20 @@
 ---
 name: add-skill
-description: Add a new dev-workflow skill to this project (under .agents/skills/) following the agentskills.io specification and tiered context loading conventions. Use when creating a new skill directory under .agents/skills/, writing a SKILL.md, or deciding what belongs in Tier 1 (AGENTS.md) vs Tier 3 (skill body) vs Tier 4 (references/). NOT for adding a new Zoho CRM/Desk implementation skill — those live under src/skills/ and are registered in src/tools/zoho-skills.ts's ALLOWED_SKILLS list, not this spec.
+description: Add a new dev-workflow skill to this project (under .claude/skills/) following the agentskills.io specification and tiered context loading conventions. Use when creating a new skill directory under .claude/skills/, writing a SKILL.md, or deciding what belongs in Tier 1 (AGENTS.md) vs Tier 3 (skill body) vs Tier 4 (references/). NOT for adding a new Zoho CRM/Desk implementation skill — those live under src/skills/ and are registered in src/tools/zoho-skills.ts's ALLOWED_SKILLS list, not this spec.
 allowed-tools: Read Edit Write
 ---
 
-This skill is only for `.agents/skills/` dev-workflow skills (Claude Code's own skill catalog for working on
+This skill is only for `.claude/skills/` dev-workflow skills (Claude Code's own skill catalog for working on
 this repo). Zoho CRM/Desk implementation skills served to the deployed agent at runtime live under
 `src/skills/` and don't follow this spec — see `docs/skills.md`'s "Zoho CRM/Desk implementation skills"
 section instead, and add the new skill's directory name to `ALLOWED_SKILLS` in `src/tools/zoho-skills.ts`.
 
 ## agentskills.io spec requirements
 
-Each skill is a directory under `.agents/skills/` containing a `SKILL.md` file:
+Each skill is a directory under `.claude/skills/` containing a `SKILL.md` file:
 
 ```
-.agents/skills/<name>/
+.claude/skills/<name>/
 ├── SKILL.md          # Required
 ├── references/       # Optional: detail loaded on demand
 └── scripts/          # Optional: executable code
@@ -76,7 +76,7 @@ This project uses a four-tier structure to maximise prompt cache hit rate. Earli
 
 ## Steps to add a new skill
 
-1. Create `.agents/skills/<name>/` — name must be lowercase, hyphen-separated.
+1. Create `.claude/skills/<name>/` — name must be lowercase, hyphen-separated.
 2. Write `SKILL.md` with frontmatter and instructions.
 3. If any section is longer than ~30 lines of detail, move it to `references/<topic>.md` and add a conditional load instruction at the bottom of the body (e.g. "Read `references/X.md` if you need the full spec").
 4. Verify the skill description triggers correctly: it should include the specific error messages, file paths, or task verbs an agent would see when this skill is relevant.

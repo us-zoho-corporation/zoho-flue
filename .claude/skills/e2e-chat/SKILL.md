@@ -31,7 +31,7 @@ selectable model.
 ## Run it
 
 ```bash
-bash .agents/skills/e2e-chat/scripts/e2e.sh
+bash .claude/skills/e2e-chat/scripts/e2e.sh
 ```
 
 `e2e.sh` sets `ENV=local` + `STORE_BACKEND=memory` (a clean in-memory store for a
@@ -65,7 +65,7 @@ assert the login screen returns and the local chat list is cleared.
   `E2E_HARD_TIMEOUT_MS`. Target a different origin with `E2E_BASE_URL`.
 - Sanity: with `ENV` unset, `curl -sI localhost:3583/api/auth/dev-login` returns `404`.
 - **The dev server's file watcher (`vite dev`, via the `flue()` plugin) covers
-  the whole repo tree, including `.agents/`** — so editing a script already
+  the whole repo tree, including `.claude/`** — so editing a script already
   sitting in `scripts/` (not just the first copy) triggers a reload, and if
   that lands while a conversation is mid-turn, it can kill the in-flight
   request or, after a few edits in quick succession, wedge the server

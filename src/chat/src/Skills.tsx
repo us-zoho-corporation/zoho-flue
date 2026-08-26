@@ -14,7 +14,7 @@ interface SkillsProps {
 }
 
 /**
- * Displays the list of reusable skills discovered under `.agents/skills/`,
+ * Displays the list of reusable skills discovered under `.claude/skills/`,
  * fetched from `/api/skills`, including each skill's description, allowed
  * tools, and compatibility tag.
  * @param onBack - Called when the "Back" button is clicked.
@@ -49,7 +49,7 @@ export function Skills({ onBack }: SkillsProps) {
           {loading ? (
             <p className="text-sm text-kumo-subtle">Loading…</p>
           ) : skills.length === 0 ? (
-            <p className="text-sm text-kumo-subtle">No skills found in <code className="text-xs">.agents/skills/</code>.</p>
+            <p className="text-sm text-kumo-subtle">No skills found in <code className="text-xs">.claude/skills/</code>.</p>
           ) : (
             <div className="flex flex-col gap-3">
               {skills.map(skill => (

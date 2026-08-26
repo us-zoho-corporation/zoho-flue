@@ -124,7 +124,7 @@ app.get('/api/models', (c) => c.json({
 }));
 
 app.get('/api/skills', async (c) => {
-	const skillsDir = resolve('.agents/skills');
+	const skillsDir = resolve('.claude/skills');
 	let entries: string[] = [];
 	try { entries = await readdir(skillsDir); } catch { return c.json([]); }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Boots the app dev server (:3583) + the Vite chat (:5173) for live layout verification,
 # using the same ENV=local / STORE_BACKEND=memory dev-login seam as e2e-chat
-# (see .agents/skills/e2e-chat/SKILL.md) — no real Zoho OAuth needed.
+# (see .claude/skills/e2e-chat/SKILL.md) — no real Zoho OAuth needed.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 

@@ -2,15 +2,15 @@
 
 Two distinct kinds of "skill" live in this repo, for two different consumers — don't mix them up:
 
-- **`.agents/skills/`** — dev-workflow skills for engineers (and Claude Code) working *on* this repo: adding an agent, running tests, setting up Zoho OAuth, and so on. Follows the [agentskills.io](https://agentskills.io/specification) open specification and the four-tier context loading design below. Never read by the deployed app at runtime.
+- **`.claude/skills/`** — dev-workflow skills for engineers (and Claude Code) working *on* this repo: adding an agent, running tests, setting up Zoho OAuth, and so on. Follows the [agentskills.io](https://agentskills.io/specification) open specification and the four-tier context loading design below. Never read by the deployed app at runtime.
 - **`src/skills/`** — the *deployed* `assistant` agent's own runtime skill catalog, read on demand via its `zoho_skill_get` tool (`src/tools/zoho-skills.ts`) to keep operation docs out of the always-loaded system prompt. Currently holds the Zoho CRM/Desk implementation skills below, but the directory and tool aren't inherently limited to those — future runtime skills (other Zoho products, other kinds of operations) belong here too, registered in `zoho-skills.ts`'s `ALLOWED_SKILLS`. Each is a `SKILL.md` (+ optional `references/`), loosely following the same file layout for consistency, but it is not part of the agentskills.io/Claude-Code skill catalog and the sections below (spec compliance, tiered loading) don't apply to it — see [Zoho CRM/Desk implementation skills](#zoho-crmdesk-implementation-skills).
 
-## `.agents/skills/` specification compliance
+## `.claude/skills/` specification compliance
 
 Each skill is a directory containing a `SKILL.md` file:
 
 ```
-.agents/skills/<name>/
+.claude/skills/<name>/
 ├── SKILL.md          # Required: YAML frontmatter + Markdown instructions
 ├── references/       # Optional: detail files loaded on demand
 └── scripts/          # Optional: executable code
@@ -48,7 +48,7 @@ allowed-tools: <...>  # Optional/experimental. Space-separated pre-approved tool
 
 **Tier 4 — `references/`:** detailed specs, lookup tables, long format docs. Load conditionally: "Read `references/X.md` if you encounter error Y."
 
-## Existing `.agents/skills/` dev-workflow skills
+## Existing `.claude/skills/` dev-workflow skills
 
 | Skill | When to activate |
 |---|---|
@@ -64,7 +64,7 @@ allowed-tools: <...>  # Optional/experimental. Space-separated pre-approved tool
 
 ## Zoho CRM/Desk implementation skills
 
-`src/skills/`'s current contents (not `.agents/skills/` — see the top of this doc): the runtime operation
+`src/skills/`'s current contents (not `.claude/skills/` — see the top of this doc): the runtime operation
 catalog for the `assistant` agent's `zoho_skill_get` tool (`src/tools/zoho-skills.ts`) — each is also readable
 as a dev-time reference. Executed via the shared `zoho_api` tool (`src/tools/zoho-api.ts`); Desk skills
 additionally need `orgId` resolved via `zoho-desk-organizations` (see `docs/architecture.md`). A future skill

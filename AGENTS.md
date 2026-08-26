@@ -19,7 +19,7 @@ Flue v2 has no filename-based agent/workflow/channel discovery. `app.ts`/`db.ts`
 | `src/mcp/` | Programmatic MCP server clients | — |
 | `src/sandboxes/` | Sandbox configs (`flue add sandbox <provider>`); attached with `useSandbox(...)` inside the agent function | — |
 | `src/chat/` | Browser chat UI (Vite + React) | — |
-| `src/skills/` | Runtime skill catalog served to the deployed agent by the `zoho_skill_get` tool (`src/tools/zoho-skills.ts`) — currently the Zoho CRM/Desk implementation docs; distinct from `.agents/skills/` below | — |
+| `src/skills/` | Runtime skill catalog served to the deployed agent by the `zoho_skill_get` tool (`src/tools/zoho-skills.ts`) — currently the Zoho CRM/Desk implementation docs; distinct from `.claude/skills/` below | — |
 
 ## Code conventions
 
@@ -33,4 +33,4 @@ Flue v2 has no filename-based agent/workflow/channel discovery. `app.ts`/`db.ts`
 
 ## Skills
 
-Two distinct kinds: `.agents/skills/` holds dev-workflow skills for working on this repo (activate the relevant one before starting work); `src/skills/` holds the deployed agent's own runtime skill catalog (currently Zoho CRM/Desk implementation docs, served via `zoho_skill_get`), not for you to activate. See [docs/skills.md](docs/skills.md) for the agentskills.io spec compliance rules, four-tier context loading conventions, and this split in full.
+Two distinct kinds: `.claude/skills/` holds dev-workflow skills for working on this repo (activate the relevant one before starting work); `src/skills/` holds the deployed agent's own runtime skill catalog (currently Zoho CRM/Desk implementation docs, served via `zoho_skill_get`), not for you to activate. See [docs/skills.md](docs/skills.md) for the agentskills.io spec compliance rules, four-tier context loading conventions, and this split in full.

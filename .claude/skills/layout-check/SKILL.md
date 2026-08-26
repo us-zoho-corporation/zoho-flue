@@ -25,12 +25,12 @@ catch things numbers don't, like color, contrast, or something reading as
 ## Boot the app
 
 ```bash
-bash .agents/skills/layout-check/scripts/boot.sh   # starts the agent server (:3583) + vite chat (:5173)
-bash .agents/skills/layout-check/scripts/teardown.sh   # stop them when done
+bash .claude/skills/layout-check/scripts/boot.sh   # starts the agent server (:3583) + vite chat (:5173)
+bash .claude/skills/layout-check/scripts/teardown.sh   # stop them when done
 ```
 
 This reuses `e2e-chat`'s dev-login seam (`ENV=local`, `STORE_BACKEND=memory`) —
-see `.agents/skills/e2e-chat/SKILL.md` for how that works. `boot.sh` refuses to
+see `.claude/skills/e2e-chat/SKILL.md` for how that works. `boot.sh` refuses to
 start if `:3583`/`:5173` are already busy; a stale server from an earlier
 session is the most common source of confusing, flaky measurements.
 
@@ -56,7 +56,7 @@ prompt for permission on every write, while the repo does (once) for a new
 script:
 
 1. Draft it in your scratchpad directory first.
-2. Copy it into `.agents/skills/e2e-chat/scripts/<descriptive-name>.tmp.mjs`
+2. Copy it into `.claude/skills/e2e-chat/scripts/<descriptive-name>.tmp.mjs`
    and run it from there with `node` — it needs the repo's installed
    `playwright` dependency, which the scratchpad path doesn't have.
 
@@ -139,8 +139,8 @@ Only the regression pass caught it before it shipped.
 ## Clean up every time
 
 ```bash
-bash .agents/skills/layout-check/scripts/teardown.sh
-rm -f .agents/skills/e2e-chat/scripts/*.tmp.mjs
+bash .claude/skills/layout-check/scripts/teardown.sh
+rm -f .claude/skills/e2e-chat/scripts/*.tmp.mjs
 ```
 
 Confirm the ports are actually free (`teardown.sh` does this and exits
