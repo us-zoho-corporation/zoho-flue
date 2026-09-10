@@ -54,6 +54,7 @@ export const config = {
 				'ZohoCRM.modules.ALL',
 				'ZohoCRM.settings.ALL',
 				'ZohoCRM.settings.blueprint.ALL',
+				'ZohoCRM.settings.transitions.ALL',
 				'ZohoCRM.settings.workflow_rules.ALL',
 				'ZohoCRM.settings.automation_actions.ALL',
 				'ZohoCRM.bulk.ALL',

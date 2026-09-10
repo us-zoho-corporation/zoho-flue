@@ -9,6 +9,7 @@ Adds one or more transitions to a Blueprint (up to 50 per request). A transition
 | Name | Required | Description |
 |---|---|---|
 | name | yes | Transition name, unique within the Blueprint |
+| api_name | no | Auto-derived from `name` if omitted; this is what `connections[].transitions.api_name` (Create/Update Blueprint) references, not `name` |
 | module | yes | `{ api_name, id }` |
 | trigger_type | yes | `manual` (user-fired) or `automatic` (fires after a configured wait) |
 | transition_type | yes | `standalone_transition`, `parallel_transition`, or `child_transition` |
@@ -17,8 +18,8 @@ Adds one or more transitions to a Blueprint (up to 50 per request). A transition
 | layout | yes | `{ api_name, name, id }` — pass the same layout as the parent Blueprint |
 | criteria | no | `{ group_operator: "AND"\|"OR", group: [{ comparator, field: { api_name, id }, type: "value"\|"field", value }] }` — gates whether the transition is offered |
 | owners | no | `[{ type: "record_owner"\|"users"\|"role"\|"group"\|"portal_user_type", resources: [{ id, name }] \| null }]` — who may execute it |
-| common_source | no | `true` to make this transition available from multiple source states (see `common_source_states`) |
-| during_inputs | no | `[{ sequence, type, optional, field?: { api_name, id }, validation_filter?: {...}, items?: [...] (checklist), message?: "..." (info), widget?: { name, id } }]` |
+| common_source | no | `true` to make this transition available from multiple source states (see `common_source_states`) — Zoho's own docs are inconsistent about this field's exact name (a raw sample elsewhere uses `common` instead of `common_source`); verify against a live response before depending on it |
+| during_inputs | no | `[{ sequence, type, optional, field?: { api_name, id }, validation_filter?: {...}, message?: "..." (info), widget?: { name, id }, title?: "..." (checklist heading), items?: [{ sequence, name, optional }] (checklist rows) }]` |
 | actions | no | `[{ name, id, type }]` — automation to run after the transition completes; `id` comes from that action type's own Get API (e.g. Get Tasks Action, Get Field Update Action from `zoho-crm-workflow-automation`) |
 
 ## Sample input
@@ -69,9 +70,10 @@ Missing required field, invalid enum value (e.g. bad `transition_type`), conflic
 
 ## Scopes
 
-`ZohoCRM.settings.blueprint.transitions.ALL` or `ZohoCRM.settings.blueprint.transitions.CREATE`
+`ZohoCRM.settings.transitions.ALL` — not `ZohoCRM.settings.blueprint.transitions.ALL`/`.CREATE` as Zoho's own docs state; those are rejected at the Zoho consent screen with "Invalid OAuth Scope: Scope does not exist".
 
 ## Notes
 
 - Mutating — requires HITL approval. Decision options: approve / edit / reject / respond.
 - If a transition needs an `actions` entry, create the action first via its own Create API, create this transition without `actions`, then attach `actions` via Update Blueprint Transitions — see Create Blueprint's "Recommended two-phase approach".
+- Zoho's own docs sample response for this endpoint shows a `blueprints` root key ("blueprints exported successfully") instead of `transitions` — inconsistent with every other Blueprint Transitions response shown elsewhere in their docs (including Update/Get), and almost certainly a copy-paste error in their example rather than the real shape. Don't be surprised either way; check the actual response key at runtime.

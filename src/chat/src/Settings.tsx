@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpen, Briefcase, CheckCircle, Headset, type Icon } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowsClockwise, BookOpen, Briefcase, CheckCircle, Headset, type Icon } from '@phosphor-icons/react';
 import { Button, Loader, Select, Switch } from '@cloudflare/kumo';
 import { useCallback, useEffect, useState } from 'react';
 import type { ModelOption, UserProfile } from './App.tsx';
@@ -30,6 +30,8 @@ interface Connection {
   description: string;
   scopes: string[];
   connected: boolean;
+  /** Connected before, but missing scopes since added to the bundle — needs re-authorization, not a fresh connect. */
+  partial: boolean;
   kind?: 'docs';
 }
 
@@ -201,7 +203,10 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                         <div className="flex items-center gap-3 min-w-0">
                           <div
                             className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-                            style={{ background: c.connected ? 'var(--ok)' : 'var(--glass)', color: c.connected ? '#fff' : 'var(--txt2)' }}
+                            style={{
+                              background: c.connected ? 'var(--ok)' : c.partial ? 'var(--accent-soft)' : 'var(--glass)',
+                              color: c.connected ? '#fff' : c.partial ? 'var(--accent)' : 'var(--txt2)',
+                            }}
                           >
                             <ProductIcon size={18} weight={c.connected ? 'fill' : 'regular'} />
                           </div>
@@ -211,6 +216,11 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                               {c.connected && (
                                 <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--ok)' }}>
                                   <CheckCircle size={13} weight="fill" /> Connected
+                                </span>
+                              )}
+                              {c.partial && (
+                                <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--accent)' }}>
+                                  <ArrowsClockwise size={13} weight="bold" /> Needs update
                                 </span>
                               )}
                             </div>
@@ -223,12 +233,13 @@ export function Settings({ profile, models, modelsLoading, modelKey, onModelChan
                           className="shrink-0"
                           loading={disconnectingKey === c.key}
                           onClick={() => {
-                            if (c.connected) disconnectProduct(c.key);
+                            if (c.partial) connectProduct(c.scopes);
+                            else if (c.connected) disconnectProduct(c.key);
                             else if (c.kind === 'docs') connectDocs();
                             else connectProduct(c.scopes);
                           }}
                         >
-                          {c.connected ? 'Disconnect' : 'Connect'}
+                          {c.partial ? 'Update' : c.connected ? 'Disconnect' : 'Connect'}
                         </Button>
                       </div>
                     );

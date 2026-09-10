@@ -9,6 +9,15 @@
 |---|---|---|
 | blueprint_id | no | Omit to list all; include to get one Blueprint's full detail |
 | fields | no | (single-Blueprint only) Comma-separated `state`, `transition` to include those on demand |
+| module | no | (list-all only) Filter to one module's API name (e.g. `Leads`) |
+| status | no | (list-all only) Filter by `active`, `draft`, or `inactive` |
+| layout_id | no | (list-all only) Filter to one layout |
+| sort_by | no | (list-all only) Only `modified_time` is supported |
+| sort_order | no | (list-all only) `asc` or `desc` |
+| page | no | (list-all only) Page number |
+| per_page | no | (list-all only) Default 200 |
+
+The list-all response is a flatter summary per Blueprint (`id`, `name`, `api_name`, `status`, `module`, `layout`, `field`, `continuous`, `created_by`/`modified_by`, `pipeline` for Deals) — it omits `states`/`transitions`/`connections`/`chart_data`, which only come back from the single-Blueprint call below.
 
 ## Response (single Blueprint)
 

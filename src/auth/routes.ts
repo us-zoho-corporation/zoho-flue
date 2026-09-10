@@ -9,6 +9,7 @@ import {
 	fetchUserInfo,
 } from './zoho-oauth';
 import { buildDocsAuthorizeUrl, exchangeDocsCodeForTokens, forgetDocsToken, getDocsAccessToken } from './docs-oauth';
+import { scopeStatus } from '../tools/zoho-connection';
 import {
 	clearSession,
 	getUserToken,
@@ -207,16 +208,22 @@ export function createAuthRoutes(deps: AuthDeps): Hono {
 	app.get('/connections', async (c) => {
 		const userId = c.get('userId');
 		const token = userId ? await deps.stores.tokens.get(userId) : null;
-		const granted = new Set(token?.scopes ?? []);
+		const granted = token?.scopes ?? [];
+		const loginScopes = deps.oauth.loginScopes.split(/[\s,]+/);
 		const connections: Array<{
-			key: string; label: string; description: string; scopes: string[]; connected: boolean; kind?: 'docs';
-		}> = deps.products.map((product) => ({
-			key: product.key,
-			label: product.label,
-			description: product.description,
-			scopes: product.scopes,
-			connected: product.scopes.every((scope) => granted.has(scope)),
-		}));
+			key: string; label: string; description: string; scopes: string[];
+			connected: boolean; partial: boolean; kind?: 'docs';
+		}> = deps.products.map((product) => {
+			const status = scopeStatus(product.scopes, granted, loginScopes);
+			return {
+				key: product.key,
+				label: product.label,
+				description: product.description,
+				scopes: product.scopes,
+				connected: status === 'connected',
+				partial: status === 'partial',
+			};
+		});
 		// Docs isn't a Zoho product — its own authorization server, own token
 		// store (see docs-oauth.ts) — but it's still just one more row on this
 		// same list: a single fixed grant, so "connected" is just "has a token".
@@ -228,6 +235,7 @@ export function createAuthRoutes(deps: AuthDeps): Hono {
 				description: 'Search Zoho product documentation to answer how-to, configuration, and troubleshooting questions.',
 				scopes: [],
 				connected: !!docsToken,
+				partial: false,
 				kind: 'docs',
 			});
 		}

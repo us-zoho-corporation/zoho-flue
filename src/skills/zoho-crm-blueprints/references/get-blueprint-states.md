@@ -34,7 +34,7 @@
 
 ## Scopes
 
-`ZohoCRM.settings.blueprint.ALL` or `ZohoCRM.settings.blueprint.READ`
+Zoho's docs give only `ZohoCRM.settings.blueprint.states.read` for this endpoint (unlike every other Blueprint read endpoint, which offers a `blueprint.ALL`/`blueprint.READ` fallback) — given the sibling `blueprint.transitions.*` scopes are confirmed rejected at the consent screen, treat this one as unverified too and fall back to `ZohoCRM.settings.blueprint.ALL` if it's rejected.
 
 ## Notes
 

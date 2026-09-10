@@ -44,7 +44,7 @@ Same as Create Blueprint Transitions, plus:
 
 ## Scopes
 
-`ZohoCRM.settings.blueprint.ALL` or `ZohoCRM.settings.blueprint.states.ALL` or `ZohoCRM.settings.blueprint.transitions.UPDATE`
+`ZohoCRM.settings.blueprint.ALL` or `ZohoCRM.settings.blueprint.states.ALL` or `ZohoCRM.settings.transitions.UPDATE` — unlike Get/Create Blueprint Transitions, Zoho's docs give this one's third alternative correctly (no stray `.blueprint.` segment); `ZohoCRM.settings.transitions.ALL` also works if you're already requesting it for other transition operations. (`ZohoCRM.settings.blueprint.states.ALL` hasn't been checked against a real consent screen.)
 
 ## Notes
 

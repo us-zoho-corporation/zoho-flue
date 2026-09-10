@@ -37,7 +37,7 @@ There is no plain "list all transitions" call — use Get Blueprints (with `fiel
 
 ## Scopes
 
-`ZohoCRM.settings.blueprint.transitions.read`
+`ZohoCRM.settings.transitions.ALL` — not `ZohoCRM.settings.blueprint.transitions.read`/`.ALL` as Zoho's own docs state; those are rejected at the Zoho consent screen with "Invalid OAuth Scope: Scope does not exist".
 
 ## Notes
 
