@@ -1,6 +1,8 @@
 # Flue generated
 .flue-vite/
-.vitest-attachments
+
+# Vitest artifacts (failure screenshots, etc.)
+.vitest/
 
 # Catalyst CLI local config
 .catalystrc

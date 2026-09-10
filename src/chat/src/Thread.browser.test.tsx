@@ -119,9 +119,9 @@ describe('AssistantTurn (browser) — unified tool-call flow', () => {
 		expect(html.indexOf('2 steps')).toBeLessThan(html.indexOf('Professional adds workflows'));
 	});
 
-	test('a running turn with no steps or text yet shows Thinking', async () => {
+	test('a running turn with no steps or text yet shows the thinking indicator', async () => {
 		const screen = await render(<AssistantTurn running message={turn()} />);
-		await expect.element(screen.getByText('Thinking')).toBeInTheDocument();
+		await expect.poll(() => screen.container.querySelector('.thinking-dots')).not.toBeNull();
 	});
 });
 
@@ -177,7 +177,7 @@ describe('AssistantTurn streaming transition (browser)', () => {
 		const t2 = trailingTurn([
 			userMsg,
 			asst(toolPart('zoho_kb_search', 'output-available', { query: 'editions' })),
-			asst(toolPart('get_page', 'input-available', { url: 'https://help.zoho.com/crm/editions' })),
+			asst(toolPart('zoho_kb_get_page', 'input-available', { url: 'https://help.zoho.com/crm/editions' })),
 		]);
 		await screen.rerender(<AssistantTurn running message={t2} />);
 		await expect.element(screen.getByText('Searched “editions”')).toBeInTheDocument();
@@ -189,7 +189,7 @@ describe('AssistantTurn streaming transition (browser)', () => {
 		const t3 = trailingTurn([
 			userMsg,
 			asst(toolPart('zoho_kb_search', 'output-available', { query: 'editions' })),
-			asst(toolPart('get_page', 'output-available', { url: 'https://help.zoho.com/crm/editions' })),
+			asst(toolPart('zoho_kb_get_page', 'output-available', { url: 'https://help.zoho.com/crm/editions' })),
 			asst({ type: 'text', text: 'Enterprise adds automation and analytics.', state: 'done' }),
 		]);
 		await screen.rerender(<AssistantTurn running={false} message={t3} />);
